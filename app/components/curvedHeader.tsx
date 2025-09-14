@@ -1,6 +1,6 @@
 import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
 import React from "react";
-import { Dimensions, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
 const { width: screenWidth } = Dimensions.get("window");
@@ -12,6 +12,7 @@ interface CurvedHeaderProps {
   textColor?: string;
   height?: number;
   children?: React.ReactNode;
+  showLogo?: boolean; // New prop to control logo visibility
 }
 
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
@@ -21,6 +22,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   textColor = "#2c3e50",
   height = 100,
   children,
+  showLogo = false, // Default to false
 }) => {
   // Load the Barlow font
   const [fontsLoaded] = useFonts({
@@ -63,6 +65,13 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
           children
         ) : (
           <>
+            {showLogo && (
+              <Image 
+                source={require("../../assets/images/logo.png")} 
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            )}
             {title && (
               <Text style={[styles.title, { color: textColor, fontFamily: 'BarlowSemiCondensed' }]}>
                 {title}
@@ -107,10 +116,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
+  logo: {
+    width: 50,
+    height: 50,
+    marginBottom: 10,
+  },
   title: {
     fontSize: 20,
     textAlign: "center",
-    marginBottom:17,
+    marginBottom: 17,
     lineHeight: 30,
     letterSpacing: 0.5, 
   },
