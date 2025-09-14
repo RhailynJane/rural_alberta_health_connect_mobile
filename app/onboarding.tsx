@@ -10,18 +10,13 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
-        <ScrollView 
-          style={styles.container} 
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header Section using CurvedHeader */}
+        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+          {/* Header Section using CurvedHeader - NO line breaks in the text */}
           <CurvedHeader
-            title="Your trusted healthcare companion"
-            subtitle="for rural Alberta communities"
+            title="Your trusted healthcare companion for rural Alberta communities"
             backgroundColor="rgba(214, 227, 240, 0.9)"
             textColor="#2c3e50"
-            height={180}
+            height={200}
           />
         </ScrollView>
       </CurvedBackground>
@@ -32,13 +27,16 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: '#f8f9fa',
   },
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
   contentContainer: {
     flexGrow: 1,
-    paddingHorizontal: 16,
+  },
+  contentSection: {
+    padding: 24,
+    paddingTop: 40,
   },
 });
