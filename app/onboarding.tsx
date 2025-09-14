@@ -1,8 +1,6 @@
-import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,25 +10,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import CurvedBackground from "../app/components/curvedBackground";
 import CurvedHeader from "../app/components/curvedHeader";
-
+import { FONTS } from "../app/constants/constants";
 
 export default function Onboarding() {
   const router = useRouter();
-
-  // Load the Barlow Semi Condensed font
-  let [fontsLoaded] = useFonts({
-    BarlowSemiCondensed: Barlow_600SemiBold,
-  });
-
-  // Show loading screen while fonts are loading
-  if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#2A7DE1" />
-      </View>
-    );
-  }
-  
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -51,8 +34,10 @@ export default function Onboarding() {
                 <Ionicons name="medical" size={32} color="#2A7DE1" />
               </View>
               <View style={styles.textContainer}>
-                <Text style={styles.featureTitle}>AI-Powered Triage</Text>
-                <Text style={styles.featureDescription}>
+                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
+                  AI-Powered Triage
+                </Text>
+                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
                   Get instant guidance for your health concerns
                 </Text>
               </View>
@@ -64,8 +49,10 @@ export default function Onboarding() {
                 <Ionicons name="location" size={32} color="#2A7DE1" />
               </View>
               <View style={styles.textContainer}>
-                <Text style={styles.featureTitle}>Rural-Focused</Text>
-                <Text style={styles.featureDescription}>
+                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
+                  Rural-Focused
+                </Text>
+                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
                   Designed specifically for Alberta&#39;s remote communities
                 </Text>
               </View>
@@ -77,8 +64,10 @@ export default function Onboarding() {
                 <Ionicons name="lock-closed" size={32} color="#2A7DE1" />
               </View>
               <View style={styles.textContainer}>
-                <Text style={styles.featureTitle}>Secure & Private</Text>
-                <Text style={styles.featureDescription}>
+                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
+                  Secure & Private
+                </Text>
+                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
                   Your health data is protected and confidential
                 </Text>
               </View>
@@ -89,11 +78,13 @@ export default function Onboarding() {
               style={styles.getStartedButton}
               onPress={() => router.push("/auth/signin")}
             >
-              <Text style={styles.getStartedText}>Get Started</Text>
+              <Text style={[styles.getStartedText, {fontFamily: FONTS.BarlowSemiCondensed}]}>
+                Get Started
+              </Text>
             </TouchableOpacity>
 
             {/* Disclaimer */}
-            <Text style={styles.disclaimer}>
+            <Text style={[styles.disclaimer, {fontFamily: FONTS.BarlowSemiCondensed}]}>
               By continuing, you acknowledge that this app provides health
               information only and does not replace professional medical advice,
               diagnosis, or treatment.
@@ -142,13 +133,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 4,
-    fontFamily: 'BarlowSemiCondensed',
   },
   featureDescription: {
     fontSize: 14,
     color: "#666",
     lineHeight: 20,
-    fontFamily: 'BarlowSemiCondensed',
   },
   getStartedButton: {
     backgroundColor: "#2A7DE1",
@@ -165,7 +154,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
-    fontFamily: 'BarlowSemiCondensed',
   },
   disclaimer: {
     fontSize: 12,
