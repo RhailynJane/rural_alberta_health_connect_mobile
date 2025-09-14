@@ -33,7 +33,21 @@ export default function Onboarding() {
                 </Text>
               </View>
             </View>
+          {/* Feature 2: Rural-Focused */}
+            <View style={styles.featureContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="location" size={32} color="#2A7DE1" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.featureTitle}>Rural-Focused</Text>
+                <Text style={styles.featureDescription}>
+                  Designed specifically for Alberta&#39;s remote communities
+                </Text>
+              </View>
+            </View>
           </View>
+
+
         </ScrollView>
       </CurvedBackground>
     </SafeAreaView>
