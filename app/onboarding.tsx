@@ -1,0 +1,176 @@
+import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import CurvedBackground from "../app/components/curvedBackground";
+import CurvedHeader from "../app/components/curvedHeader";
+
+
+export default function Onboarding() {
+  const router = useRouter();
+
+  // Load the Barlow Semi Condensed font
+  let [fontsLoaded] = useFonts({
+    BarlowSemiCondensed: Barlow_600SemiBold,
+  });
+
+  // Show loading screen while fonts are loading
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#2A7DE1" />
+      </View>
+    );
+  }
+  
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.contentContainer}
+        >
+          <CurvedHeader
+            title="Your trusted healthcare companion for rural Alberta communities"
+            height={150}
+          />
+
+          <View style={styles.contentSection}>
+            {/* Feature 1: AI-Powered Triage */}
+            <View style={styles.featureContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="medical" size={32} color="#2A7DE1" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.featureTitle}>AI-Powered Triage</Text>
+                <Text style={styles.featureDescription}>
+                  Get instant guidance for your health concerns
+                </Text>
+              </View>
+            </View>
+
+            {/* Feature 2: Rural-Focused */}
+            <View style={styles.featureContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="location" size={32} color="#2A7DE1" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.featureTitle}>Rural-Focused</Text>
+                <Text style={styles.featureDescription}>
+                  Designed specifically for Alberta&#39;s remote communities
+                </Text>
+              </View>
+            </View>
+
+            {/* Feature 3: Secure & Private */}
+            <View style={styles.featureContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="lock-closed" size={32} color="#2A7DE1" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.featureTitle}>Secure & Private</Text>
+                <Text style={styles.featureDescription}>
+                  Your health data is protected and confidential
+                </Text>
+              </View>
+            </View>
+
+            {/* Get Started Button */}
+            <TouchableOpacity
+              style={styles.getStartedButton}
+              onPress={() => router.push("/auth/signin")}
+            >
+              <Text style={styles.getStartedText}>Get Started</Text>
+            </TouchableOpacity>
+
+            {/* Disclaimer */}
+            <Text style={styles.disclaimer}>
+              By continuing, you acknowledge that this app provides health
+              information only and does not replace professional medical advice,
+              diagnosis, or treatment.
+            </Text>
+          </View>
+        </ScrollView>
+      </CurvedBackground>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+  },
+  contentSection: {
+    padding: 24,
+    paddingTop: 40,
+  },
+  featureContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  iconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#E8F2FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  textContainer: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 4,
+    fontFamily: 'BarlowSemiCondensed',
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+    fontFamily: 'BarlowSemiCondensed',
+  },
+  getStartedButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 90,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+  },
+  getStartedText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    fontFamily: 'BarlowSemiCondensed',
+  },
+  disclaimer: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    lineHeight: 16,
+  },
+});
