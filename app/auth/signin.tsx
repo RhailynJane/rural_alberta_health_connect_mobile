@@ -1,12 +1,11 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   ScrollView,
-  StyleSheet, View
+  StyleSheet
 } from "react-native";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -35,17 +34,12 @@ export default function SignIn() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Logo and Header Container */}
-            <View style={styles.headerWithLogo}>
-              <Image 
-                source={require("../../assets/images/logo.png")} 
-                style={styles.logo}
-                resizeMode="contain"
-              />
               <CurvedHeader
                 title="Alberta Health Connect"
                 height={120}
+                showLogo={true}
+                screenType="signin"
               />
-            </View>
             </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>

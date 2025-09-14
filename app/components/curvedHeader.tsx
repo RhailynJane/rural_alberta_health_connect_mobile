@@ -12,7 +12,8 @@ interface CurvedHeaderProps {
   textColor?: string;
   height?: number;
   children?: React.ReactNode;
-  showLogo?: boolean; // New prop to control logo visibility
+  showLogo?: boolean;
+  screenType?: 'onboarding' | 'signin'; // New prop to determine screen type
 }
 
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
@@ -22,16 +23,15 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   textColor = "#2c3e50",
   height = 100,
   children,
-  showLogo = false, // Default to false
+  showLogo = false,
+  screenType = 'onboarding', // Default to onboarding
 }) => {
-  // Load the Barlow font
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
   });
 
   const curveHeight = 70;
   
-  // Don't render until fonts are loaded
   if (!fontsLoaded) {
     return null;
   }
@@ -64,25 +64,48 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
         {children ? (
           children
         ) : (
-          <>
+          <View style={[
+            styles.headerContent, 
+            screenType === 'signin' ? styles.signinLayout : styles.onboardingLayout
+          ]}>
             {showLogo && (
               <Image 
                 source={require("../../assets/images/logo.png")} 
-                style={styles.logo}
+                style={[
+                  styles.logo,
+                  screenType === 'signin' ? styles.signinLogo : styles.onboardingLogo
+                ]}
                 resizeMode="contain"
               />
             )}
-            {title && (
-              <Text style={[styles.title, { color: textColor, fontFamily: 'BarlowSemiCondensed' }]}>
-                {title}
-              </Text>
-            )}
-            {subtitle && (
-              <Text style={[styles.subtitle, { color: textColor, fontFamily: 'BarlowSemiCondensed' }]}>
-                {subtitle}
-              </Text>
-            )}
-          </>
+            <View style={[
+              styles.textContainer,
+              screenType === 'signin' ? styles.signinTextContainer : styles.onboardingTextContainer
+            ]}>
+              {title && (
+                <Text 
+                  style={[
+                    styles.title, 
+                    { color: textColor, fontFamily: 'BarlowSemiCondensed' },
+                    screenType === 'signin' ? styles.signinTitle : styles.onboardingTitle
+                  ]}
+                  numberOfLines={screenType === 'signin' ? 1 : 2} 
+                  adjustsFontSizeToFit={true} 
+                >
+                  {title}
+                </Text>
+              )}
+              {subtitle && (
+                <Text style={[
+                  styles.subtitle, 
+                  { color: textColor, fontFamily: 'BarlowSemiCondensed' },
+                  screenType === 'signin' ? styles.signinSubtitle : styles.onboardingSubtitle
+                ]}>
+                  {subtitle}
+                </Text>
+              )}
+            </View>
+          </View>
         )}
       </View>
     </View>
@@ -116,22 +139,82 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  logo: {
-    width: 50,
-    height: 50,
-    marginBottom: 10,
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  // Onboarding layout (multi-line title, centered)
+  onboardingLayout: {
+    justifyContent: "center",
+  },
+  onboardingLogo: {
+    width: 90,
+    height: 90,
+    marginRight: 20,
+  },
+  onboardingTextContainer: {
+    flex: 1,
+  },
+  onboardingTitle: {
+    fontSize: 20,
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 28,
+    letterSpacing: 0.5,
+  },
+  onboardingSubtitle: {
+    fontSize: 18,
+    textAlign: "center",
+    lineHeight: 22,
+    letterSpacing: 0.3,
+  },
+  // Signin layout (single line title, left-aligned with logo)
+signinLayout: {
+  justifyContent: "flex-start",
+  alignItems: "center",
+},
+signinLogo: {
+  width: 90,
+  height: 90,
+  marginRight: 10, 
+  justifyContent: "flex-start",
+},
+signinTextContainer: {
+  flex: 1,
+  marginLeft: 1, 
+},
+signinTitle: {
+  fontSize: 22,
+  textAlign: "left",
+  marginBottom: 4,
+  lineHeight: 26,
+  letterSpacing: 0.5,
+},
+signinSubtitle: {
+  fontSize: 18,
+  textAlign: "left",
+  lineHeight: 22,
+  letterSpacing: 0.3,
+},
+logo: {
+  width: 90,
+  height: 90,
+  marginRight: 20,
+},
+  textContainer: {
+    flex: 1,
   },
   title: {
     fontSize: 20,
     textAlign: "center",
-    marginBottom: 17,
-    lineHeight: 30,
-    letterSpacing: 0.5, 
+    marginBottom: 8,
+    lineHeight: 28,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 18,
-    textAlign: "center",
-    lineHeight: 24,
+    textAlign: "left",
+    lineHeight: 22,
     letterSpacing: 0.3,
   },
 });
