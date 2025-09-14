@@ -1,18 +1,36 @@
+import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CurvedBackground from "../app/components/curvedBackground";
 import CurvedHeader from "../app/components/curvedHeader";
 
+
 export default function Onboarding() {
   const router = useRouter();
+
+  // Load the Barlow Semi Condensed font
+  let [fontsLoaded] = useFonts({
+    BarlowSemiCondensed: Barlow_600SemiBold,
+  });
+
+  // Show loading screen while fonts are loading
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#2A7DE1" />
+      </View>
+    );
+  }
+  
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -124,11 +142,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 4,
+    fontFamily: 'BarlowSemiCondensed',
   },
   featureDescription: {
     fontSize: 14,
     color: "#666",
     lineHeight: 20,
+    fontFamily: 'BarlowSemiCondensed',
   },
   getStartedButton: {
     backgroundColor: "#2A7DE1",
@@ -145,6 +165,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+    fontFamily: 'BarlowSemiCondensed',
   },
   disclaimer: {
     fontSize: 12,
