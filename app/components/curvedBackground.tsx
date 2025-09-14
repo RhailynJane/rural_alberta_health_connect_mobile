@@ -30,14 +30,14 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
           <RadialGradient id="ovalGradient1" cx="50%" cy="50%" r="50%">
             <Stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
             <Stop offset="70%" stopColor="#f8f9fa" stopOpacity="0.4" />
-            <Stop offset="100%" stopColor="#e9ecef" stopOpacity="0.1" />
+            <Stop offset="100%" stopColor="#e9ecef" stopOpacity="0.5" />
           </RadialGradient>
           
           {/* Radial gradient for darker oval shapes */}
           <RadialGradient id="ovalGradient2" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#e9ecef" stopOpacity="0.6" />
-            <Stop offset="70%" stopColor="#dee2e6" stopOpacity="0.3" />
-            <Stop offset="100%" stopColor="#ced4da" stopOpacity="0.1" />
+            <Stop offset="0%" stopColor="#e9ecef" stopOpacity="0.8" />
+            <Stop offset="70%" stopColor="#dee2e6" stopOpacity="0.7" />
+            <Stop offset="100%" stopColor="#ced4da" stopOpacity="0.8" />
           </RadialGradient>
           
           {/* Subtle radial gradient for background ovals */}
@@ -54,7 +54,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
           rx={screenWidth * 0.35}
           ry={screenHeight * 0.3}
           fill="url(#ovalGradient1)"
-          opacity="0.7"
+          opacity="1"
         />
 
         {/* Medium oval - upper right */}
@@ -64,7 +64,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
           rx={screenWidth * 0.25}
           ry={screenHeight * 0.2}
           fill="url(#ovalGradient2)"
-          opacity="0.6"
+          opacity="1"
         />
 
         {/* Large oval - center left, partially off screen */}
@@ -74,7 +74,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
           rx={screenWidth * 0.4}
           ry={screenHeight * 0.35}
           fill="url(#ovalGradient1)"
-          opacity="0.5"
+          opacity="1"
         />
 
         {/* Medium oval - lower center */}
@@ -135,7 +135,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#d4cdcdff",
   },
 });
 
