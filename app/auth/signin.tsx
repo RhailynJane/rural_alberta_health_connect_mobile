@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { Formik } from 'formik';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,18 +11,27 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import * as Yup from 'yup';
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
+// Validation schema
+const SignInSchema = Yup.object().shape({
+  email: Yup.string()
+    .email('Invalid email address')
+    .required('Email is required'),
+  password: Yup.string()
+    .min(6, 'Password must be at least 6 characters')
+    .required('Password is required'),
+});
+
 export default function SignIn() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
 
-  const handleSignIn = () => {
+  const handleSignIn = (values: { email: string; password: string }) => {
     // Handle sign in logic here
-    console.log("Sign in attempted with:", email, password);
+    console.log("Sign in attempted with:", values);
     // For now, navigate to dashboard
     router.push("/dashboard");
   };
@@ -39,14 +48,14 @@ export default function SignIn() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Logo and Header Container */}
-              <CurvedHeader
-                title="Alberta Health Connect"
-                height={120}
-                showLogo={true}
-                screenType="signin"
-              />
+            <CurvedHeader
+              title="Alberta Health Connect"
+              height={120}
+              showLogo={true}
+              screenType="signin"
+            />
 
-              <View style={styles.contentSection}>
+            <View style={styles.contentSection}>
               <Text style={[styles.welcomeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Welcome Back
               </Text>
@@ -54,52 +63,78 @@ export default function SignIn() {
                 Sign in to access your health dashboard
               </Text>
 
-              <View style={styles.formContainer}>
-                <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Email
-                </Text>
-                <TextInput
-                  style={[styles.input, { fontFamily: FONTS.BarlowSemiCondensed }]}
-                  placeholder="Enter your email"
-                  placeholderTextColor="#999"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-
-                <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Password
-                </Text>
-                <TextInput
-                  style={[styles.input, { fontFamily: FONTS.BarlowSemiCondensed }]}
-                  placeholder="Enter your password"
-                  placeholderTextColor="#999"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-
-                <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
-                  <Text style={[styles.signInButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Sign In
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={styles.signUpContainer}>
-                  <Text style={[styles.signUpText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Don&apos;t have an account?{" "}
-                  </Text>
-                  <TouchableOpacity onPress={() => router.push("/auth/signup")}>
-                    <Text style={[styles.signUpLink, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Create Account
+              <Formik
+                initialValues={{ email: '', password: '' }}
+                validationSchema={SignInSchema}
+                onSubmit={handleSignIn}
+              >
+                {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
+                  <View style={styles.formContainer}>
+                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Email
                     </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+                    <TextInput
+                      style={[
+                        styles.input, 
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        errors.email && touched.email && styles.inputError
+                      ]}
+                      placeholder="Enter your email"
+                      placeholderTextColor="#999"
+                      value={values.email}
+                      onChangeText={handleChange('email')}
+                      onBlur={handleBlur('email')}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                    {errors.email && touched.email && (
+                      <Text style={styles.errorText}>{errors.email}</Text>
+                    )}
 
-            </ScrollView>
+                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Password
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input, 
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        errors.password && touched.password && styles.inputError
+                      ]}
+                      placeholder="Enter your password"
+                      placeholderTextColor="#999"
+                      value={values.password}
+                      onChangeText={handleChange('password')}
+                      onBlur={handleBlur('password')}
+                      secureTextEntry
+                    />
+                    {errors.password && touched.password && (
+                      <Text style={styles.errorText}>{errors.password}</Text>
+                    )}
+
+                    <TouchableOpacity 
+                      style={styles.signInButton} 
+                      onPress={() => handleSubmit()}
+                    >
+                      <Text style={[styles.signInButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Sign In
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.signUpContainer}>
+                      <Text style={[styles.signUpText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Don&apos;t have an account?{" "}
+                      </Text>
+                      <TouchableOpacity onPress={() => router.push("/auth/signup")}>
+                        <Text style={[styles.signUpLink, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Create Account
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </Formik>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
     </SafeAreaView>
@@ -127,7 +162,7 @@ const styles = StyleSheet.create({
     height: 100,
     marginBottom: 16,
   },
-   headerTextContainer: {
+  headerTextContainer: {
     flex: 1,
   },
   appTitle: {
@@ -173,13 +208,22 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    fontSize: 12,
-    marginBottom: 20,
+    fontSize: 15, 
+    marginBottom: 8, 
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+  },
+  inputError: {
+    borderColor: "#ff3b30", // Red border for errors
+  },
+  errorText: {
+    color: "#ff3b30",
+    fontSize: 14,
+    marginBottom: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
   signInButton: {
     backgroundColor: "#2A7DE1",
@@ -213,5 +257,4 @@ const styles = StyleSheet.create({
     color: "#2A7DE1",
     fontWeight: "600",
   },
-
 });
