@@ -1,14 +1,77 @@
-import React from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet, View
+} from "react-native";
+import CurvedBackground from "../components/curvedBackground";
+import CurvedHeader from "../components/curvedHeader";
 
-const signin = () => {
+export default function SignIn() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleSignIn = () => {
+    // Handle sign in logic here
+    console.log("Sign in attempted with:", email, password);
+    // For now, navigate to dashboard
+    router.push("/dashboard");
+  };
+
   return (
-    <View>
-      <Text>signin</Text>
-    </View>
-  )
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.container}
+        >
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Logo and Header Container */}
+            <View style={styles.headerWithLogo}>
+              <Image 
+                source={require("../../assets/images/logo.png")} 
+                style={styles.logo}
+                resizeMode="contain"
+              />
+              <CurvedHeader
+                title="Alberta Health Connect"
+                height={120}
+              />
+            </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+      </CurvedBackground>
+    </SafeAreaView>
+  );
 }
 
-export default signin
-
-const styles = StyleSheet.create({})
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+  },
+  headerWithLogo: {
+    alignItems: "flex-start",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 16,
+  },
+});
