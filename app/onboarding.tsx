@@ -33,6 +33,7 @@ export default function Onboarding() {
                 </Text>
               </View>
             </View>
+            
           {/* Feature 2: Rural-Focused */}
             <View style={styles.featureContainer}>
               <View style={styles.iconContainer}>
@@ -45,9 +46,22 @@ export default function Onboarding() {
                 </Text>
               </View>
             </View>
+
+            {/* Feature 3: Secure & Private */}
+            <View style={styles.featureContainer}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="lock-closed" size={32} color="#2A7DE1" />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={styles.featureTitle}>Secure & Private</Text>
+                <Text style={styles.featureDescription}>
+                  Your health data is protected and confidential
+                </Text>
+              </View>
+            </View>
+
+
           </View>
-
-
         </ScrollView>
       </CurvedBackground>
     </SafeAreaView>
