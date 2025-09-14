@@ -1,6 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CurvedBackground from "../app/components/curvedBackground";
 import CurvedHeader from "../app/components/curvedHeader";
@@ -33,8 +39,8 @@ export default function Onboarding() {
                 </Text>
               </View>
             </View>
-            
-          {/* Feature 2: Rural-Focused */}
+
+            {/* Feature 2: Rural-Focused */}
             <View style={styles.featureContainer}>
               <View style={styles.iconContainer}>
                 <Ionicons name="location" size={32} color="#2A7DE1" />
@@ -60,7 +66,13 @@ export default function Onboarding() {
               </View>
             </View>
 
-
+            {/* Get Started Button */}
+            <TouchableOpacity
+              style={styles.getStartedButton}
+              onPress={() => router.push("/auth/signin")}
+            >
+              <Text style={styles.getStartedText}>Get Started</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </CurvedBackground>
@@ -110,5 +122,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     lineHeight: 20,
+  },
+  getStartedButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+  },
+  getStartedText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
