@@ -11,12 +11,9 @@ export default function Onboarding() {
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
         <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-          {/* Header Section using CurvedHeader - NO line breaks in the text */}
           <CurvedHeader
             title="Your trusted healthcare companion for rural Alberta communities"
-            backgroundColor="rgba(214, 227, 240, 0.9)"
-            textColor="#2c3e50"
-            height={200}
+            height={150}
           />
         </ScrollView>
       </CurvedBackground>

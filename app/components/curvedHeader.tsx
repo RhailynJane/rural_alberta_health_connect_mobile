@@ -19,7 +19,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   subtitle,
   backgroundColor = "#D6E3F0",
   textColor = "#2c3e50",
-  height = 200,
+  height = 100,
   children,
 }) => {
   // Load the Barlow font
@@ -27,7 +27,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
     BarlowSemiCondensed: Barlow_600SemiBold,
   });
 
-  const curveHeight = 40;
+  const curveHeight = 70;
   
   // Don't render until fonts are loaded
   if (!fontsLoaded) {
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     textAlign: "center",
-    marginBottom: 8,
-    lineHeight: 34,
+    marginBottom:17,
+    lineHeight: 30,
     letterSpacing: 0.5, 
   },
   subtitle: {
