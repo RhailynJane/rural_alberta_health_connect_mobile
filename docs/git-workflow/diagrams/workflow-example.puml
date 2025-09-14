@@ -1,0 +1,167 @@
+@startuml
+
+<style>
+' Professional Light Theme Configuration - Pure CSS Style
+!$color_bg = "#ffffff"
+!$color_bg_light = "#f8f9fa"
+!$color_bg_lighter = "#e9ecef"
+!$color_fg = "#212529"
+!$color_fg_muted = "#6c757d"
+!$color_primary = "#0066cc"
+!$color_primary_light = "#4da6ff"
+!$color_success = "#28a745"
+!$color_warning = "#856404"
+!$color_error = "#dc3545"
+!$color_accent = "#6f42c1"
+
+' Root document styling
+document {
+  BackGroundColor: $color_bg;
+  FontColor: $color_fg;
+  FontName: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  FontSize: 11;
+}
+
+' Sequence diagram specific styling
+participant {
+  BackGroundColor: $color_bg_light;
+  LineColor: $color_primary;
+  FontColor: $color_fg;
+  FontSize: 10;
+  LineThickness: 2;
+  RoundCorner: 8;
+  Padding: 8;
+}
+
+actor {
+  BackGroundColor: $color_bg_lighter;
+  LineColor: $color_accent;
+  FontColor: $color_fg;
+  FontSize: 10;
+  LineThickness: 2;
+}
+
+' Arrow styling
+arrow {
+  LineColor: $color_success;
+  FontColor: $color_warning;
+  FontSize: 12;
+  LineThickness: 2;
+}
+
+' Activation box styling
+lifeLine {
+  LineColor: $color_primary;
+  LineThickness: 2;
+}
+
+' Note styling
+note {
+  BackGroundColor: $color_bg_lighter;
+  LineColor: $color_accent;
+  FontColor: $color_fg;
+  FontSize: 9;
+  LineThickness: 1;
+  RoundCorner: 6;
+  Padding: 6;
+}
+
+' Group/Alt styling
+group {
+  BackGroundColor: $color_bg_light;
+  LineColor: $color_primary;
+  FontColor: $color_fg;
+  FontSize: 10;
+  LineThickness: 2;
+}
+</style>
+actor Sarah
+actor Mike
+participant "main branch" as Main
+participant "dev branch" as Dev
+participant "hotfix-critical (Sarah)" as Hotfix
+participant "feature-api (Mike)" as Api
+
+== Critical Issue Identified ==
+Sarah -> Mike : "Critical bug in production - need hotfix!"
+
+|||
+|||
+
+== Emergency Hotfix Branch ==
+Sarah -> Hotfix : git fetch origin
+Sarah -> Hotfix : git switch -c hotfix-critical origin/dev
+Sarah -> Hotfix : git add / git commit -m "fix: critical security vulnerability"
+
+|||
+|||
+
+== Parallel Feature Development ==
+Mike -> Api : git fetch origin
+Mike -> Api : git switch -c feature-api origin/dev
+Mike -> Api : git add / git commit -m "feat: new API endpoints" (multiple commits)
+
+|||
+|||
+
+== Hotfix Merge to Dev ==
+Sarah -> Dev : git push origin hotfix-critical
+Sarah -> Dev : Open PR hotfix-critical -> dev (GitHub)
+Dev -> Dev : Code review and CI checks
+Dev -> Dev : Click "Merge pull request" (--no-ff)
+note right of Dev : GitHub merge preserves hotfix history\nfor audit trail (best practice)
+Sarah -> Mike : "Hotfix merged to dev - please rebase your feature"
+
+|||
+|||
+
+== Rebase Feature Branch ==
+Mike -> Api : git fetch origin
+Mike -> Api : git rebase origin/dev
+
+|||
+|||
+
+== Handle Rebase Conflicts ==
+Api -> Api : Resolve merge conflicts
+Api -> Api : git add conflicted-files
+Api -> Api : git rebase --continue
+
+|||
+|||
+
+== Feature Review and Merge to Dev ==
+Mike -> Dev : git push origin feature-api
+Mike -> Dev : Open PR feature-api -> dev (GitHub)
+Dev -> Dev : Code review and approval
+Dev -> Dev : Click "Squash and merge"
+note right of Dev : Squash merge cleans up feature history\nBut PR preserves original commits
+
+|||
+|||
+
+== Additional Features Development ==
+note over Sarah, Mike : More developers continue working...\nMultiple features accumulate in dev branch
+
+|||
+|||
+
+== Release to Production ==
+Dev -> Main : git push origin dev
+Dev -> Main : Open PR dev -> main (GitHub)
+Main -> Main : Final review and testing
+Main -> Main : Click "Create a merge commit"
+Main -> Main : Deploy to production
+
+|||
+|||
+
+== Post-Merge Cleanup ==
+Mike -> Api : git branch -d feature-api
+Sarah -> Hotfix : git branch -d hotfix-critical
+
+|||
+|||
+
+
+@enduml
