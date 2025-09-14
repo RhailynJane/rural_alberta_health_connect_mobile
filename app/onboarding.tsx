@@ -73,6 +73,13 @@ export default function Onboarding() {
             >
               <Text style={styles.getStartedText}>Get Started</Text>
             </TouchableOpacity>
+
+            {/* Disclaimer */}
+            <Text style={styles.disclaimer}>
+              By continuing, you acknowledge that this app provides health
+              information only and does not replace professional medical advice,
+              diagnosis, or treatment.
+            </Text>
           </View>
         </ScrollView>
       </CurvedBackground>
@@ -128,7 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 30,
     alignItems: "center",
-    marginTop: 20,
+    marginTop: 90,
     marginBottom: 24,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -138,5 +145,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  disclaimer: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    lineHeight: 16,
   },
 });
