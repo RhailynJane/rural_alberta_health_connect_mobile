@@ -12,6 +12,7 @@ import {
   View
 } from "react-native";
 import * as Yup from 'yup';
+import { useAuthActions } from "@convex-dev/auth/react";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
@@ -28,12 +29,16 @@ const SignInSchema = Yup.object().shape({
 
 export default function SignIn() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
 
-  const handleSignIn = (values: { email: string; password: string }) => {
-    // Handle sign in logic here
-    console.log("Sign in attempted with:", values);
-    // For now, navigate to dashboard
-    router.push("/dashboard");
+  const handleSignIn = async (values: { email: string; password: string }) => {
+    try {
+      await signIn("password", { email: values.email, password: values.password });
+      router.push("/(tabs)/dashboard");
+    } catch (error) {
+      console.error("Sign in failed:", error);
+      // Handle error (you can add error state here)
+    }
   };
 
   return (
