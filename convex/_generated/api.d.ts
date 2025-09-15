@@ -15,8 +15,9 @@ import type {
 } from "convex/server";
 import type * as auth from "../auth.js";
 import type * as http from "../http.js";
+import type * as model_user from "../model/user.js";
+import type * as user from "../user.js";
 import type * as userProfile from "../userProfile.js";
-import type * as userProfiles from "../userProfiles.js";
 import type * as utils_sanitize from "../utils/sanitize.js";
 
 /**
@@ -30,8 +31,9 @@ import type * as utils_sanitize from "../utils/sanitize.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   http: typeof http;
+  "model/user": typeof model_user;
+  user: typeof user;
   userProfile: typeof userProfile;
-  userProfiles: typeof userProfiles;
   "utils/sanitize": typeof utils_sanitize;
 }>;
 export declare const api: FilterApi<

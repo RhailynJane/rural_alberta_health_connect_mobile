@@ -1,4 +1,5 @@
 // app/dashboard.tsx
+import { useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { api } from "../../convex/_generated/api";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -20,7 +22,32 @@ export default function Dashboard() {
   const router = useRouter();
   const [userName, setUserName] = useState<string>("Demo");
   const [healthStatus, setHealthStatus] = useState<string>("Good");
+  const userWithProfile = useQuery(api.user.dashboardUser);
+  if (userWithProfile === undefined) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Loading...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  if (userWithProfile === null) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Please sign in to view your dashboard
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const { user, profile } = userWithProfile;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
@@ -85,7 +112,7 @@ export default function Dashboard() {
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Welcome, {userName}!!
+                Welcome, {user.name} {userName}!!
               </Text>
               <View style={styles.healthStatusContainer}>
                 <Text
@@ -332,5 +359,28 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 14,
     fontWeight: "600",
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#ff3b30",
+    textAlign: "center",
   },
 });
