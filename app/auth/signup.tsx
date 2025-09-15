@@ -1,5 +1,7 @@
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "expo-router";
 import { Formik } from 'formik';
+import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -35,20 +37,42 @@ const SignUpSchema = Yup.object().shape({
     .oneOf([true], 'You must agree to the terms and conditions')
 });
 
+interface SignUpFormValues {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  agreeToTerms: boolean;
+}
+
 export default function SignUp() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSignUp = (values: { 
-    firstName: string; 
-    lastName: string; 
-    email: string; 
-    password: string;
-    confirmPassword: string;
-    agreeToTerms: boolean;
-  }) => {
+  const handleSignUp = async (values: SignUpFormValues) => {
     // Handle sign up logic here
     console.log("Sign up attempted with:", values);
-    router.push("/auth/personal-info");
+    setSubmitError(null);
+    try {
+      console.log("🔄 Calling signIn with password provider...");
+      await signIn("password", {
+        email: values.email,
+        password: values.password,
+        flow: "signUp"
+      });
+      console.log("✅ Signup successful! Redirecting to profile completion...");
+      router.push("/auth/personal-info");
+    } catch (error) {
+      console.error("❌ Sign up failed:", error);
+      console.error("📊 Error details:", JSON.stringify(error, null, 2));
+      
+      const errorMessage = error instanceof Error
+      ? error.message
+      : "Signup failed. Please try again.";
+      setSubmitError(errorMessage);
+    }
   };
 
   return (
@@ -79,10 +103,10 @@ export default function SignUp() {
               </Text>
 
               <Formik
-                initialValues={{ 
-                  firstName: '', 
-                  lastName: '', 
-                  email: '', 
+                initialValues={{
+                  firstName: '',
+                  lastName: '',
+                  email: '',
                   password: '',
                   confirmPassword: '',
                   agreeToTerms: false
@@ -99,7 +123,7 @@ export default function SignUp() {
                         </Text>
                         <TextInput
                           style={[
-                            styles.input, 
+                            styles.input,
                             { fontFamily: FONTS.BarlowSemiCondensed },
                             errors.firstName && touched.firstName && styles.inputError
                           ]}
@@ -114,14 +138,14 @@ export default function SignUp() {
                           <Text style={styles.errorText}>{errors.firstName}</Text>
                         )}
                       </View>
-                      
+
                       <View style={styles.nameInputContainer}>
                         <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           Last Name
                         </Text>
                         <TextInput
                           style={[
-                            styles.input, 
+                            styles.input,
                             { fontFamily: FONTS.BarlowSemiCondensed },
                             errors.lastName && touched.lastName && styles.inputError
                           ]}
@@ -143,7 +167,7 @@ export default function SignUp() {
                     </Text>
                     <TextInput
                       style={[
-                        styles.input, 
+                        styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                         errors.email && touched.email && styles.inputError
                       ]}
@@ -164,7 +188,7 @@ export default function SignUp() {
                     </Text>
                     <TextInput
                       style={[
-                        styles.input, 
+                        styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                         errors.password && touched.password && styles.inputError
                       ]}
@@ -184,7 +208,7 @@ export default function SignUp() {
                     </Text>
                     <TextInput
                       style={[
-                        styles.input, 
+                        styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                         errors.confirmPassword && touched.confirmPassword && styles.inputError
                       ]}
@@ -218,8 +242,8 @@ export default function SignUp() {
                       <Text style={styles.errorText}>{errors.agreeToTerms}</Text>
                     )}
 
-                    <TouchableOpacity 
-                      style={styles.signUpButton} 
+                    <TouchableOpacity
+                      style={styles.signUpButton}
                       onPress={() => handleSubmit()}
                     >
                       <Text style={[styles.signUpButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -299,8 +323,8 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    fontSize: 15, 
-    marginBottom: 8, 
+    fontSize: 15,
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
