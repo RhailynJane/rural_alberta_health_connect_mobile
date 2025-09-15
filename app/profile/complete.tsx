@@ -43,6 +43,7 @@ export default function ProfileComplete() {
   const router = useRouter();
   const updateProfile = useMutation(api.userProfile.updateUserProfile);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = React.useState(false);
 
   const handleSaveProfile = async (values: ProfileFormValues) => {
     console.log("💾 Saving profile data...");
@@ -61,7 +62,10 @@ export default function ProfileComplete() {
         allergies: values.allergies || undefined,
       });
       console.log("✅ Profile saved successfully! Redirecting to dashboard...");
-      router.push("/(tabs)/dashboard");
+      setIsRedirecting(true);
+      setTimeout(() => {
+        router.push("/(tabs)/dashboard");
+      }, 1500);
     } catch (error) {
       console.error("❌ Profile save failed:", error);
       const errorMessage = error instanceof Error 
@@ -73,7 +77,10 @@ export default function ProfileComplete() {
 
   const handleSkip = () => {
     console.log("⏭️ User skipped profile completion");
-    router.push("/(tabs)/dashboard");
+    setIsRedirecting(true);
+    setTimeout(() => {
+      router.push("/(tabs)/dashboard");
+    }, 1500);
   };
 
   return (
@@ -220,27 +227,35 @@ export default function ProfileComplete() {
                       </View>
                     )}
 
-                    <View style={styles.buttonContainer}>
-                      <TouchableOpacity 
-                        style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]} 
-                        onPress={() => handleSubmit()}
-                        disabled={isSubmitting}
-                      >
-                        <Text style={[styles.saveButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {isSubmitting ? "Saving..." : "Save Profile"}
+                    {isRedirecting ? (
+                      <View style={styles.redirectingContainer}>
+                        <Text style={[styles.redirectingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          ✅ Taking you to your dashboard...
                         </Text>
-                      </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.buttonContainer}>
+                        <TouchableOpacity 
+                          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]} 
+                          onPress={() => handleSubmit()}
+                          disabled={isSubmitting}
+                        >
+                          <Text style={[styles.saveButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                            {isSubmitting ? "Saving..." : "Save Profile"}
+                          </Text>
+                        </TouchableOpacity>
 
-                      <TouchableOpacity 
-                        style={styles.skipButton} 
-                        onPress={handleSkip}
-                        disabled={isSubmitting}
-                      >
-                        <Text style={[styles.skipButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          Skip for now
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                        <TouchableOpacity 
+                          style={styles.skipButton} 
+                          onPress={handleSkip}
+                          disabled={isSubmitting}
+                        >
+                          <Text style={[styles.skipButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                            Skip for now
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 )}
               </Formik>
@@ -361,5 +376,17 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 16,
     fontWeight: "500",
+  },
+  redirectingContainer: {
+    marginTop: 32,
+    padding: 24,
+    backgroundColor: "#e8f5e8",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  redirectingText: {
+    fontSize: 16,
+    color: "#2e7d32",
+    textAlign: "center",
   },
 });

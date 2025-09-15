@@ -33,7 +33,7 @@ export default function SignIn() {
 
   const handleSignIn = async (values: { email: string; password: string }) => {
     try {
-      await signIn("password", { email: values.email, password: values.password });
+      await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
       router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);

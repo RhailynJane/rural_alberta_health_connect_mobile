@@ -1,4 +1,5 @@
 // app/dashboard.tsx
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -23,6 +24,18 @@ export default function Dashboard() {
   const [userName, setUserName] = useState<string>("Demo");
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const userWithProfile = useQuery(api.user.dashboardUser);
+  const debugData = useQuery(api.user.debugUserData);
+  const { signOut } = useAuthActions();
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace("/auth/signin");
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    }
+  };
+
   if (userWithProfile === undefined) {
     return (
       <SafeAreaView style={styles.container}>
@@ -222,6 +235,13 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+              <Text style={[styles.logoutButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Sign Out
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -382,5 +402,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#ff3b30",
     textAlign: "center",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  infoCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  infoRow: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 16,
+    color: "#1A1A1A",
+  },
+  noProfileCard: {
+    backgroundColor: "#fff3cd",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#ffc107",
+  },
+  noProfileText: {
+    fontSize: 16,
+    color: "#856404",
+    textAlign: "center",
+  },
+  logoutButton: {
+    backgroundColor: "#ff3b30",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  logoutButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
