@@ -5,9 +5,12 @@ import {
     SafeAreaView,
     ScrollView,
     StyleSheet,
+    Text,
+    View,
 } from "react-native";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import { FONTS } from "../constants/constants";
 
 export default function PersonalInfo() {
   const router = useRouter();
@@ -31,6 +34,16 @@ export default function PersonalInfo() {
               showLogo={true}
             />
 
+            <View style={styles.contentSection}>
+              <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Personal Information
+              </Text>
+              <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Help us personalize your experience
+              </Text>
+
+              </View>
+
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
@@ -48,5 +61,22 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
+  },
+  contentSection: {
+    padding: 24,
+    paddingTop: 40,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 40,
   },
 });
