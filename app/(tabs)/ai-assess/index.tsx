@@ -20,61 +20,105 @@ export default function SymptomAssessment() {
   const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [symptomDescription, setSymptomDescription] = useState("");
-  const [currentStep, setCurrentStep] = useState(1); // 1, 2, or 3
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
-    setCurrentStep(2); // Move to description step
   };
 
   const handleContinue = () => {
-    if (currentStep === 1 && !selectedCategory) {
-      Alert.alert("Selection Required", "Please select a symptom category or describe your symptoms.");
+    if (!selectedCategory && !symptomDescription.trim()) {
+      Alert.alert("Information Required", "Please select a symptom category or describe your symptoms.");
       return;
     }
     
-    if (currentStep === 2 && !symptomDescription.trim()) {
-      Alert.alert("Description Required", "Please describe your symptoms.");
-      return;
-    }
-
-    if (currentStep === 3) {
-      console.log("Moving to next step:", { selectedCategory, symptomDescription });
-      router.push("/(tabs)/ai-assess/symptom-severity"); 
-      return;
-    }
-
-    setCurrentStep(currentStep + 1);
-  };
-
-  const handleBack = () => {
-    if (currentStep === 1) {
-      router.back();
-    } else {
-      setCurrentStep(currentStep - 1);
-    }
+    console.log("Submitting assessment:", { selectedCategory, symptomDescription, uploadedPhotos });
+    router.push({
+      pathname: "/(tabs)/ai-assess/symptom-severity",
+      params: {
+        category: selectedCategory || "Custom",
+        description: symptomDescription,
+        photos: JSON.stringify(uploadedPhotos),
+      },
+    });
   };
 
   const handleTakePhoto = () => {
-    // Implement photo taking functionality
-    Alert.alert("Camera", "This would open the camera");
+    Alert.alert("Camera", "Camera functionality would be implemented here", [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Simulate Photo", 
+        onPress: () => {
+          const newPhoto = `photo_${Date.now()}.jpg`;
+          setUploadedPhotos(prev => [...prev, newPhoto]);
+        }
+      }
+    ]);
   };
 
   const handleUploadPhoto = () => {
-    // Implement photo upload functionality
-    Alert.alert("Photo Upload", "This would open the photo gallery");
+    Alert.alert("Photo Upload", "Photo gallery would be opened here", [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Simulate Upload", 
+        onPress: () => {
+          const newPhoto = `uploaded_${Date.now()}.jpg`;
+          setUploadedPhotos(prev => [...prev, newPhoto]);
+        }
+      }
+    ]);
   };
 
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <>
+  const handleRemovePhoto = (photoToRemove: string) => {
+    setUploadedPhotos(prev => prev.filter(photo => photo !== photoToRemove));
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case "Cold Weather Injuries":
+        return "snow";
+      case "Burns & Heat Injuries":
+        return "flame";
+      case "Trauma & Injuries":
+        return "bandage";
+      default:
+        return "medical";
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case "Cold Weather Injuries":
+        return "#2A7DE1";
+      case "Burns & Heat Injuries":
+        return "#FF6B35";
+      case "Trauma & Injuries":
+        return "#DC3545";
+      default:
+        return "#6C757D";
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header with logo */}
+          <CurvedHeader
+            title="Symptom Assessment"
+            height={120}
+            showLogo={true}
+          />
+
+          <View style={styles.contentSection}>
             <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               Describe Your Symptoms
             </Text>
             <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Select a category or describe what youre experiencing
+              Select a category or describe what you&#39;re experiencing
             </Text>
 
             {/* Cold Weather Injuries Card Button */}
@@ -86,7 +130,12 @@ export default function SymptomAssessment() {
               onPress={() => handleCategorySelect("Cold Weather Injuries")}
             >
               <View style={styles.categoryHeader}>
-                <Ionicons name="snow" size={24} color="#2A7DE1" style={styles.categoryIcon} />
+                <Ionicons 
+                  name={getCategoryIcon("Cold Weather Injuries")} 
+                  size={24} 
+                  color={getCategoryColor("Cold Weather Injuries")} 
+                  style={styles.categoryIcon} 
+                />
                 <Text style={[styles.categoryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                   Cold Weather Injuries
                 </Text>
@@ -105,7 +154,12 @@ export default function SymptomAssessment() {
               onPress={() => handleCategorySelect("Burns & Heat Injuries")}
             >
               <View style={styles.categoryHeader}>
-                <Ionicons name="flame" size={24} color="#FF6B35" style={styles.categoryIcon} />
+                <Ionicons 
+                  name={getCategoryIcon("Burns & Heat Injuries")} 
+                  size={24} 
+                  color={getCategoryColor("Burns & Heat Injuries")} 
+                  style={styles.categoryIcon} 
+                />
                 <Text style={[styles.categoryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                   Burns & Heat Injuries
                 </Text>
@@ -124,7 +178,12 @@ export default function SymptomAssessment() {
               onPress={() => handleCategorySelect("Trauma & Injuries")}
             >
               <View style={styles.categoryHeader}>
-                <Ionicons name="bandage" size={24} color="#DC3545" style={styles.categoryIcon} />
+                <Ionicons 
+                  name={getCategoryIcon("Trauma & Injuries")} 
+                  size={24} 
+                  color={getCategoryColor("Trauma & Injuries")} 
+                  style={styles.categoryIcon} 
+                />
                 <Text style={[styles.categoryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                   Trauma & Injuries
                 </Text>
@@ -138,34 +197,6 @@ export default function SymptomAssessment() {
               Or describe your symptoms:
             </Text>
             
-            <TouchableOpacity 
-              style={styles.describeButton}
-              onPress={() => setCurrentStep(2)}
-            >
-              <Ionicons name="create-outline" size={20} color="white" />
-              <Text style={[styles.describeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Describe Symptoms
-              </Text>
-            </TouchableOpacity>
-          </>
-        );
-
-      case 2:
-        return (
-          <>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Describe Your Symptoms
-            </Text>
-            
-            {selectedCategory && (
-              <View style={styles.selectedCategory}>
-                <Ionicons name="checkmark-circle" size={20} color="#2E7D32" style={styles.selectedIcon} />
-                <Text style={[styles.selectedCategoryText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Selected: {selectedCategory}
-                </Text>
-              </View>
-            )}
-            
             <TextInput
               style={[styles.symptomInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
               placeholder="I have been experiencing..."
@@ -173,7 +204,7 @@ export default function SymptomAssessment() {
               value={symptomDescription}
               onChangeText={setSymptomDescription}
               multiline
-              numberOfLines={6}
+              numberOfLines={4}
               textAlignVertical="top"
             />
 
@@ -182,8 +213,25 @@ export default function SymptomAssessment() {
                 Add Photos
               </Text>
               <Text style={[styles.photoDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Photos can help better understand your symptoms. Only upload photos youre comfortable sharing.
+                Photos can help better understand your symptoms. Only upload photos you&#39;re comfortable sharing.
               </Text>
+              
+              {/* Display uploaded photos */}
+              {uploadedPhotos.length > 0 && (
+                <View style={styles.uploadedPhotosContainer}>
+                  {uploadedPhotos.map((photo, index) => (
+                    <View key={index} style={styles.uploadedPhotoItem}>
+                      <Ionicons name="image" size={16} color="#2A7DE1" />
+                      <Text style={[styles.uploadedPhotoText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        {photo}
+                      </Text>
+                      <TouchableOpacity onPress={() => handleRemovePhoto(photo)}>
+                        <Ionicons name="close-circle" size={20} color="#DC3545" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
               
               <View style={styles.photoButtons}>
                 <TouchableOpacity style={styles.photoButton} onPress={handleTakePhoto}>
@@ -201,98 +249,28 @@ export default function SymptomAssessment() {
                 </TouchableOpacity>
               </View>
             </View>
-          </>
-        );
-
-      case 3:
-        return (
-          <>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Review Your Assessment
-            </Text>
-            
-            <View style={styles.reviewSection}>
-              {selectedCategory && (
-                <View style={styles.reviewItem}>
-                  <Text style={[styles.reviewLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Category:
-                  </Text>
-                  <Text style={[styles.reviewValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {selectedCategory}
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.reviewItem}>
-                <Text style={[styles.reviewLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Description:
-                </Text>
-                <Text style={[styles.reviewValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {symptomDescription || "No description provided"}
-                </Text>
-              </View>
-            </View>
-            
-            <Text style={[styles.finalNote, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Please review your information before submitting. Our AI system will analyze your symptoms and provide guidance.
-            </Text>
-          </>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header with logo */}
-          <CurvedHeader
-            title="Symptom Assessment"
-            height={120}
-            showLogo={true}
-          />
-
-          {/* Progress Bar - 3 Steps */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: `${(currentStep / 4) * 100}%` }
-                ]} 
-              />
-            </View>
-            <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Step {currentStep} of 4
-            </Text>
-          </View>
-
-          <View style={styles.contentSection}>
-            {renderStepContent()}
 
             <View style={styles.buttonContainer}>
               <TouchableOpacity 
                 style={styles.backButton} 
-                onPress={handleBack}
+                onPress={() => router.back()}
               >
                 <Ionicons name="arrow-back" size={20} color="#666" />
                 <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {currentStep === 1 ? "Cancel" : "Back"}
+                  Cancel
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={styles.continueButton} 
+                style={[
+                  styles.continueButton,
+                  (!selectedCategory && !symptomDescription.trim()) && styles.continueButtonDisabled
+                ]} 
                 onPress={handleContinue}
+                disabled={!selectedCategory && !symptomDescription.trim()}
               >
                 <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {currentStep === 3 ? "Submit Assessment" : "Continue"}
+                  Continue
                 </Text>
                 <Ionicons name="arrow-forward" size={20} color="white" />
               </TouchableOpacity>
@@ -315,27 +293,6 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     paddingBottom: 60,
-  },
-  progressContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 16,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 3,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#2A7DE1',
-    borderRadius: 3,
-  },
-  progressText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
   },
   contentSection: {
     padding: 24,
@@ -389,7 +346,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     lineHeight: 20,
-    marginLeft: 36, // Align with icon + title
+    marginLeft: 36,
   },
   orText: {
     fontSize: 16,
@@ -398,45 +355,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginVertical: 24,
   },
-  describeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#6C757D",
-    padding: 16,
-    borderRadius: 8,
-  },
-  describeButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  selectedCategory: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E8F5E8",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#C8E6C9",
-  },
-  selectedIcon: {
-    marginRight: 8,
-  },
-  selectedCategoryText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2E7D32",
-  },
   symptomInput: {
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    minHeight: 120,
+    minHeight: 100,
     marginBottom: 24,
     textAlignVertical: "top",
     shadowColor: "#000",
@@ -444,6 +369,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    fontSize: 16,
   },
   photoSection: {
     backgroundColor: "#F8F9FA",
@@ -451,6 +377,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
+    marginBottom: 24,
   },
   photoTitle: {
     fontSize: 16,
@@ -463,6 +390,25 @@ const styles = StyleSheet.create({
     color: "#666",
     marginBottom: 16,
     lineHeight: 20,
+  },
+  uploadedPhotosContainer: {
+    marginBottom: 16,
+  },
+  uploadedPhotoItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  uploadedPhotoText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 8,
   },
   photoButtons: {
     flexDirection: "row",
@@ -486,38 +432,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 8,
   },
-  reviewSection: {
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-  },
-  reviewItem: {
-    marginBottom: 16,
-  },
-  reviewLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 4,
-  },
-  reviewValue: {
-    fontSize: 16,
-    color: "#1A1A1A",
-  },
-  finalNote: {
-    fontSize: 14,
-    color: "#666",
-    fontStyle: "italic",
-    textAlign: "center",
-    marginBottom: 24,
-  },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 24,
   },
   backButton: {
     flexDirection: "row",
@@ -546,6 +463,9 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     flex: 1,
     marginLeft: 12,
+  },
+  continueButtonDisabled: {
+    backgroundColor: "#A0A0A0",
   },
   continueButtonText: {
     color: "white",

@@ -1,14 +1,14 @@
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-    
-const SymptomSeverity = () => {
+
+const SymptomDuration = () => {
   return (
     <View>
-      <Text>Symptom Severity</Text>
+      <Text>Symptom Duration</Text>
     </View>
   )
 }
 
-export default SymptomSeverity
+export default SymptomDuration
 
 const styles = StyleSheet.create({})
