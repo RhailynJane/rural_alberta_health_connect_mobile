@@ -235,13 +235,7 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
-          <View style={styles.section}>
-            <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-              <Text style={[styles.logoutButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Sign Out
-              </Text>
-            </TouchableOpacity>
-          </View>
+          
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -453,16 +447,5 @@ const styles = StyleSheet.create({
     color: "#856404",
     textAlign: "center",
   },
-  logoutButton: {
-    backgroundColor: "#ff3b30",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  logoutButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  
 });
