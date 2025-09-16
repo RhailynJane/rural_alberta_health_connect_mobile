@@ -48,7 +48,7 @@ export default function SignUp() {
   }) => {
     // Handle sign up logic here
     console.log("Sign up attempted with:", values);
-    router.push("/dashboard");
+    router.push("/auth/personal-info");
   };
 
   return (
