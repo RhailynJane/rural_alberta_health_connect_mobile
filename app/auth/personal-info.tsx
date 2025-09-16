@@ -42,6 +42,21 @@ export default function PersonalInfo() {
               showLogo={true}
             />
 
+            {/* Progress Bar */}
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View style={styles.progressFill} />
+              </View>
+              <Text
+                style={[
+                  styles.progressText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Step 1 of 3
+              </Text>
+            </View>
+
             <View style={styles.contentSection}>
               <Text
                 style={[
@@ -146,6 +161,28 @@ const styles = StyleSheet.create({
   contentSection: {
     padding: 24,
     paddingTop: 40,
+  },
+  progressContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: "#E0E0E0",
+    borderRadius: 3,
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    width: "33%", // 1 out of 3 steps completed
+    backgroundColor: "#2A7DE1",
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
   },
   sectionTitle: {
     fontSize: 24,
