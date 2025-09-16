@@ -1,3 +1,4 @@
+import { Picker } from '@react-native-picker/picker';
 import { useRouter } from "expo-router";
 import {
     KeyboardAvoidingView,
@@ -42,7 +43,49 @@ export default function PersonalInfo() {
                 Help us personalize your experience
               </Text>
 
+               <View style={styles.formContainer}>
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Age Range
+                </Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    style={styles.picker}
+                    dropdownIconColor="#2A7DE1"
+                  >
+                    <Picker.Item label="Select your age range" value="" />
+                    <Picker.Item label="Under 18" value="under18" />
+                    <Picker.Item label="18-24" value="18-24" />
+                    <Picker.Item label="25-34" value="25-34" />
+                    <Picker.Item label="35-44" value="35-44" />
+                    <Picker.Item label="45-54" value="45-54" />
+                    <Picker.Item label="55-64" value="55-64" />
+                    <Picker.Item label="65+" value="65plus" />
+                  </Picker>
+                </View>
+
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Location
+                </Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    style={styles.picker}
+                    dropdownIconColor="#2A7DE1"
+                  >
+                    <Picker.Item label="Select your location" value="" />
+                    <Picker.Item label="Northern Alberta" value="northern" />
+                    <Picker.Item label="Central Alberta" value="central" />
+                    <Picker.Item label="Edmonton Area" value="edmonton" />
+                    <Picker.Item label="Calgary Area" value="calgary" />
+                    <Picker.Item label="Southern Alberta" value="southern" />
+                  </Picker>
+                </View>
+
+                <Text style={[styles.helperText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  This helps us provide location-specific health resources
+                </Text>
               </View>
+
+            </View>
 
           </ScrollView>
         </KeyboardAvoidingView>
@@ -78,5 +121,39 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginBottom: 40,
+  },
+  formContainer: {
+    width: "100%",
+    marginBottom: 40,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  pickerContainer: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  picker: {
+    width: "100%",
+    height: 50,
+  },
+  helperText: {
+    fontSize: 14,
+    color: "#666",
+    fontStyle: "italic",
+    marginTop: 4,
   },
 });
