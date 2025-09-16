@@ -144,7 +144,7 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "transparent",
   },
   container: {
     flex: 1,
