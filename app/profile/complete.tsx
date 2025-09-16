@@ -13,7 +13,7 @@ import {
   View
 } from "react-native";
 import * as Yup from 'yup';
-import { useMutation } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -41,9 +41,24 @@ interface ProfileFormValues {
 
 export default function ProfileComplete() {
   const router = useRouter();
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const user = useQuery(
+    api.user.dashboardUser,
+    isAuthenticated ? {} : "skip"
+  );
   const updateProfile = useMutation(api.userProfile.updateUserProfile);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = React.useState(false);
+
+  // Handle redirect when not authenticated
+  React.useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/auth/signin");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Determine if we're ready to show the form
+  const isAuthReady = isAuthenticated && !isLoading && user;
 
   const handleSaveProfile = async (values: ProfileFormValues) => {
     console.log("💾 Saving profile data...");
@@ -63,9 +78,7 @@ export default function ProfileComplete() {
       });
       console.log("✅ Profile saved successfully! Redirecting to dashboard...");
       setIsRedirecting(true);
-      setTimeout(() => {
-        router.push("/(tabs)/dashboard");
-      }, 1500);
+      router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("❌ Profile save failed:", error);
       const errorMessage = error instanceof Error 
@@ -78,10 +91,41 @@ export default function ProfileComplete() {
   const handleSkip = () => {
     console.log("⏭️ User skipped profile completion");
     setIsRedirecting(true);
-    setTimeout(() => {
-      router.push("/(tabs)/dashboard");
-    }, 1500);
+    router.push("/(tabs)/dashboard");
   };
+
+  // Show loading state while auth is establishing or redirect is happening
+  if (!isAuthReady) {
+    const loadingText = !isAuthenticated ? "Redirecting..." : "Setting up account...";
+    const loadingSubtext = !isAuthenticated ? "" : "Please wait while we prepare your profile";
+
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <View style={styles.container}>
+            <CurvedHeader
+              title="Alberta Health Connect"
+              height={120}
+              showLogo={true}
+              screenType="signin"
+            />
+            <View style={styles.contentSection}>
+              <View style={styles.loadingContainer}>
+                <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {loadingText}
+                </Text>
+                {loadingSubtext && (
+                  <Text style={[styles.loadingSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {loadingSubtext}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        </CurvedBackground>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -388,5 +432,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#2e7d32",
     textAlign: "center",
+  },
+  loadingContainer: {
+    marginTop: 60,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    fontSize: 24,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  loadingSubtext: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 22,
   },
 });
