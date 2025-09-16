@@ -23,7 +23,7 @@ export default function SymptomSeverity() {
     console.log("Severity level:", severityLevel);
     // Navigate to next screen with all collected data
     router.push({
-      pathname: "/(tabs)/ai-assess/assessment-results",
+      pathname: "/(tabs)/ai-assess/symptom-duration",
       params: {
         ...params,
         severity: severityLevel.toString(),
