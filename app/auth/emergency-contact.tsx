@@ -7,6 +7,8 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
+    TouchableOpacity,
     View
 } from "react-native";
 import CurvedBackground from "../components/curvedBackground";
@@ -66,6 +68,58 @@ export default function EmergencyContact() {
               <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Important for your safety
               </Text>
+
+              <View style={styles.formContainer}>
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Emergency Contact Name
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { fontFamily: FONTS.BarlowSemiCondensed }
+                  ]}
+                  placeholder="Enter emergency contact name"
+                  placeholderTextColor="#999"
+                  value={contactName}
+                  onChangeText={setContactName}
+                />
+
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
+                  Emergency Contact Phone
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { fontFamily: FONTS.BarlowSemiCondensed }
+                  ]}
+                  placeholder="Enter emergency contact phone"
+                  placeholderTextColor="#999"
+                  value={contactPhone}
+                  onChangeText={setContactPhone}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity 
+                  style={styles.backButton} 
+                  onPress={handleBack}
+                >
+                  <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Back
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.continueButton, (!contactName || !contactPhone) && styles.continueButtonDisabled]} 
+                  onPress={handleContinue}
+                  disabled={!contactName || !contactPhone}
+                >
+                  <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Continue
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -122,5 +176,75 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginBottom: 32,
+  },
+  formContainer: {
+    width: "100%",
+    marginBottom: 40,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 16,
+    fontSize: 15, 
+    marginBottom: 8, 
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  backButton: {
+    backgroundColor: "#F0F0F0",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    alignItems: "center",
+    flex: 1,
+    marginRight: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  backButtonText: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  continueButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    alignItems: "center",
+    flex: 1,
+    marginLeft: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  continueButtonDisabled: {
+    backgroundColor: "#CCCCCC",
+  },
+  continueButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
