@@ -1,59 +1,45 @@
 // components/BottomNavigation.tsx
+import { usePathname, useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FONTS } from '../constants/constants';
 
-interface BottomNavigationProps {
-  state: any;
-  descriptors: any;
-  navigation: any;
+interface Tab {
+  name: string;
+  label: string;
+  route: string;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ state, descriptors, navigation }) => {
+const tabs: Tab[] = [
+  { name: 'Home', label: 'Home', route: '/dashboard' },
+  { name: 'AIAssess', label: 'AI Assess', route: '/ai-assess' },
+  { name: 'Tracker', label: 'Tracker', route: '/tracker' },
+  { name: 'Emergency', label: 'Emergency', route: '/emergency' },
+  { name: 'Profile', label: 'Profile', route: '/profile' },
+];
+
+const BottomNavigation: React.FC = () => {
+  const router = useRouter();
+  const pathname = usePathname();
+
   return (
     <View style={styles.container}>
-      {state.routes.map((route: any, index: number) => {
-        const { options } = descriptors[route.key];
-        const label =
-          options.tabBarLabel !== undefined
-            ? options.tabBarLabel
-            : options.title !== undefined
-            ? options.title
-            : route.name;
-
-        const isFocused = state.index === index;
+      {tabs.map((tab) => {
+        const isFocused = pathname === tab.route;
 
         const onPress = () => {
-          const event = navigation.emit({
-            type: 'tabPress',
-            target: route.key,
-            canPreventDefault: true,
-          });
-
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
-
-        const onLongPress = () => {
-          navigation.emit({
-            type: 'tabLongPress',
-            target: route.key,
-          });
+          router.push(tab.route as any);
         };
 
         return (
           <TouchableOpacity
-            key={route.key}
+            key={tab.name}
             accessibilityRole="button"
             accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel}
-            testID={options.tabBarTestID}
             onPress={onPress}
-            onLongPress={onLongPress}
             style={[styles.tab, isFocused && styles.tabFocused]}
           >
             <Text style={[styles.tabText, isFocused && styles.tabTextFocused]}>
-              {label}
+              {tab.label}
             </Text>
           </TouchableOpacity>
         );
