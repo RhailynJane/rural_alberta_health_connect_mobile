@@ -1,14 +1,21 @@
-import React from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Text, View } from 'react-native';
+import BottomNavigation from '../components/bottomNavigation';
+import CurvedBackground from '../components/curvedBackground';
+import CurvedHeader from '../components/curvedHeader';
+import { FONTS } from '../constants/constants';
 
-const dashboard = () => {
+export default function dashboard() {
   return (
-    <View>
-      <Text>dashboard</Text>
-    </View>
-  )
+    <CurvedBackground>
+      <CurvedHeader
+        title="Dashboard"
+        height={120}
+        showLogo={true}
+      />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed }}>Dashboard Screen</Text>
+      </View>
+      <BottomNavigation />
+    </CurvedBackground>
+  );
 }
-
-export default dashboard
-
-const styles = StyleSheet.create({})
