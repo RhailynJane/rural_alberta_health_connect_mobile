@@ -8,20 +8,22 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import HealthStatusTag from "../components/HealthStatusTag";
 import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [userName, setUserName] = useState<string>("Rha");
+  const [userName, setUserName] = useState<string>("Demo");
+  const [healthStatus, setHealthStatus] = useState<string>("Good");
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
-    router.push("/(tabs)/ai-assess/index");
+    router.push("../ai-assess");
   };
 
   const handleEmergencyCall = (): void => {
@@ -31,37 +33,33 @@ export default function Dashboard() {
       [
         {
           text: "Cancel",
-          style: "cancel"
+          style: "cancel",
         },
         {
           text: "Call 911",
           onPress: () => {
             // This would actually call 911 in a real app
             console.log("Calling 911...");
-          }
-        }
+          },
+        },
       ]
     );
   };
 
   const callHealthLink = (): void => {
-    Alert.alert(
-      "Health Link Alberta",
-      "Call 811 for urgent health concerns?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
+    Alert.alert("Health Link Alberta", "Call 811 for urgent health concerns?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Call 811",
+        onPress: () => {
+          // This would actually call 811 in a real app
+          console.log("Calling Health Link Alberta at 811...");
         },
-        {
-          text: "Call 811",
-          onPress: () => {
-            // This would actually call 811 in a real app
-            console.log("Calling Health Link Alberta at 811...");
-          }
-        }
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -81,66 +79,116 @@ export default function Dashboard() {
           <View style={styles.contentSection}>
             {/* Welcome Section */}
             <View style={styles.welcomeContainer}>
-              <Text style={[styles.welcomeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.welcomeText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Welcome, {userName}!!
               </Text>
               <View style={styles.healthStatusContainer}>
-                <Text style={[styles.healthStatusLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.healthStatusLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   Health Status
                 </Text>
-                <Text style={[styles.healthStatusValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Good
-                </Text>
+                <HealthStatusTag status={healthStatus} />
               </View>
             </View>
 
             {/* Symptom Assessment Button */}
-            <TouchableOpacity 
-              style={styles.assessmentButton} 
+            <TouchableOpacity
+              style={styles.assessmentButton}
               onPress={handleSymptomAssessment}
             >
-              <Text style={[styles.assessmentButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.assessmentButtonText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Start Symptom Assessment
               </Text>
             </TouchableOpacity>
 
             {/* Medical Disclaimer */}
             <View style={styles.disclaimerContainer}>
-              <Text style={[styles.disclaimerTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.disclaimerTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Medical Disclaimer
               </Text>
-              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                This app provides health guidance only. It does not replace professional medical advice.
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                This app provides health guidance only. It does not replace
+                professional medical advice.
               </Text>
-              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Always consult healthcare professionals for medical concerns.
               </Text>
             </View>
 
             {/* Emergency Notice */}
             <View style={styles.emergencyContainer}>
-              <Text style={[styles.emergencyTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.emergencyTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Emergency Notice
               </Text>
-              <Text style={[styles.emergencyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                For life-threatening emergencies, call 911 immediately. For urgent health concerns, contact Health Link Alberta at 811.
+              <Text
+                style={[
+                  styles.emergencyText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                For life-threatening emergencies, call 911 immediately. For
+                urgent health concerns, contact Health Link Alberta at 811.
               </Text>
-              
+
               <View style={styles.emergencyButtonsContainer}>
-                <TouchableOpacity 
-                  style={styles.emergencyButton} 
+                <TouchableOpacity
+                  style={styles.emergencyButton}
                   onPress={handleEmergencyCall}
                 >
-                  <Text style={[styles.emergencyButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  <Text
+                    style={[
+                      styles.emergencyButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
                     Call 911
                   </Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.healthLinkButton} 
+
+                <TouchableOpacity
+                  style={styles.healthLinkButton}
                   onPress={callHealthLink}
                 >
-                  <Text style={[styles.healthLinkButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  <Text
+                    style={[
+                      styles.healthLinkButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
                     Call Health Link
                   </Text>
                 </TouchableOpacity>
@@ -179,18 +227,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   healthStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: "#E9ECEF",
   },
   healthStatusLabel: {
     fontSize: 16,
     color: "#666",
-    marginRight: 8,
+    marginRight: 150,
   },
   healthStatusValue: {
     fontSize: 16,
@@ -254,8 +302,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   emergencyButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   emergencyButton: {
     backgroundColor: "#DC3545",
@@ -264,7 +312,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     marginRight: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emergencyButtonText: {
     color: "white",
@@ -278,7 +326,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     marginLeft: 8,
-    alignItems: 'center',
+    alignItems: "center",
   },
   healthLinkButtonText: {
     color: "white",
