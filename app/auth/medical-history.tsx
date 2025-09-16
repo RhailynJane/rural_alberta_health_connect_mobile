@@ -7,6 +7,8 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
+    TouchableOpacity,
     View
 } from "react-native";
 import CurvedBackground from "../components/curvedBackground";
@@ -15,9 +17,9 @@ import { FONTS } from "../constants/constants";
 
 export default function MedicalHistory() {
   const router = useRouter();
-  const [medicalConditions, setMedicalConditions] = useState("");
-  const [currentMedications, setCurrentMedications] = useState(false);
-  const [allergies, setAllergies] = useState(false);
+  const [medicalConditions, setMedicalConditions] = useState('');
+  const [currentMedications, setCurrentMedications] = useState('');
+  const [allergies, setAllergies] = useState('');
 
   const handleCompleteSetup = () => {
     // Handle form submission logic here
@@ -53,55 +55,92 @@ export default function MedicalHistory() {
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
               <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: "100%" }]} />
+                <View style={[styles.progressFill, { width: '100%' }]} />
               </View>
-              <Text
-                style={[
-                  styles.progressText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
+              <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Step 3 of 3
               </Text>
             </View>
 
             <View style={styles.contentSection}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
+              <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Medical History
               </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
+              <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Optional but helps provide better guidance
               </Text>
 
               <View style={styles.formContainer}>
-                <Text
-                  style={[
-                    styles.fieldLabel,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                   Medical Conditions (Optional)
                 </Text>
-                <View style={styles.textAreaContainer}>
-                  <Text
-                    style={[
-                      styles.placeholderText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    List any medical conditions you have
+                <TextInput
+                  style={[
+                    styles.textArea, 
+                    { fontFamily: FONTS.BarlowSemiCondensed }
+                  ]}
+                  placeholder="List any medical conditions you have"
+                  placeholderTextColor="#999"
+                  value={medicalConditions}
+                  onChangeText={setMedicalConditions}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
+                  Current Medications (Optional)
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textArea, 
+                    { fontFamily: FONTS.BarlowSemiCondensed }
+                  ]}
+                  placeholder="List any current medications"
+                  placeholderTextColor="#999"
+                  value={currentMedications}
+                  onChangeText={setCurrentMedications}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+
+                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
+                  Allergies (Optional)
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textArea, 
+                    { fontFamily: FONTS.BarlowSemiCondensed }
+                  ]}
+                  placeholder="List any allergies you have"
+                  placeholderTextColor="#999"
+                  value={allergies}
+                  onChangeText={setAllergies}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity 
+                  style={styles.backButton} 
+                  onPress={handleBack}
+                >
+                  <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Back
                   </Text>
-                </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.completeButton} 
+                  onPress={handleCompleteSetup}
+                >
+                  <Text style={[styles.completeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Complete Setup
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
@@ -128,20 +167,20 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 6,
-    backgroundColor: "#E0E0E0",
+    backgroundColor: '#E0E0E0',
     borderRadius: 3,
     marginBottom: 8,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   progressFill: {
-    height: "100%",
-    backgroundColor: "#2A7DE1",
+    height: '100%',
+    backgroundColor: '#2A7DE1',
     borderRadius: 3,
   },
   progressText: {
     fontSize: 14,
-    color: "#666",
-    textAlign: "center",
+    color: '#666',
+    textAlign: 'center',
   },
   contentSection: {
     padding: 24,
@@ -168,25 +207,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#1A1A1A",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  textAreaContainer: {
+  textArea: {
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    height: 100,
-    marginBottom: 20,
-    justifyContent: "center",
+    fontSize: 15,
+    minHeight: 100,
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
-  placeholderText: {
-    fontSize: 15,
-    color: "#999",
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 5,
+  },
+  backButton: {
+    backgroundColor: "#F0F0F0",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    alignItems: "center",
+    flex: 1,
+    marginRight: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  backButtonText: {
+    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  completeButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 30,
+    alignItems: "center",
+    flex: 1,
+    marginLeft: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  completeButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
