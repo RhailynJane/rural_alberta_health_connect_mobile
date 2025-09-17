@@ -17,7 +17,6 @@ import type * as auth from "../auth.js";
 import type * as dashboard_user from "../dashboard/user.js";
 import type * as http from "../http.js";
 import type * as model_user from "../model/user.js";
-import type * as user from "../user.js";
 import type * as userProfile from "../userProfile.js";
 import type * as utils_sanitize from "../utils/sanitize.js";
 
@@ -34,7 +33,6 @@ declare const fullApi: ApiFromModules<{
   "dashboard/user": typeof dashboard_user;
   http: typeof http;
   "model/user": typeof model_user;
-  user: typeof user;
   userProfile: typeof userProfile;
   "utils/sanitize": typeof utils_sanitize;
 }>;
