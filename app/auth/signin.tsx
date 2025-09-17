@@ -1,3 +1,4 @@
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "expo-router";
 import { Formik } from 'formik';
 import {
@@ -12,7 +13,6 @@ import {
   View
 } from "react-native";
 import * as Yup from 'yup';
-import { useAuthActions } from "@convex-dev/auth/react";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
@@ -34,7 +34,7 @@ export default function SignIn() {
   const handleSignIn = async (values: { email: string; password: string }) => {
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      router.push("/(tabs)/dashboard");
+      router.push("/auth/personal-info");
     } catch (error) {
       console.error("Sign in failed:", error);
       // Handle error (you can add error state here)
@@ -80,7 +80,7 @@ export default function SignIn() {
                     </Text>
                     <TextInput
                       style={[
-                        styles.input, 
+                        styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                         errors.email && touched.email && styles.inputError
                       ]}
@@ -101,7 +101,7 @@ export default function SignIn() {
                     </Text>
                     <TextInput
                       style={[
-                        styles.input, 
+                        styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                         errors.password && touched.password && styles.inputError
                       ]}
@@ -116,8 +116,8 @@ export default function SignIn() {
                       <Text style={styles.errorText}>{errors.password}</Text>
                     )}
 
-                    <TouchableOpacity 
-                      style={styles.signInButton} 
+                    <TouchableOpacity
+                      style={styles.signInButton}
                       onPress={() => handleSubmit()}
                     >
                       <Text style={[styles.signInButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -213,8 +213,8 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    fontSize: 15, 
-    marginBottom: 8, 
+    fontSize: 15,
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,

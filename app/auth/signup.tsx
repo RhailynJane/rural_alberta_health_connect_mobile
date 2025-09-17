@@ -56,21 +56,19 @@ export default function SignUp() {
     console.log("Sign up attempted with:", values);
     setSubmitError(null);
     try {
-      console.log("🔄 Calling signIn with password provider...");
       await signIn("password", {
         email: values.email,
         password: values.password,
         flow: "signUp"
       });
-      console.log("✅ Signup successful! Redirecting to profile completion...");
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
-      
+
       const errorMessage = error instanceof Error
-      ? error.message
-      : "Signup failed. Please try again.";
+        ? error.message
+        : "Signup failed. Please try again.";
       setSubmitError(errorMessage);
     }
   };

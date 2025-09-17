@@ -1,3 +1,4 @@
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { Formik } from 'formik';
 import React from 'react';
@@ -13,7 +14,6 @@ import {
   View
 } from "react-native";
 import * as Yup from 'yup';
-import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -43,7 +43,7 @@ export default function ProfileComplete() {
   const router = useRouter();
   const { isLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(
-    api.user.dashboardUser,
+    api.dashboard.user.getUserWithProfile,
     isAuthenticated ? {} : "skip"
   );
   const updateProfile = useMutation(api.userProfile.updateUserProfile);
@@ -81,8 +81,8 @@ export default function ProfileComplete() {
       router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("❌ Profile save failed:", error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
+      const errorMessage = error instanceof Error
+        ? error.message
         : "Failed to save profile. Please try again.";
       setSubmitError(errorMessage);
     }
@@ -279,8 +279,8 @@ export default function ProfileComplete() {
                       </View>
                     ) : (
                       <View style={styles.buttonContainer}>
-                        <TouchableOpacity 
-                          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]} 
+                        <TouchableOpacity
+                          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
                           onPress={() => handleSubmit()}
                           disabled={isSubmitting}
                         >
@@ -289,8 +289,8 @@ export default function ProfileComplete() {
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
-                          style={styles.skipButton} 
+                        <TouchableOpacity
+                          style={styles.skipButton}
                           onPress={handleSkip}
                           disabled={isSubmitting}
                         >
@@ -360,8 +360,8 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    fontSize: 15, 
-    marginBottom: 16, 
+    fontSize: 15,
+    marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
