@@ -1,4 +1,5 @@
 // app/dashboard.tsx
+import { useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { api } from "../../convex/_generated/api";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -18,9 +20,34 @@ import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [userName, setUserName] = useState<string>("Demo");
   const [healthStatus, setHealthStatus] = useState<string>("Good");
+  const userWithProfile = useQuery(api.dashboard.user.getUserWithProfile);
 
+  if (userWithProfile === undefined) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Loading...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (userWithProfile === null) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Please sign in to view your dashboard
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const { userName, userEmail } = userWithProfile;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
@@ -85,7 +112,7 @@ export default function Dashboard() {
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Welcome, {userName}!!
+                Welcome, {userName} {userEmail}!!
               </Text>
               <View style={styles.healthStatusContainer}>
                 <Text
@@ -195,6 +222,7 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
+
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -333,4 +361,78 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#ff3b30",
+    textAlign: "center",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 24,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  infoCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  infoRow: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 4,
+  },
+  value: {
+    fontSize: 16,
+    color: "#1A1A1A",
+  },
+  noProfileCard: {
+    backgroundColor: "#fff3cd",
+    borderRadius: 12,
+    padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#ffc107",
+  },
+  noProfileText: {
+    fontSize: 16,
+    color: "#856404",
+    textAlign: "center",
+  },
+
 });
