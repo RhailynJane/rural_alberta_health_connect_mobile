@@ -1,18 +1,24 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
-import { getOneFrom } from "convex-helpers/server/relationships";
+import { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
-export async function getCurrentUserWithProfile(ctx: QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
-
+export async function getCurrentUserWithProfile(
+  ctx: QueryCtx,
+  userId: Id<"users">
+) {
   const user = await ctx.db.get(userId);
-  if (!user) throw new Error("User not found");
 
-  const profile = await getOneFrom(ctx.db, "userProfiles", "byUserId", userId, "userId");
+  if (!user) {
+    return null;
+  }
+
+  const userProfile = await ctx.db
+    .query("userProfiles")
+    .withIndex("byUserId", (q) => q.eq("userId", userId))
+    .first();
 
   return {
-    user,
-    profile,
+    ...userProfile,
+    userEmail: user?.email,
+    userName: user?.name,
   };
 }
