@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { query } from "../_generated/server";
+import { getCurrentUserWithProfile } from "../model/user";
 
 export const getUserWithProfile = query({
   args: {},
@@ -7,9 +8,6 @@ export const getUserWithProfile = query({
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
 
-    const user = await ctx.db.get(userId);
-    if (!user) throw new Error("User not found");
-
-    return await Promise.resolve;
+    return await getCurrentUserWithProfile(ctx, userId);
   },
 });

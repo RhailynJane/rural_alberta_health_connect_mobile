@@ -1,5 +1,4 @@
 // app/dashboard.tsx
-import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -21,19 +20,8 @@ import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [userName, setUserName] = useState<string>("Demo");
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const userWithProfile = useQuery(api.user.dashboardUser);
-  const { signOut } = useAuthActions();
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.replace("/auth/signin");
-    } catch (error) {
-      console.error("Sign out failed:", error);
-    }
-  };
+  const userWithProfile = useQuery(api.dashboard.user.getUserWithProfile);
 
   if (userWithProfile === undefined) {
     return (
@@ -59,7 +47,7 @@ export default function Dashboard() {
     );
   }
 
-  const { user, profile } = userWithProfile;
+  const { userName, userEmail } = userWithProfile;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
@@ -124,7 +112,7 @@ export default function Dashboard() {
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Welcome, {user.name} {userName}!!
+                Welcome, {userName} {userEmail}!!
               </Text>
               <View style={styles.healthStatusContainer}>
                 <Text
