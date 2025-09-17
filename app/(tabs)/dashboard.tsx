@@ -24,7 +24,6 @@ export default function Dashboard() {
   const [userName, setUserName] = useState<string>("Demo");
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const userWithProfile = useQuery(api.user.dashboardUser);
-  const debugData = useQuery(api.user.debugUserData);
   const { signOut } = useAuthActions();
 
   const handleSignOut = async () => {
@@ -235,7 +234,7 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
-          
+
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -447,5 +446,5 @@ const styles = StyleSheet.create({
     color: "#856404",
     textAlign: "center",
   },
-  
+
 });
