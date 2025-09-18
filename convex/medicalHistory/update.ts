@@ -1,9 +1,9 @@
-import { mutation } from "../_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { updateMedicalHistory, completeOnboarding } from "../model/userProfile";
+import { v } from "convex/values";
+import { mutation } from "../_generated/server";
+import { completeOnboarding, updateMedicalHistory } from "../model/userProfile";
 
-export const updateHistory = mutation({
+export const withAllConditions = mutation({
   args: {
     medicalConditions: v.optional(v.string()),
     currentMedications: v.optional(v.string()),

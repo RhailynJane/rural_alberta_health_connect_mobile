@@ -1,19 +1,19 @@
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
-import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -26,7 +26,8 @@ export default function MedicalHistory() {
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updateMedicalHistory = useMutation(api.userProfile.updateMedicalHistory);
+  const updateMedicalHistory = useMutation(api.medicalHistory.update.withAllConditions);
+  const updateCompleteUserOnboarding = useMutation(api.medicalHistory.update.completeUserOnboarding);
 
   const handleCompleteSetup = async () => {
     setIsSubmitting(true);
@@ -38,6 +39,7 @@ export default function MedicalHistory() {
       });
       console.log("Medical history saved successfully, onboarding completed!");
       // Navigate to dashboard
+      await updateCompleteUserOnboarding();
       router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("Error saving medical history:", error);
