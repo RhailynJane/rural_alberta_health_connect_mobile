@@ -1,6 +1,9 @@
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -10,18 +13,40 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
 export default function PersonalInfo() {
   const router = useRouter();
+  const [ageRange, setAgeRange] = useState("");
+  const [location, setLocation] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleContinue = () => {
-    // Handle form submission logic here
-    console.log("Personal info form submitted");
-    // Navigate to next screen
-    router.push("/auth/emergency-contact");
+  const updatePersonalInfo = useMutation(api.userProfile.updatePersonalInfo);
+
+  const handleContinue = async () => {
+    if (!ageRange || !location) {
+      Alert.alert("Required Fields", "Please select both age range and location to continue.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updatePersonalInfo({ ageRange, location });
+      console.log("Personal info saved successfully");
+      router.push("/auth/emergency-contact");
+    } catch (error) {
+      console.error("Error saving personal info:", error);
+      Alert.alert(
+        "Error",
+        "Failed to save personal information. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -85,7 +110,12 @@ export default function PersonalInfo() {
                   Age Range
                 </Text>
                 <View style={styles.pickerContainer}>
-                  <Picker style={styles.picker} dropdownIconColor="#2A7DE1">
+                  <Picker
+                    style={styles.picker}
+                    dropdownIconColor="#2A7DE1"
+                    selectedValue={ageRange}
+                    onValueChange={setAgeRange}
+                  >
                     <Picker.Item label="Select your age range" value="" />
                     <Picker.Item label="Under 18" value="under18" />
                     <Picker.Item label="18-24" value="18-24" />
@@ -106,7 +136,12 @@ export default function PersonalInfo() {
                   Location
                 </Text>
                 <View style={styles.pickerContainer}>
-                  <Picker style={styles.picker} dropdownIconColor="#2A7DE1">
+                  <Picker
+                    style={styles.picker}
+                    dropdownIconColor="#2A7DE1"
+                    selectedValue={location}
+                    onValueChange={setLocation}
+                  >
                     <Picker.Item label="Select your location" value="" />
                     <Picker.Item label="Northern Alberta" value="northern" />
                     <Picker.Item label="Central Alberta" value="central" />
@@ -127,17 +162,25 @@ export default function PersonalInfo() {
               </View>
 
               <TouchableOpacity
-                style={styles.continueButton}
+                style={[
+                  styles.continueButton,
+                  (isSubmitting || !ageRange || !location) && styles.continueButtonDisabled
+                ]}
                 onPress={handleContinue}
+                disabled={isSubmitting || !ageRange || !location}
               >
-                <Text
-                  style={[
-                    styles.continueButtonText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Continue
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.continueButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Continue
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -243,6 +286,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
+  },
+  continueButtonDisabled: {
+    backgroundColor: "#CCCCCC",
   },
   continueButtonText: {
     color: "white",

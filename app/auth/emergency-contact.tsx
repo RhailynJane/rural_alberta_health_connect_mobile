@@ -1,6 +1,8 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -11,6 +13,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
@@ -19,12 +23,33 @@ export default function EmergencyContact() {
   const router = useRouter();
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleContinue = () => {
-    // Handle form submission logic here
-    console.log("Emergency contact form submitted");
-    // Navigate to next screen
-    router.push("/auth/medical-history");
+  const updateEmergencyContact = useMutation(api.userProfile.updateEmergencyContact);
+
+  const handleContinue = async () => {
+    if (!contactName || !contactPhone) {
+      Alert.alert("Required Fields", "Please enter both emergency contact name and phone number.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateEmergencyContact({
+        emergencyContactName: contactName,
+        emergencyContactPhone: contactPhone
+      });
+      console.log("Emergency contact saved successfully");
+      router.push("/auth/medical-history");
+    } catch (error) {
+      console.error("Error saving emergency contact:", error);
+      Alert.alert(
+        "Error",
+        "Failed to save emergency contact information. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBack = () => {
@@ -110,14 +135,21 @@ export default function EmergencyContact() {
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={[styles.continueButton, (!contactName || !contactPhone) && styles.continueButtonDisabled]} 
+                <TouchableOpacity
+                  style={[
+                    styles.continueButton,
+                    (isSubmitting || !contactName || !contactPhone) && styles.continueButtonDisabled
+                  ]}
                   onPress={handleContinue}
-                  disabled={!contactName || !contactPhone}
+                  disabled={isSubmitting || !contactName || !contactPhone}
                 >
-                  <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Continue
-                  </Text>
+                  {isSubmitting ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Continue
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
