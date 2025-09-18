@@ -15,7 +15,7 @@ import type {
 } from "convex/server";
 import type * as auth from "../auth.js";
 import type * as dashboard_user from "../dashboard/user.js";
-import type * as emergencyContact_index from "../emergencyContact/index.js";
+import type * as emergencyContact_update from "../emergencyContact/update.js";
 import type * as http from "../http.js";
 import type * as medicalHistory_index from "../medicalHistory/index.js";
 import type * as model_user from "../model/user.js";
@@ -35,7 +35,7 @@ import type * as utils_sanitize from "../utils/sanitize.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "dashboard/user": typeof dashboard_user;
-  "emergencyContact/index": typeof emergencyContact_index;
+  "emergencyContact/update": typeof emergencyContact_update;
   http: typeof http;
   "medicalHistory/index": typeof medicalHistory_index;
   "model/user": typeof model_user;

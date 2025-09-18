@@ -1,9 +1,9 @@
-import { mutation } from "../_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation } from "../_generated/server";
 import { updateEmergencyContact } from "../model/userProfile";
 
-export const updateContact = mutation({
+export const withNameAndPhone = mutation({
   args: {
     emergencyContactName: v.string(),
     emergencyContactPhone: v.string(),

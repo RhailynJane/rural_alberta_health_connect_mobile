@@ -1,19 +1,19 @@
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
-import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -25,7 +25,7 @@ export default function EmergencyContact() {
   const [contactPhone, setContactPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updateEmergencyContact = useMutation(api.userProfile.updateEmergencyContact);
+  const updateEmergencyContact = useMutation(api.emergencyContact.update.withNameAndPhone);
 
   const handleContinue = async () => {
     if (!contactName || !contactPhone) {
