@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { mutation } from "../_generated/server";
 import { updatePersonalInfo } from "../model/userProfile";
 
-export const update = mutation({
+export const withAgeRangeAndLocation = mutation({
   args: {
     ageRange: v.string(),
     location: v.string(),

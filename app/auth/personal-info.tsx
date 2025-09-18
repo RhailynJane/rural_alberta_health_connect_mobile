@@ -25,7 +25,7 @@ export default function PersonalInfo() {
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updatePersonalInfo = useMutation(api.personalInfo.info.update) 
+  const updatePersonalInfo = useMutation(api.personalInfo.update.withAgeRangeAndLocation); 
 
   const handleContinue = async () => {
     if (!ageRange || !location) {
