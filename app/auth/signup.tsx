@@ -59,6 +59,8 @@ export default function SignUp() {
       await signIn("password", {
         email: values.email,
         password: values.password,
+        firstName: values.firstName,
+        lastName: values.lastName,
         flow: "signUp"
       });
       router.push("/auth/personal-info");
