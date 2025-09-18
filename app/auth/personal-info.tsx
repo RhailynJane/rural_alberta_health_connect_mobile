@@ -1,19 +1,19 @@
 import { Picker } from "@react-native-picker/picker";
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -25,7 +25,7 @@ export default function PersonalInfo() {
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updatePersonalInfo = useMutation(api.userProfile.updatePersonalInfo);
+  const updatePersonalInfo = useMutation(api.personalInfo.info.update) 
 
   const handleContinue = async () => {
     if (!ageRange || !location) {
