@@ -6,6 +6,8 @@ const PasswordProvider = Password<DataModel>({
   profile(params) {
     return {
       email: params.email as string,
+      firstName: params.firstName as string,
+      lastName: params.lastName as string,
     };
   },
 });
