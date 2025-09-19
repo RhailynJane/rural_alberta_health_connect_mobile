@@ -18,11 +18,21 @@ export const FONT_CONFIG = {
 };
 
 export const COLORS = {
+  // Primary colors
   primary: '#007AFF',
   white: '#FFFFFF',
   black: '#000000',
-  darkText: '#1C1C1E',
+  
+  // Light theme
+  lightBackground: '#F2F2F7',
+  lightText: '#1C1C1E',
   lightGray: '#8E8E93',
-  darkGray: '#48484A',
+  lightCard: '#FFFFFF',
+  
+  // Dark theme
+  darkBackground: '#000000',
+  darkText: '#000000',
+  darkGray: '#8E8E93',
   darkCard: '#1C1C1E',
+  darkInput: '#2C2C2E',
 };
