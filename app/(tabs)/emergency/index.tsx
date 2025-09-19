@@ -99,9 +99,9 @@ export default function Emergency() {
             <Text style={styles.cardDescription}>24/7 health advice</Text>
             <View style={styles.cardFooter}>
               <Text style={styles.cardNumber}>811</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.callButton, styles.healthButton]}
-                onPress={() => handleEmergencyCall('811')}
+                onPress={() => handleEmergencyCall("811")}
               >
                 <Icon name="call" size={20} color="#FFF" />
               </TouchableOpacity>
@@ -118,7 +118,9 @@ export default function Emergency() {
             </View>
             {isLoading ? (
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Finding nearest clinic...</Text>
+                <Text style={styles.loadingText}>
+                  Finding nearest clinic...
+                </Text>
               </View>
             ) : clinicInfo ? (
               <>
@@ -128,16 +130,22 @@ export default function Emergency() {
                 )}
                 <View style={styles.cardFooter}>
                   <Text style={styles.cardNumber}>{clinicInfo.number}</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.callButton, styles.clinicButton]}
-                    onPress={() => handleEmergencyCall(clinicInfo.number.replace(/[^0-9]/g, ''))}
+                    onPress={() =>
+                      handleEmergencyCall(
+                        clinicInfo.number.replace(/[^0-9]/g, "")
+                      )
+                    }
                   >
                     <Icon name="call" size={20} color="#FFF" />
                   </TouchableOpacity>
                 </View>
               </>
             ) : (
-              <Text style={styles.cardDescription}>Clinic information not available</Text>
+              <Text style={styles.cardDescription}>
+                Clinic information not available
+              </Text>
             )}
           </View>
         </View>
@@ -153,12 +161,15 @@ export default function Emergency() {
               </View>
             </View>
             <Text style={styles.locationDescription}>
-              Emergency services can locate you faster with location sharing enabled
+              Emergency services can locate you faster with location sharing
+              enabled
             </Text>
-            
+
             <View style={styles.locationDetails}>
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Your approximate location:</Text>
+                <Text style={styles.detailLabel}>
+                  Your approximate location:
+                </Text>
                 <Text style={styles.detailValue}>Rural Alberta</Text>
               </View>
               <View style={styles.detailItem}>
@@ -173,8 +184,23 @@ export default function Emergency() {
           </View>
         </View>
 
-
-
+        {/* Important Reminders Section */}
+        <Text style={styles.sectionTitle}>Remember</Text>
+        <View style={[styles.card, styles.rememberCard]}>
+          <View style={styles.cardContent}>
+            {[
+              "Keep your phone charged for emergencies",
+              "Know your exact address or GPS coordinates",
+              "Have a list of current medications ready",
+              "Inform family members of your health status",
+            ].map((reminder, index) => (
+              <View key={index} style={styles.reminderItem}>
+                <View style={styles.bulletPoint} />
+                <Text style={styles.reminderText}>{reminder}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
       </ScrollView>
       <BottomNavigation />
     </CurvedBackground>
@@ -187,38 +213,38 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emergencyBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF4F4",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFE5E5',
     borderLeftWidth: 5,
-    borderLeftColor: "#E12D2D",
+    borderLeftColor: '#E12D2D',
     padding: 16,
     marginBottom: 20,
-    borderRadius: 5,
+    borderRadius: 8,
   },
   emergencyText: {
     marginLeft: 12,
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
+    fontWeight: '500',
+    color: '#333',
     flex: 1,
   },
   sectionTitle: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 22,
-    fontWeight: "700",
-    color: "#333",
+    fontWeight: '700',
+    color: '#333',
     marginBottom: 16,
     marginTop: 8,
   },
   card: {
-    backgroundColor: "#FFF",
+    backgroundColor: '#FFF',
     borderRadius: 12,
     marginBottom: 16,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
@@ -228,48 +254,51 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  rememberCard: {
+    marginBottom: 30, // Added space below the Remember section
+  },
   cardContent: {
-    padding: 10,
+    padding: 20,
   },
   cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
   cardTitle: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: '600',
     marginLeft: 10,
-    color: "#333",
+    color: '#333',
   },
   cardDescription: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
-    color: "#666",
+    color: '#666',
     marginBottom: 8,
   },
   cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 10,
   },
   cardNumber: {
-    fontFamily: FONTS.BarlowSemiCondensedExtraBold,
-    fontWeight: "900",
-    color: "#333",
-    fontSize: 25,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
   },
   callButton: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'center',
+    alignItems: 'center',
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 3,
@@ -280,10 +309,10 @@ const styles = StyleSheet.create({
     }),
   },
   emergencyButton: {
-    backgroundColor: "#E12D2D",
+    backgroundColor: '#E12D2D',
   },
   healthButton: {
-    backgroundColor: "#2D89E1",
+    backgroundColor: '#2D89E1',
   },
   clinicButton: {
     backgroundColor: '#2DE16B',
@@ -351,5 +380,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#333',
+  },
+  reminderItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
+  bulletPoint: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E12D2D',
+    marginTop: 8,
+    marginRight: 12,
+  },
+  reminderText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: '#333',
+    flex: 1,
   },
 });
