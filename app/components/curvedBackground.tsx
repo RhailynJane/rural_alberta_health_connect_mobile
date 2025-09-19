@@ -6,8 +6,9 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 interface CurvedBackgroundProps {
   children?: React.ReactNode;
-  style?: object;
+  style?: object; 
 }
+
 
 /**
  * CurvedBackground Component

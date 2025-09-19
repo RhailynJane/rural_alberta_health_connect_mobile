@@ -1,10 +1,161 @@
-import { Text, View } from 'react-native';
+import React, { useState } from 'react';
+import {
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import BottomNavigation from '../../components/bottomNavigation';
 import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
-import { FONTS } from '../../constants/constants';
+import { COLORS, FONTS } from '../../constants/constants';
 
 export default function Profile() {
+  // State for expandable sections
+  const [expandedSections, setExpandedSections] = useState({
+    personalInfo: false,
+    emergencyContacts: false,
+    medicalInfo: false,
+    appSettings: false
+  });
+  
+  // State for user data matching your schema
+  const [userData, setUserData] = useState({
+    ageRange: '25-34',
+    allergies: 'Peanuts',
+    currentMedications: 'None',
+    emergencyContactName: 'Jane Cona',
+    emergencyContactPhone: '+1 (403) 234-4567',
+    location: 'Calgary, AB',
+    medicalConditions: 'Asthma',
+    symptomReminder: true,
+    dataEncryption: true,
+    locationServices: true
+  });
+  
+  // Toggle section expansion
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+  
+  // Handle input changes
+  const handleInputChange = (field: keyof typeof userData, value: string | boolean) => {
+    setUserData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      padding: 16,
+      backgroundColor: "transparent",
+    },
+    card: {
+      backgroundColor: COLORS.white,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: expandedSections.personalInfo ? 12 : 0,
+    },
+    cardTitle: {
+      fontFamily: FONTS.BarlowSemiCondensedBold,
+      fontSize: 18,
+      marginBottom: 8,
+      color: COLORS.darkText,
+    },
+    sectionTitle: {
+      fontFamily: FONTS.BarlowSemiCondensedBold,
+      fontSize: 16,
+      marginBottom: 10,
+      color: COLORS.darkGray,
+    },
+    text: {
+      fontFamily: FONTS.BarlowSemiCondensed,
+      fontSize: 14,
+      color: COLORS.darkText,
+      marginBottom: 8,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: COLORS.lightGray,
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 15,
+      color: COLORS.darkText,
+      backgroundColor: COLORS.white,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    toggleText: {
+      fontFamily: FONTS.BarlowSemiCondensed,
+      fontSize: 14,
+      color: COLORS.darkText,
+    },
+    editButton: {
+      color: COLORS.primary,
+      fontFamily: FONTS.BarlowSemiCondensedBold,
+    },
+    saveButton: {
+      backgroundColor: COLORS.primary,
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    saveButtonText: {
+      color: COLORS.white,
+      fontFamily: FONTS.BarlowSemiCondensedBold,
+      fontSize: 16,
+    },
+    privacyText: {
+      fontFamily: FONTS.BarlowSemiCondensed,
+      fontSize: 12,
+      color: COLORS.darkGray,
+      marginTop: 8,
+      fontStyle: 'italic',
+    },
+    privacyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    privacyIcon: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: COLORS.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    privacyIconText: {
+      color: COLORS.white,
+      fontWeight: 'bold',
+      fontSize: 16,
+    },
+  });
+
   return (
     <CurvedBackground>
       <CurvedHeader
@@ -12,9 +163,197 @@ export default function Profile() {
         height={120}
         showLogo={true}
       />
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed }}>Profile Screen</Text>
-      </View>
+      <ScrollView style={styles.container}>
+        {/* Privacy Notice */}
+        <View style={styles.card}>
+          <View style={styles.privacyHeader}>
+            <View style={styles.privacyIcon}>
+              <Text style={styles.privacyIconText}>✓</Text>
+            </View>
+            <Text style={styles.cardTitle}>Privacy Protected</Text>
+          </View>
+          <Text style={styles.privacyText}>
+            Your personal information is encrypted and stored locally.  
+            No data is shared without your consent.
+          </Text>
+        </View>
+
+        {/* Personal Information Card */}
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={styles.cardHeader}
+            onPress={() => toggleSection('personalInfo')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>Personal Information</Text>
+            <Text style={styles.editButton}>
+              {expandedSections.personalInfo ? 'Done' : 'Edit'}
+            </Text>
+          </TouchableOpacity>
+          
+          {expandedSections.personalInfo ? (
+            <>
+              <Text style={styles.sectionTitle}>Age Range</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.ageRange}
+                onChangeText={(text) => handleInputChange('ageRange', text)}
+                placeholder="e.g., 25-34"
+                placeholderTextColor={COLORS.lightGray}
+              />
+              
+              <Text style={styles.sectionTitle}>Location</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.location}
+                onChangeText={(text) => handleInputChange('location', text)}
+                placeholder="Enter your location"
+                placeholderTextColor={COLORS.lightGray}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Age Range:</Text> {userData.ageRange}</Text>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Location:</Text> {userData.location}</Text>
+            </>
+          )}
+        </View>
+
+        {/* Emergency Contacts Card */}
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={styles.cardHeader}
+            onPress={() => toggleSection('emergencyContacts')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>Emergency Contact</Text>
+            <Text style={styles.editButton}>
+              {expandedSections.emergencyContacts ? 'Done' : 'Edit'}
+            </Text>
+          </TouchableOpacity>
+          
+          {expandedSections.emergencyContacts ? (
+            <>
+              <Text style={styles.sectionTitle}>Contact Name</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.emergencyContactName}
+                onChangeText={(text) => handleInputChange('emergencyContactName', text)}
+                placeholder="Emergency contact name"
+                placeholderTextColor={COLORS.lightGray}
+              />
+              
+              <Text style={styles.sectionTitle}>Phone Number</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.emergencyContactPhone}
+                onChangeText={(text) => handleInputChange('emergencyContactPhone', text)}
+                placeholder="Emergency contact phone"
+                placeholderTextColor={COLORS.lightGray}
+                keyboardType="phone-pad"
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Name:</Text> {userData.emergencyContactName}</Text>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Phone:</Text> {userData.emergencyContactPhone}</Text>
+            </>
+          )}
+        </View>
+
+        {/* Medical Information Card */}
+        <View style={styles.card}>
+          <TouchableOpacity 
+            style={styles.cardHeader}
+            onPress={() => toggleSection('medicalInfo')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>Medical Information</Text>
+            <Text style={styles.editButton}>
+              {expandedSections.medicalInfo ? 'Done' : 'Edit'}
+            </Text>
+          </TouchableOpacity>
+          
+          {expandedSections.medicalInfo ? (
+            <>
+              <Text style={styles.sectionTitle}>Allergies</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.allergies}
+                onChangeText={(text) => handleInputChange('allergies', text)}
+                placeholder="List any allergies"
+                placeholderTextColor={COLORS.lightGray}
+                multiline
+              />
+              
+              <Text style={styles.sectionTitle}>Current Medications</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.currentMedications}
+                onChangeText={(text) => handleInputChange('currentMedications', text)}
+                placeholder="List current medications"
+                placeholderTextColor={COLORS.lightGray}
+                multiline
+              />
+              
+              <Text style={styles.sectionTitle}>Medical Conditions</Text>
+              <TextInput
+                style={styles.input}
+                value={userData.medicalConditions}
+                onChangeText={(text) => handleInputChange('medicalConditions', text)}
+                placeholder="List medical conditions"
+                placeholderTextColor={COLORS.lightGray}
+                multiline
+              />
+
+              <TouchableOpacity style={styles.saveButton} onPress={() => toggleSection('medicalInfo')}>
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Allergies:</Text> {userData.allergies}</Text>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Medications:</Text> {userData.currentMedications}</Text>
+              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Conditions:</Text> {userData.medicalConditions}</Text>
+            </>
+          )}
+        </View>
+
+        {/* App Settings Card */}
+        <View style={[styles.card, { marginBottom: 32 }]}>
+          <TouchableOpacity 
+            style={styles.cardHeader}
+            onPress={() => toggleSection('appSettings')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cardTitle}>App Settings</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
+            <Switch
+              value={userData.symptomReminder}
+              onValueChange={(value) => handleInputChange('symptomReminder', value)}
+            />
+          </View>
+          
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleText}>Data Encryption</Text>
+            <Switch
+              value={userData.dataEncryption}
+              onValueChange={(value) => handleInputChange('dataEncryption', value)}
+            />
+          </View>
+          
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleText}>Location Services</Text>
+            <Switch
+              value={userData.locationServices}
+              onValueChange={(value) => handleInputChange('locationServices', value)}
+            />
+          </View>
+        </View>
+      </ScrollView>
       <BottomNavigation />
     </CurvedBackground>
   );
