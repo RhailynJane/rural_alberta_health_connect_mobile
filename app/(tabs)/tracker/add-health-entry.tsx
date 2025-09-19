@@ -1,4 +1,4 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -25,28 +25,35 @@ export default function AddHealthEntry() {
   const [symptoms, setSymptoms] = useState("");
   const [severity, setSeverity] = useState("");
   const [notes, setNotes] = useState("");
-  
+
   // State for picker visibility
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
 
   // Severity options (1-10)
-  const severityOptions = Array.from({ length: 10 }, (_, i) => (i + 1).toString());
+  const severityOptions = Array.from({ length: 10 }, (_, i) =>
+    (i + 1).toString()
+  );
 
-  // Format date as YYYY-MM-DD
+  // Format date as YYYY-MM-DD in local timezone
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
-  // Format time as HH:MM
+  // Format time as HH:MM in local timezone
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
   };
 
   // Handle date picker change
   const handleDateChange = (event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       setShowDatePicker(false); // Auto-close on Android
     }
     if (date) {
@@ -56,7 +63,7 @@ export default function AddHealthEntry() {
 
   // Handle time picker change
   const handleTimeChange = (event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
+    if (Platform.OS === "android") {
       setShowTimePicker(false); // Auto-close on Android
     }
     if (date) {
@@ -71,7 +78,7 @@ export default function AddHealthEntry() {
       time: formatTime(selectedTime),
       symptoms,
       severity,
-      notes
+      notes,
     });
     router.back(); // Return to previous screen
   };
@@ -89,19 +96,40 @@ export default function AddHealthEntry() {
           showsVerticalScrollIndicator={false}
         >
           {/* Header with title */}
-          <CurvedHeader title="Add Health Entry" height={120} showLogo={true} />
+          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+
+          <View>
+            <Text
+              style={[
+                styles.headerText,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+              ]}
+            >
+              Add a new health entry
+            </Text>
+          </View>
 
           <View style={styles.contentSection}>
             {/* Date selection */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Select Date
               </Text>
               <TouchableOpacity
                 style={styles.pickerButton}
                 onPress={() => setShowDatePicker(true)}
               >
-                <Text style={[styles.pickerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.pickerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   {formatDate(selectedDate)}
                 </Text>
               </TouchableOpacity>
@@ -109,7 +137,7 @@ export default function AddHealthEntry() {
                 <DateTimePicker
                   value={selectedDate}
                   mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
                   onChange={handleDateChange}
                   maximumDate={new Date()} // Can't select future dates
                 />
@@ -118,14 +146,24 @@ export default function AddHealthEntry() {
 
             {/* Time selection */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Select Time
               </Text>
               <TouchableOpacity
                 style={styles.pickerButton}
                 onPress={() => setShowTimePicker(true)}
               >
-                <Text style={[styles.pickerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.pickerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   {formatTime(selectedTime)}
                 </Text>
               </TouchableOpacity>
@@ -133,7 +171,7 @@ export default function AddHealthEntry() {
                 <DateTimePicker
                   value={selectedTime}
                   mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
                   onChange={handleTimeChange}
                 />
               )}
@@ -141,11 +179,19 @@ export default function AddHealthEntry() {
 
             {/* Symptoms input */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Symptoms/Details
               </Text>
               <TextInput
-                style={[styles.textInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                style={[
+                  styles.textInput,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
                 placeholder="e.g: Headache, Fatigue"
                 placeholderTextColor="#999"
                 value={symptoms}
@@ -156,14 +202,24 @@ export default function AddHealthEntry() {
 
             {/* Severity dropdown */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Severity (1-10)
               </Text>
               <TouchableOpacity
                 style={styles.pickerButton}
                 onPress={() => setShowSeverityDropdown(true)}
               >
-                <Text style={[styles.pickerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.pickerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   {severity || "Select severity"}
                 </Text>
               </TouchableOpacity>
@@ -175,7 +231,9 @@ export default function AddHealthEntry() {
                 animationType="fade"
                 onRequestClose={() => setShowSeverityDropdown(false)}
               >
-                <TouchableWithoutFeedback onPress={() => setShowSeverityDropdown(false)}>
+                <TouchableWithoutFeedback
+                  onPress={() => setShowSeverityDropdown(false)}
+                >
                   <View style={styles.modalOverlay}>
                     <View style={styles.dropdownContainer}>
                       {severityOptions.map((option) => (
@@ -187,7 +245,12 @@ export default function AddHealthEntry() {
                             setShowSeverityDropdown(false);
                           }}
                         >
-                          <Text style={[styles.dropdownText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          <Text
+                            style={[
+                              styles.dropdownText,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
                             {option}
                           </Text>
                         </TouchableOpacity>
@@ -200,11 +263,20 @@ export default function AddHealthEntry() {
 
             {/* Additional notes */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.label,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Notes
               </Text>
               <TextInput
-                style={[styles.textInput, styles.notesInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                style={[
+                  styles.textInput,
+                  styles.notesInput,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
                 placeholder="Additional Details"
                 placeholderTextColor="#999"
                 value={notes}
@@ -220,7 +292,12 @@ export default function AddHealthEntry() {
                 style={[styles.button, styles.cancelButton]}
                 onPress={handleCancel}
               >
-                <Text style={[styles.buttonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   Cancel
                 </Text>
               </TouchableOpacity>
@@ -228,7 +305,12 @@ export default function AddHealthEntry() {
                 style={[styles.button, styles.saveButton]}
                 onPress={handleSaveEntry}
               >
-                <Text style={[styles.buttonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   Save Entry
                 </Text>
               </TouchableOpacity>
@@ -259,6 +341,13 @@ const styles = StyleSheet.create({
   inputGroup: {
     marginBottom: 24, // Space between form fields
   },
+  headerText: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#1A1A1A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
   label: {
     fontSize: 16,
     fontWeight: "600",
@@ -287,41 +376,41 @@ const styles = StyleSheet.create({
   },
   notesInput: {
     minHeight: 100, // Minimum height for notes
-    textAlignVertical: 'top', // Start text from top
+    textAlignVertical: "top", // Start text from top
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)", // Semi-transparent background
+    justifyContent: "center",
+    alignItems: "center",
   },
   dropdownContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    width: '80%',
+    width: "80%",
     maxHeight: 300, // Limit dropdown height
   },
   dropdownItem: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF', // Separator between items
+    borderBottomColor: "#E9ECEF", // Separator between items
   },
   dropdownText: {
     fontSize: 16,
     color: "#1A1A1A",
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 32, // Space above buttons
   },
   button: {
     flex: 1,
     paddingVertical: 18,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     marginHorizontal: 8, // Space between buttons
   },
   saveButton: {
