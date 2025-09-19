@@ -23,6 +23,22 @@ export default function Tracker() {
       ]
     );
   };
+
+  const callHealthLink = (): void => {
+    Alert.alert("Health Link Alberta", "Call 811 for urgent health concerns?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Call 811",
+        onPress: () => {
+          console.log("Calling Health Link Alberta at 811...");
+        },
+      },
+    ]);
+  };
+
   
   return (
     <CurvedBackground>
