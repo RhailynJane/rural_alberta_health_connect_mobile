@@ -88,6 +88,28 @@ export default function Emergency() {
             </View>
           </View>
         </View>
+
+        {/* Health Link Alberta Card */}
+        <View style={styles.card}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <Icon name="healing" size={24} color="#2D89E1" />
+              <Text style={styles.cardTitle}>Health Link Alberta</Text>
+            </View>
+            <Text style={styles.cardDescription}>24/7 health advice</Text>
+            <View style={styles.cardFooter}>
+              <Text style={styles.cardNumber}>811</Text>
+              <TouchableOpacity 
+                style={[styles.callButton, styles.healthButton]}
+                onPress={() => handleEmergencyCall('811')}
+              >
+                <Icon name="call" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+
       </ScrollView>
       <BottomNavigation />
     </CurvedBackground>
@@ -172,6 +194,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensedExtraBold,
     fontWeight: "900",
     color: "#333",
+    fontSize: 25,
   },
   callButton: {
     width: 50,
@@ -193,5 +216,8 @@ const styles = StyleSheet.create({
   },
   emergencyButton: {
     backgroundColor: "#E12D2D",
+  },
+  healthButton: {
+    backgroundColor: "#2D89E1",
   },
 });
