@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -86,6 +87,21 @@ export default function Tracker() {
                 emergencies.
               </Text>
             </View>
+
+            {/* Daily Log/History tabs */}
+            <View style={styles.tabsContainer}>
+              <TouchableOpacity style={styles.activeTab}>
+                <Text style={[styles.tabText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Daily Log
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.inactiveTab}>
+                <Text style={[styles.tabText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  History
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
           </View>
         </ScrollView>
 
@@ -115,7 +131,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FFEAA7",
-    marginBottom: 24,
+    marginBottom: 15,
+    marginTop: -30,
   },
   disclaimerTitle: {
     fontSize: 16,
@@ -128,5 +145,30 @@ const styles = StyleSheet.create({
     color: "#856404",
     marginBottom: 4,
     lineHeight: 20,
+  },
+   tabsContainer: {
+    flexDirection: "row",
+    marginBottom: 24,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    overflow: 'hidden',
+  },
+  activeTab: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "#2A7DE1",
+    alignItems: "center",
+  },
+  inactiveTab: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "transparent",
+    alignItems: "center",
+  },
+  tabText: {
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

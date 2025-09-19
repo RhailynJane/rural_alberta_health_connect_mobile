@@ -246,7 +246,8 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   welcomeContainer: {
-    marginBottom: 32,
+    marginBottom: 25,
+    marginTop: -20,
   },
   welcomeText: {
     fontSize: 28,
@@ -262,6 +263,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
+    marginBottom: -10,
   },
   healthStatusLabel: {
     fontSize: 16,
