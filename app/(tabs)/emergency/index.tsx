@@ -1,14 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
-  View
-} from 'react-native';
-import BottomNavigation from '../../components/bottomNavigation';
-import CurvedBackground from '../../components/curvedBackground';
-import CurvedHeader from '../../components/curvedHeader';
-import { FONTS } from '../../constants/constants';
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import BottomNavigation from "../../components/bottomNavigation";
+import CurvedBackground from "../../components/curvedBackground";
+import CurvedHeader from "../../components/curvedHeader";
+import { FONTS } from "../../constants/constants";
 
 // Define types for our component
 interface ClinicInfo {
@@ -27,9 +32,9 @@ export default function Emergency() {
     const simulateFetchClinicData = () => {
       setTimeout(() => {
         setClinicInfo({
-          name: 'Rural Health Centre',
-          number: '(780) 555-0123',
-          distance: 'Approx. 45 minutes away'
+          name: "Rural Health Centre",
+          number: "(780) 555-0123",
+          distance: "Approx. 45 minutes away",
         });
         setIsLoading(false);
       }, 1500); // Simulate network delay
@@ -40,22 +45,153 @@ export default function Emergency() {
 
   // Function to handle emergency calls
   const handleEmergencyCall = (number: string) => {
-    Linking.openURL(`tel:${number}`).catch(err => 
-      Alert.alert('Error', 'Could not make the call. Please check your device.')
+    Linking.openURL(`tel:${number}`).catch((err) =>
+      Alert.alert("Error", "Could not make the call. Please check your device.")
     );
   };
 
   return (
     <CurvedBackground>
-      <CurvedHeader
-        title="Emergency"
-        height={120}
-        showLogo={true}
-      />
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed }}>Emergency Screen</Text>
-      </View>
+      <CurvedHeader title="Emergency" height={120} showLogo={true} />
+
+      <ScrollView style={styles.container}>
+        {/* Emergency Warning Banner */}
+        <View style={styles.emergencyBanner}>
+          <Icon name="warning" size={24} color="#cb2a2aff" />
+          <Text style={styles.emergencyText}>
+            If you or someone else is experiencing a life-threatening emergency,
+            call 911 immediately. Don&apos;t wait.
+          </Text>
+        </View>
+
+        {/* Emergency Contacts Section */}
+        <Text style={styles.sectionTitle}>Emergency Contacts</Text>
+
+        {/* Emergency Services Card */}
+        <View style={styles.card}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <Icon name="local-hospital" size={24} color="#E12D2D" />
+              <Text style={styles.cardTitle}>Emergency Services</Text>
+            </View>
+            <Text style={styles.cardDescription}>
+              Life-threatening emergencies
+            </Text>
+            <View style={styles.cardFooter}>
+              <Text style={styles.cardNumber}>911</Text>
+              <TouchableOpacity
+                style={[styles.callButton, styles.emergencyButton]}
+                onPress={() => handleEmergencyCall("911")}
+              >
+                <Icon name="call" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
       <BottomNavigation />
     </CurvedBackground>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+  },
+  emergencyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF4F4",
+    borderLeftWidth: 5,
+    borderLeftColor: "#E12D2D",
+    padding: 16,
+    marginBottom: 20,
+    borderRadius: 5,
+  },
+  emergencyText: {
+    marginLeft: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#333",
+    flex: 1,
+  },
+  sectionTitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#333",
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  card: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  cardContent: {
+    padding: 20,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 18,
+    fontWeight: "600",
+    marginLeft: 10,
+    color: "#333",
+  },
+  cardDescription: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  cardNumber: {
+    fontFamily: FONTS.BarlowSemiCondensedExtraBold,
+    fontWeight: "900",
+    color: "#333",
+  },
+  callButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: "center",
+    alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  emergencyButton: {
+    backgroundColor: "#E12D2D",
+  },
+});
