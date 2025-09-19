@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  Linking,
   Text,
   View
 } from 'react-native';
@@ -35,7 +37,14 @@ export default function Emergency() {
 
     simulateFetchClinicData();
   }, []);
-  
+
+  // Function to handle emergency calls
+  const handleEmergencyCall = (number: string) => {
+    Linking.openURL(`tel:${number}`).catch(err => 
+      Alert.alert('Error', 'Could not make the call. Please check your device.')
+    );
+  };
+
   return (
     <CurvedBackground>
       <CurvedHeader
