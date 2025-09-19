@@ -44,11 +44,17 @@ export default function AddHealthEntry() {
     return `${year}-${month}-${day}`;
   };
 
-  // Format time as HH:MM in local timezone
+  // Format time as HH:MM AM/PM in 12-hour format
   const formatTime = (date: Date) => {
-    const hours = String(date.getHours()).padStart(2, "0");
+    let hours = date.getHours();
     const minutes = String(date.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
+    const ampm = hours >= 12 ? "PM" : "AM";
+
+    // Convert to 12-hour format
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+
+    return `${hours}:${minutes} ${ampm}`;
   };
 
   // Handle date picker change
