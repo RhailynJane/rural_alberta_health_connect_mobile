@@ -109,6 +109,40 @@ export default function Emergency() {
           </View>
         </View>
 
+        {/* Local Clinic Card */}
+        <View style={styles.card}>
+          <View style={styles.cardContent}>
+            <View style={styles.cardHeader}>
+              <Icon name="local-pharmacy" size={24} color="#2DE16B" />
+              <Text style={styles.cardTitle}>Local Clinic</Text>
+            </View>
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Finding nearest clinic...</Text>
+              </View>
+            ) : clinicInfo ? (
+              <>
+                <Text style={styles.cardDescription}>{clinicInfo.name}</Text>
+                {clinicInfo.distance && (
+                  <Text style={styles.distanceText}>{clinicInfo.distance}</Text>
+                )}
+                <View style={styles.cardFooter}>
+                  <Text style={styles.cardNumber}>{clinicInfo.number}</Text>
+                  <TouchableOpacity 
+                    style={[styles.callButton, styles.clinicButton]}
+                    onPress={() => handleEmergencyCall(clinicInfo.number.replace(/[^0-9]/g, ''))}
+                  >
+                    <Icon name="call" size={20} color="#FFF" />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.cardDescription}>Clinic information not available</Text>
+            )}
+          </View>
+        </View>
+
+
 
       </ScrollView>
       <BottomNavigation />
@@ -164,7 +198,7 @@ const styles = StyleSheet.create({
     }),
   },
   cardContent: {
-    padding: 20,
+    padding: 10,
   },
   cardHeader: {
     flexDirection: "row",
@@ -219,5 +253,23 @@ const styles = StyleSheet.create({
   },
   healthButton: {
     backgroundColor: "#2D89E1",
+  },
+  clinicButton: {
+    backgroundColor: '#2DE16B',
+  },
+  distanceText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  loadingContainer: {
+    paddingVertical: 10,
+  },
+  loadingText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: '#666',
+    fontStyle: 'italic',
   },
 });
