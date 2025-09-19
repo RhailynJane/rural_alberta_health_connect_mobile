@@ -8,7 +8,7 @@ export default function Index() {
   useEffect(() => {
     const timer = setTimeout(() => {
       router.push('/onboarding');
-    }, 30000); // 30000ms = 30 seconds
+    }, 5000); // 5000ms = 5 seconds
 
     // Cleanup timer if component unmounts
     return () => clearTimeout(timer);
