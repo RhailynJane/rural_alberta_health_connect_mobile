@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -13,6 +14,9 @@ import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function Tracker() {
+   // State to track active tab
+  const [activeTab, setActiveTab] = useState<'daily' | 'history'>('daily');
+  
   // Handle emergency call button press
   const handleEmergencyCall = (): void => {
     Alert.alert(
@@ -90,13 +94,27 @@ export default function Tracker() {
 
             {/* Daily Log/History tabs */}
             <View style={styles.tabsContainer}>
-              <TouchableOpacity style={styles.activeTab}>
-                <Text style={[styles.tabText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <TouchableOpacity 
+                style={activeTab === 'daily' ? styles.activeTab : styles.inactiveTab}
+                onPress={() => setActiveTab('daily')}
+              >
+                <Text style={[
+                  styles.tabText, 
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                  activeTab === 'daily' ? styles.activeTabText : styles.inactiveTabText
+                ]}>
                   Daily Log
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.inactiveTab}>
-                <Text style={[styles.tabText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <TouchableOpacity 
+                style={activeTab === 'history' ? styles.activeTab : styles.inactiveTab}
+                onPress={() => setActiveTab('history')}
+              >
+                <Text style={[
+                  styles.tabText, 
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                  activeTab === 'history' ? styles.activeTabText : styles.inactiveTabText
+                ]}>
                   History
                 </Text>
               </TouchableOpacity>
@@ -170,5 +188,11 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 16,
     fontWeight: "600",
+  },
+  activeTabText: {
+    color: "white",
+  },
+  inactiveTabText: {
+    color: "#666",
   },
 });
