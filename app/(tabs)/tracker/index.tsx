@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -54,7 +54,7 @@ export default function Tracker() {
     router.push("/tracker/add-health-entry");
   };
 
-   return (
+  return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
         {/* Main content area */}
@@ -68,40 +68,72 @@ export default function Tracker() {
             <View style={styles.contentSection}>
               {/* Medical Disclaimer */}
               <View style={styles.disclaimerContainer}>
-                <Text style={[styles.disclaimerTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.disclaimerTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   Medical Disclaimer
                 </Text>
-                <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   This tracker is for personal monitoring only.
                 </Text>
-                <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Seek immediate medical attention for severe symptoms or emergencies.
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Seek immediate medical attention for severe symptoms or
+                  emergencies.
                 </Text>
               </View>
 
               {/* Daily Log/History tabs */}
               <View style={styles.tabsContainer}>
                 <TouchableOpacity
-                  style={activeTab === "daily" ? styles.activeTab : styles.inactiveTab}
+                  style={
+                    activeTab === "daily"
+                      ? styles.activeTab
+                      : styles.inactiveTab
+                  }
                   onPress={() => setActiveTab("daily")}
                 >
-                  <Text style={[
-                    styles.tabText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    activeTab === "daily" ? styles.activeTabText : styles.inactiveTabText,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      activeTab === "daily"
+                        ? styles.activeTabText
+                        : styles.inactiveTabText,
+                    ]}
+                  >
                     Daily Log
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={activeTab === "history" ? styles.activeTab : styles.inactiveTab}
+                  style={
+                    activeTab === "history"
+                      ? styles.activeTab
+                      : styles.inactiveTab
+                  }
                   onPress={() => setActiveTab("history")}
                 >
-                  <Text style={[
-                    styles.tabText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    activeTab === "history" ? styles.activeTabText : styles.inactiveTabText,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.tabText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      activeTab === "history"
+                        ? styles.activeTabText
+                        : styles.inactiveTabText,
+                    ]}
+                  >
                     History
                   </Text>
                 </TouchableOpacity>
@@ -110,16 +142,24 @@ export default function Tracker() {
               {/* Tab content */}
               {renderTabContent()}
             </View>
-          </ScrollView>
 
-          {/* Fixed Add Log Entry Button at bottom */}
-          <View style={styles.addButtonContainer}>
-            <TouchableOpacity style={styles.addEntryButton} onPress={handleAddLogEntry}>
-              <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Add Log Entry
-              </Text>
-            </TouchableOpacity>
-          </View>
+            {/* Fixed Add Log Entry Button at bottom */}
+            <View style={styles.addButtonContainer}>
+              <TouchableOpacity
+                style={styles.addEntryButton}
+                onPress={handleAddLogEntry}
+              >
+                <Text
+                  style={[
+                    styles.addEntryButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Add Log Entry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
 
         {/* Bottom navigation component */}
@@ -214,12 +254,12 @@ const styles = StyleSheet.create({
   },
   // Fixed button container at bottom
   addButtonContainer: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 70, // Position above bottom navigation
     left: 0,
     right: 0,
     paddingHorizontal: 24,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   addEntryButton: {
     backgroundColor: "#28A745",
