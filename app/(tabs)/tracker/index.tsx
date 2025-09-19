@@ -1,12 +1,12 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -16,42 +16,6 @@ import { FONTS } from "../../constants/constants";
 export default function Tracker() {
   // State to track active tab
   const [activeTab, setActiveTab] = useState<"daily" | "history">("daily");
-
-  // Handle emergency call button press
-  const handleEmergencyCall = (): void => {
-    Alert.alert(
-      "Emergency Call",
-      "For life-threatening emergencies, call 911 immediately.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Call 911",
-          onPress: () => {
-            console.log("Calling 911...");
-          },
-        },
-      ]
-    );
-  };
-
-  // Handle Health Link call button press
-  const callHealthLink = (): void => {
-    Alert.alert("Health Link Alberta", "Call 811 for urgent health concerns?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Call 811",
-        onPress: () => {
-          console.log("Calling Health Link Alberta at 811...");
-        },
-      },
-    ]);
-  };
 
   // Render content based on active tab
   const renderTabContent = () => {
@@ -85,162 +49,78 @@ export default function Tracker() {
     }
   };
 
-  return (
+  const handleAddLogEntry = () => {
+    // Navigate to Add Health Entry screen
+    router.push("/tracker/add-health-entry");
+  };
+
+   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+        {/* Main content area */}
+        <View style={styles.mainContent}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
 
-          <View style={styles.contentSection}>
-            {/* Medical Disclaimer */}
-            <View style={styles.disclaimerContainer}>
-              <Text
-                style={[
-                  styles.disclaimerTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Medical Disclaimer
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                This tracker is for personal monitoring only.
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Seek immediate medical attention for severe symptoms or
-                emergencies.
-              </Text>
-            </View>
-
-            {/* Daily Log/History tabs */}
-            <View style={styles.tabsContainer}>
-              <TouchableOpacity
-                style={
-                  activeTab === "daily" ? styles.activeTab : styles.inactiveTab
-                }
-                onPress={() => setActiveTab("daily")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    activeTab === "daily"
-                      ? styles.activeTabText
-                      : styles.inactiveTabText,
-                  ]}
-                >
-                  Daily Log
+            <View style={styles.contentSection}>
+              {/* Medical Disclaimer */}
+              <View style={styles.disclaimerContainer}>
+                <Text style={[styles.disclaimerTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Medical Disclaimer
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={
-                  activeTab === "history"
-                    ? styles.activeTab
-                    : styles.inactiveTab
-                }
-                onPress={() => setActiveTab("history")}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    activeTab === "history"
-                      ? styles.activeTabText
-                      : styles.inactiveTabText,
-                  ]}
-                >
-                  History
+                <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  This tracker is for personal monitoring only.
                 </Text>
-              </TouchableOpacity>
-            </View>
+                <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Seek immediate medical attention for severe symptoms or emergencies.
+                </Text>
+              </View>
 
-            {/* Tab content */}
-            {renderTabContent()}
-
-            {/* Add new log entry button */}
-            <TouchableOpacity style={styles.addEntryButton}>
-              <Text
-                style={[
-                  styles.addEntryButtonText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Add Log Entry
-              </Text>
-            </TouchableOpacity>
-
-            {/* Emergency notice section */}
-            <View style={styles.emergencyContainer}>
-              <Text
-                style={[
-                  styles.emergencyTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Emergency Notice
-              </Text>
-              <Text
-                style={[
-                  styles.emergencyText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                For life-threatening emergencies, call 911 immediately.
-              </Text>
-              <Text
-                style={[
-                  styles.emergencyText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                For urgent health concerns, contact Health Link Alberta at 811.
-              </Text>
-
-              {/* Emergency action buttons */}
-              <View style={styles.emergencyButtonsContainer}>
+              {/* Daily Log/History tabs */}
+              <View style={styles.tabsContainer}>
                 <TouchableOpacity
-                  style={styles.emergencyButton}
-                  onPress={handleEmergencyCall}
+                  style={activeTab === "daily" ? styles.activeTab : styles.inactiveTab}
+                  onPress={() => setActiveTab("daily")}
                 >
-                  <Text
-                    style={[
-                      styles.emergencyButtonText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Call 911
+                  <Text style={[
+                    styles.tabText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    activeTab === "daily" ? styles.activeTabText : styles.inactiveTabText,
+                  ]}>
+                    Daily Log
                   </Text>
                 </TouchableOpacity>
-
                 <TouchableOpacity
-                  style={styles.healthLinkButton}
-                  onPress={callHealthLink}
+                  style={activeTab === "history" ? styles.activeTab : styles.inactiveTab}
+                  onPress={() => setActiveTab("history")}
                 >
-                  <Text
-                    style={[
-                      styles.healthLinkButtonText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Call Health Link
+                  <Text style={[
+                    styles.tabText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    activeTab === "history" ? styles.activeTabText : styles.inactiveTabText,
+                  ]}>
+                    History
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Tab content */}
+              {renderTabContent()}
             </View>
+          </ScrollView>
+
+          {/* Fixed Add Log Entry Button at bottom */}
+          <View style={styles.addButtonContainer}>
+            <TouchableOpacity style={styles.addEntryButton} onPress={handleAddLogEntry}>
+              <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Add Log Entry
+              </Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
+        </View>
 
         {/* Bottom navigation component */}
         <BottomNavigation />
@@ -254,9 +134,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
-  contentContainer: {
+  mainContent: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
-    paddingBottom: 60,
+    paddingBottom: 100, // Extra space for the fixed button
   },
   contentSection: {
     padding: 24,
@@ -321,7 +204,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E9ECEF",
     marginBottom: 24,
-    minHeight: 100,
+    minHeight: 300,
   },
   entriesText: {
     fontSize: 16,
@@ -329,12 +212,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 24,
   },
+  // Fixed button container at bottom
+  addButtonContainer: {
+    position: 'absolute',
+    bottom: 70, // Position above bottom navigation
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    backgroundColor: 'transparent',
+  },
   addEntryButton: {
     backgroundColor: "#28A745",
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
-    marginBottom: 32,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -344,58 +235,6 @@ const styles = StyleSheet.create({
   addEntryButtonText: {
     color: "white",
     fontSize: 18,
-    fontWeight: "600",
-  },
-  emergencyContainer: {
-    backgroundColor: "#F8D7DA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#F5C6CB",
-  },
-  emergencyTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#721C24",
-    marginBottom: 8,
-  },
-  emergencyText: {
-    fontSize: 14,
-    color: "#721C24",
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  emergencyButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-  },
-  emergencyButton: {
-    backgroundColor: "#DC3545",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  emergencyButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  healthLinkButton: {
-    backgroundColor: "#6C757D",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  healthLinkButtonText: {
-    color: "white",
-    fontSize: 14,
     fontWeight: "600",
   },
 });
