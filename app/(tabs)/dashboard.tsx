@@ -28,7 +28,12 @@ export default function Dashboard() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text
+            style={[
+              styles.loadingText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
             Loading...
           </Text>
         </View>
@@ -40,7 +45,12 @@ export default function Dashboard() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text
+            style={[
+              styles.errorText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
             Please sign in to view your dashboard
           </Text>
         </View>
@@ -66,30 +76,45 @@ export default function Dashboard() {
         {
           text: "Call 911",
           onPress: () => {
-            Linking.openURL(`tel:911`).catch((err) =>
-                  Alert.alert("Error", "Could not make the call. Please check your device.")
-                );
+            Linking.openURL("tel:911").catch((err) => {
+              console.error("Error calling 911:", err);
+              Alert.alert(
+                "Error",
+                "Could not make the call. Please check your device."
+              );
+            });
           },
+          style: "destructive",
         },
-      ]
+      ],
+      { cancelable: true }
     );
   };
 
   const callHealthLink = (): void => {
-    Alert.alert("Health Link Alberta", "Call 811 for urgent health concerns?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Call 811",
-        onPress: () => {
-         Linking.openURL(`tel:811`).catch((err) =>
-                  Alert.alert("Error", "Could not make the call. Please check your device.")
-                );
+    Alert.alert(
+      "Health Link Alberta",
+      "Call 811 for non-emergency health advice?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]);
+        {
+          text: "Call 811",
+          onPress: () => {
+            Linking.openURL("tel:811").catch((err) => {
+              console.error("Error calling 811:", err);
+              Alert.alert(
+                "Error",
+                "Could not make the call. Please check your device."
+              );
+            });
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -225,7 +250,6 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
-
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -439,5 +463,4 @@ const styles = StyleSheet.create({
     color: "#856404",
     textAlign: "center",
   },
-
 });
