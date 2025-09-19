@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -65,8 +66,9 @@ export default function Dashboard() {
         {
           text: "Call 911",
           onPress: () => {
-            // This would actually call 911 in a real app
-            console.log("Calling 911...");
+            Linking.openURL(`tel:911`).catch((err) =>
+                  Alert.alert("Error", "Could not make the call. Please check your device.")
+                );
           },
         },
       ]
@@ -82,8 +84,9 @@ export default function Dashboard() {
       {
         text: "Call 811",
         onPress: () => {
-          // This would actually call 811 in a real app
-          console.log("Calling Health Link Alberta at 811...");
+         Linking.openURL(`tel:811`).catch((err) =>
+                  Alert.alert("Error", "Could not make the call. Please check your device.")
+                );
         },
       },
     ]);

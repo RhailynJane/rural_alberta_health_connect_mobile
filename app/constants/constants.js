@@ -35,4 +35,8 @@ export const COLORS = {
   darkGray: '#8E8E93',
   darkCard: '#1C1C1E',
   darkInput: '#2C2C2E',
+
+  error: '#e74c3c',
+  success: '#2ecc71',
+  warning: '#f39c12',
 };
