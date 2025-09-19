@@ -14,9 +14,9 @@ import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function Tracker() {
-   // State to track active tab
-  const [activeTab, setActiveTab] = useState<'daily' | 'history'>('daily');
-  
+  // State to track active tab
+  const [activeTab, setActiveTab] = useState<"daily" | "history">("daily");
+
   // Handle emergency call button press
   const handleEmergencyCall = (): void => {
     Alert.alert(
@@ -54,26 +54,36 @@ export default function Tracker() {
   };
 
   // Render content based on active tab
-const renderTabContent = () => {
-  if (activeTab === 'daily') {
-    return (
-      <View style={styles.entriesContainer}>
-        <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          No entries for today
-        </Text>
-      </View>
-    );
-  } else {
-    return (
-      <View style={styles.entriesContainer}>
-        <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          No historical entries found. Your past health logs will appear here once you start tracking your symptoms and health metrics over time.
-        </Text>
-      </View>
-    );
-  }
-};
-
+  const renderTabContent = () => {
+    if (activeTab === "daily") {
+      return (
+        <View style={styles.entriesContainer}>
+          <Text
+            style={[
+              styles.entriesText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
+            No entries for today
+          </Text>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.entriesContainer}>
+          <Text
+            style={[
+              styles.entriesText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
+            No historical entries found. Your past health logs will appear here
+            once you start tracking your symptoms and health metrics over time.
+          </Text>
+        </View>
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -116,42 +126,119 @@ const renderTabContent = () => {
 
             {/* Daily Log/History tabs */}
             <View style={styles.tabsContainer}>
-              <TouchableOpacity 
-                style={activeTab === 'daily' ? styles.activeTab : styles.inactiveTab}
-                onPress={() => setActiveTab('daily')}
+              <TouchableOpacity
+                style={
+                  activeTab === "daily" ? styles.activeTab : styles.inactiveTab
+                }
+                onPress={() => setActiveTab("daily")}
               >
-                <Text style={[
-                  styles.tabText, 
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                  activeTab === 'daily' ? styles.activeTabText : styles.inactiveTabText
-                ]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    activeTab === "daily"
+                      ? styles.activeTabText
+                      : styles.inactiveTabText,
+                  ]}
+                >
                   Daily Log
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={activeTab === 'history' ? styles.activeTab : styles.inactiveTab}
-                onPress={() => setActiveTab('history')}
+              <TouchableOpacity
+                style={
+                  activeTab === "history"
+                    ? styles.activeTab
+                    : styles.inactiveTab
+                }
+                onPress={() => setActiveTab("history")}
               >
-                <Text style={[
-                  styles.tabText, 
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                  activeTab === 'history' ? styles.activeTabText : styles.inactiveTabText
-                ]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    activeTab === "history"
+                      ? styles.activeTabText
+                      : styles.inactiveTabText,
+                  ]}
+                >
                   History
                 </Text>
               </TouchableOpacity>
             </View>
 
-             {/* Tab content */}
+            {/* Tab content */}
             {renderTabContent()}
 
             {/* Add new log entry button */}
             <TouchableOpacity style={styles.addEntryButton}>
-              <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.addEntryButtonText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Add Log Entry
               </Text>
             </TouchableOpacity>
-            
+
+            {/* Emergency notice section */}
+            <View style={styles.emergencyContainer}>
+              <Text
+                style={[
+                  styles.emergencyTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Emergency Notice
+              </Text>
+              <Text
+                style={[
+                  styles.emergencyText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                For life-threatening emergencies, call 911 immediately.
+              </Text>
+              <Text
+                style={[
+                  styles.emergencyText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                For urgent health concerns, contact Health Link Alberta at 811.
+              </Text>
+
+              {/* Emergency action buttons */}
+              <View style={styles.emergencyButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.emergencyButton}
+                  onPress={handleEmergencyCall}
+                >
+                  <Text
+                    style={[
+                      styles.emergencyButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Call 911
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.healthLinkButton}
+                  onPress={callHealthLink}
+                >
+                  <Text
+                    style={[
+                      styles.healthLinkButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Call Health Link
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </ScrollView>
 
@@ -196,13 +283,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 20,
   },
-   tabsContainer: {
+  tabsContainer: {
     flexDirection: "row",
     backgroundColor: "#F8F9FA",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 5,
   },
   activeTab: {
@@ -227,20 +314,20 @@ const styles = StyleSheet.create({
   inactiveTabText: {
     color: "#666",
   },
- entriesContainer: {
+  entriesContainer: {
     backgroundColor: "#F8F9FA",
-    padding: 16, 
+    padding: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
     marginBottom: 24,
-    minHeight: 100, 
+    minHeight: 100,
   },
   entriesText: {
     fontSize: 16,
     color: "#666",
     textAlign: "center",
-    lineHeight: 24, 
+    lineHeight: 24,
   },
   addEntryButton: {
     backgroundColor: "#28A745",
@@ -257,6 +344,58 @@ const styles = StyleSheet.create({
   addEntryButtonText: {
     color: "white",
     fontSize: 18,
+    fontWeight: "600",
+  },
+  emergencyContainer: {
+    backgroundColor: "#F8D7DA",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F5C6CB",
+  },
+  emergencyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#721C24",
+    marginBottom: 8,
+  },
+  emergencyText: {
+    fontSize: 14,
+    color: "#721C24",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  emergencyButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+  },
+  emergencyButton: {
+    backgroundColor: "#DC3545",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+    alignItems: "center",
+  },
+  emergencyButtonText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  healthLinkButton: {
+    backgroundColor: "#6C757D",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 8,
+    alignItems: "center",
+  },
+  healthLinkButtonText: {
+    color: "white",
+    fontSize: 14,
     fontWeight: "600",
   },
 });
