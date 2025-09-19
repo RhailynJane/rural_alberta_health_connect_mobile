@@ -142,6 +142,37 @@ export default function Emergency() {
           </View>
         </View>
 
+        {/* Location Information Section */}
+        <Text style={styles.sectionTitle}>Your Location</Text>
+        <View style={styles.card}>
+          <View style={styles.cardContent}>
+            <View style={styles.locationHeader}>
+              <Text style={styles.locationTitle}>Location Services</Text>
+              <View style={styles.statusBadge}>
+                <Text style={styles.statusText}>Currently Enabled</Text>
+              </View>
+            </View>
+            <Text style={styles.locationDescription}>
+              Emergency services can locate you faster with location sharing enabled
+            </Text>
+            
+            <View style={styles.locationDetails}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Your approximate location:</Text>
+                <Text style={styles.detailValue}>Rural Alberta</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Nearest hospital:</Text>
+                <Text style={styles.detailValue}>45 minutes away</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Emergency response time:</Text>
+                <Text style={styles.detailValue}>15-20 minutes</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
 
 
       </ScrollView>
@@ -271,5 +302,54 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensed,
     color: '#666',
     fontStyle: 'italic',
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  locationTitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  statusBadge: {
+    backgroundColor: '#2DE16B',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  statusText: {
+    color: '#FFF',
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  locationDescription: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  locationDetails: {
+    marginTop: 8,
+  },
+  detailItem: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  detailLabel: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: '#666',
+    marginRight: 5,
+  },
+  detailValue: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
   },
 });
