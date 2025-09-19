@@ -1,5 +1,7 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Switch,
@@ -8,6 +10,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import BottomNavigation from '../../components/bottomNavigation';
 import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
@@ -52,109 +55,27 @@ export default function Profile() {
     }));
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      padding: 16,
-      backgroundColor: "transparent",
-    },
-    card: {
-      backgroundColor: COLORS.white,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    cardHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: expandedSections.personalInfo ? 12 : 0,
-    },
-    cardTitle: {
-      fontFamily: FONTS.BarlowSemiCondensedBold,
-      fontSize: 18,
-      marginBottom: 8,
-      color: COLORS.darkText,
-    },
-    sectionTitle: {
-      fontFamily: FONTS.BarlowSemiCondensedBold,
-      fontSize: 16,
-      marginBottom: 10,
-      color: COLORS.darkGray,
-    },
-    text: {
-      fontFamily: FONTS.BarlowSemiCondensed,
-      fontSize: 14,
-      color: COLORS.darkText,
-      marginBottom: 8,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: COLORS.lightGray,
-      borderRadius: 8,
-      padding: 10,
-      marginBottom: 15,
-      color: COLORS.darkText,
-      backgroundColor: COLORS.white,
-    },
-    toggleRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    toggleText: {
-      fontFamily: FONTS.BarlowSemiCondensed,
-      fontSize: 14,
-      color: COLORS.darkText,
-    },
-    editButton: {
-      color: COLORS.primary,
-      fontFamily: FONTS.BarlowSemiCondensedBold,
-    },
-    saveButton: {
-      backgroundColor: COLORS.primary,
-      padding: 12,
-      borderRadius: 8,
-      alignItems: 'center',
-      marginTop: 16,
-    },
-    saveButtonText: {
-      color: COLORS.white,
-      fontFamily: FONTS.BarlowSemiCondensedBold,
-      fontSize: 16,
-    },
-    privacyText: {
-      fontFamily: FONTS.BarlowSemiCondensed,
-      fontSize: 12,
-      color: COLORS.darkGray,
-      marginTop: 8,
-      fontStyle: 'italic',
-    },
-    privacyHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    privacyIcon: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
-      backgroundColor: COLORS.primary,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginRight: 12,
-    },
-    privacyIconText: {
-      color: COLORS.white,
-      fontWeight: 'bold',
-      fontSize: 16,
-    },
-  });
+  // Handle sign out
+  const handleSignOut = () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "Sign Out", 
+          onPress: () => {
+            console.log("User signed out");
+            router.replace('/auth/signin');
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
 
   return (
     <CurvedBackground>
@@ -320,7 +241,7 @@ export default function Profile() {
         </View>
 
         {/* App Settings Card */}
-        <View style={[styles.card, { marginBottom: 32 }]}>
+        <View style={styles.card}>
           <TouchableOpacity 
             style={styles.cardHeader}
             onPress={() => toggleSection('appSettings')}
@@ -353,8 +274,145 @@ export default function Profile() {
             />
           </View>
         </View>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity 
+          style={styles.signOutButton}
+          onPress={handleSignOut}
+          activeOpacity={0.7}
+        >
+          <Icon name="exit-to-app" size={20} color={COLORS.white} style={styles.signOutIcon} />
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
       </ScrollView>
       <BottomNavigation />
     </CurvedBackground>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: "transparent",
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 18,
+    color: COLORS.darkText,
+  },
+  sectionTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    marginBottom: 8,
+    color: COLORS.darkGray,
+    marginTop: 12,
+  },
+  text: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    padding: 12,
+    color: COLORS.darkText,
+    backgroundColor: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: "transparent",
+  },
+  toggleText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+    flex: 1,
+  },
+  editButton: {
+    color: COLORS.primary,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+  },
+  saveButton: {
+    backgroundColor: COLORS.primary,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  saveButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+  },
+  privacyText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  privacyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  privacyIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  privacyIconText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  signOutButton: {
+    backgroundColor: COLORS.error,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 32,
+    marginTop: 8,
+  },
+  signOutText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  signOutIcon: {
+    marginRight: 8,
+  },
+});
