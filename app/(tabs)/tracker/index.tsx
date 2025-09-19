@@ -1,11 +1,17 @@
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function Tracker() {
-
   // Handle emergency call button press
   const handleEmergencyCall = (): void => {
     Alert.alert(
@@ -43,40 +49,50 @@ export default function Tracker() {
   };
 
   return (
-    <CurvedBackground>
-      <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
 
-      <View style={styles.contentSection}>
-        {/* Medical Disclaimer */}
-        <View style={styles.disclaimerContainer}>
-          <Text
-            style={[
-              styles.disclaimerTitle,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            Medical Disclaimer
-          </Text>
-          <Text
-            style={[
-              styles.disclaimerText,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            This tracker is for personal monitoring only.
-          </Text>
-          <Text
-            style={[
-              styles.disclaimerText,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            Seek immediate medical attention for severe symptoms or emergencies.
-          </Text>
-        </View>
-      </View>
-      <BottomNavigation />
-    </CurvedBackground>
+          <View style={styles.contentSection}>
+            {/* Medical Disclaimer */}
+            <View style={styles.disclaimerContainer}>
+              <Text
+                style={[
+                  styles.disclaimerTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Medical Disclaimer
+              </Text>
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                This tracker is for personal monitoring only.
+              </Text>
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Seek immediate medical attention for severe symptoms or
+                emergencies.
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        {/* Bottom navigation component */}
+        <BottomNavigation />
+      </CurvedBackground>
+    </SafeAreaView>
   );
 }
 
@@ -87,7 +103,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 60, // Space for bottom navigation
+    paddingBottom: 60,
   },
   contentSection: {
     padding: 24,
