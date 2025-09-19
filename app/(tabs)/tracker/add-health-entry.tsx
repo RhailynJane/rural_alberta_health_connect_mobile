@@ -242,25 +242,33 @@ export default function AddHealthEntry() {
                 >
                   <View style={styles.modalOverlay}>
                     <View style={styles.dropdownContainer}>
-                      {severityOptions.map((option) => (
-                        <TouchableOpacity
-                          key={option}
-                          style={styles.dropdownItem}
-                          onPress={() => {
-                            setSeverity(option);
-                            setShowSeverityDropdown(false);
-                          }}
-                        >
-                          <Text
+                      <ScrollView
+                        style={styles.dropdownScrollView}
+                        showsVerticalScrollIndicator={true}
+                      >
+                        {severityOptions.map((option) => (
+                          <TouchableOpacity
+                            key={option}
                             style={[
-                              styles.dropdownText,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
+                              styles.dropdownItem,
+                              { backgroundColor: "white" },
                             ]}
+                            onPress={() => {
+                              setSeverity(option);
+                              setShowSeverityDropdown(false);
+                            }}
                           >
-                            {option}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                            <Text
+                              style={[
+                                styles.dropdownText,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                              ]}
+                            >
+                              {option}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
                     </View>
                   </View>
                 </TouchableWithoutFeedback>
@@ -386,26 +394,33 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // Semi-transparent background
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   dropdownContainer: {
-    backgroundColor: "white",
+    backgroundColor: 'white',
     borderRadius: 12,
-    padding: 16,
-    width: "80%",
-    maxHeight: 300, // Limit dropdown height
+    width: '80%',
+    maxHeight: '60%', // Limit height and make scrollable
+    overflow: 'hidden',
+  },
+  dropdownScrollView: {
+    maxHeight: 300,
   },
   dropdownItem: {
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#E9ECEF", // Separator between items
+    borderBottomColor: '#E9ECEF',
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dropdownText: {
-    fontSize: 16,
+    fontSize: 18,
     color: "#1A1A1A",
-    textAlign: "center",
+    fontWeight: '500',
   },
   buttonContainer: {
     flexDirection: "row",
