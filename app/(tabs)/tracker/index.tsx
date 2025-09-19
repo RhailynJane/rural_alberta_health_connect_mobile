@@ -1,168 +1,78 @@
 import { router } from "expo-router";
-import { useState } from "react";
-import {
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function Tracker() {
-  // State to track active tab
-  const [activeTab, setActiveTab] = useState<"daily" | "history">("daily");
-
-  // Render content based on active tab
-  const renderTabContent = () => {
-    if (activeTab === "daily") {
-      return (
-        <View style={styles.entriesContainer}>
-          <Text
-            style={[
-              styles.entriesText,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            No entries for today
-          </Text>
-        </View>
-      );
-    } else {
-      return (
-        <View style={styles.entriesContainer}>
-          <Text
-            style={[
-              styles.entriesText,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            No historical entries found. Your past health logs will appear here
-            once you start tracking your symptoms and health metrics over time.
-          </Text>
-        </View>
-      );
-    }
+  const handleAddLogEntry = () => {
+    router.push("/tracker/add-health-entry");
   };
 
-  const handleAddLogEntry = () => {
-    // Navigate to Add Health Entry screen
-    router.push("/tracker/add-health-entry");
+  const navigateToDailyLog = () => {
+    router.push("/tracker/daily-log");
+  };
+
+  const navigateToHistory = () => {
+    router.push("/tracker/history");
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
-        {/* Main content area */}
-        <View style={styles.mainContent}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
 
-            <View style={styles.contentSection}>
-              {/* Medical Disclaimer */}
-              <View style={styles.disclaimerContainer}>
-                <Text
-                  style={[
-                    styles.disclaimerTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Medical Disclaimer
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  This tracker is for personal monitoring only.
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Seek immediate medical attention for severe symptoms or
-                  emergencies.
-                </Text>
-              </View>
-
-              {/* Daily Log/History tabs */}
-              <View style={styles.tabsContainer}>
-                <TouchableOpacity
-                  style={
-                    activeTab === "daily"
-                      ? styles.activeTab
-                      : styles.inactiveTab
-                  }
-                  onPress={() => setActiveTab("daily")}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                      activeTab === "daily"
-                        ? styles.activeTabText
-                        : styles.inactiveTabText,
-                    ]}
-                  >
-                    Daily Log
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={
-                    activeTab === "history"
-                      ? styles.activeTab
-                      : styles.inactiveTab
-                  }
-                  onPress={() => setActiveTab("history")}
-                >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                      activeTab === "history"
-                        ? styles.activeTabText
-                        : styles.inactiveTabText,
-                    ]}
-                  >
-                    History
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Tab content */}
-              {renderTabContent()}
+          <View style={styles.contentSection}>
+            {/* Medical Disclaimer */}
+            <View style={styles.disclaimerContainer}>
+              <Text style={[styles.disclaimerTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Medical Disclaimer
+              </Text>
+              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                This tracker is for personal monitoring only.
+              </Text>
+              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Seek immediate medical attention for severe symptoms or emergencies.
+              </Text>
             </View>
 
-            {/* Fixed Add Log Entry Button at bottom */}
-            <View style={styles.addButtonContainer}>
-              <TouchableOpacity
-                style={styles.addEntryButton}
-                onPress={handleAddLogEntry}
-              >
-                <Text
-                  style={[
-                    styles.addEntryButtonText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Add Log Entry
+            {/* Navigation Cards */}
+            <View style={styles.navigationContainer}>
+              <TouchableOpacity style={styles.navCard} onPress={navigateToDailyLog}>
+                <Text style={[styles.navCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Daily Log
+                </Text>
+                <Text style={[styles.navCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  View and manage todays health entries
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.navCard} onPress={navigateToHistory}>
+                <Text style={[styles.navCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  History
+                </Text>
+                <Text style={[styles.navCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  View past entries and health trends
                 </Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </View>
+        </ScrollView>
+
+        {/* Add Log Entry Button */}
+        <View style={styles.addButtonContainer}>
+          <TouchableOpacity style={styles.addEntryButton} onPress={handleAddLogEntry}>
+            <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Add Log Entry
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Bottom navigation component */}
         <BottomNavigation />
       </CurvedBackground>
     </SafeAreaView>
@@ -174,12 +84,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
-  mainContent: {
-    flex: 1,
-  },
-  scrollContent: {
+  contentContainer: {
     flexGrow: 1,
-    paddingBottom: 100, // Extra space for the fixed button
   },
   contentSection: {
     padding: 24,
@@ -191,7 +97,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FFEAA7",
-    marginBottom: 15,
+    marginBottom: 24,
     marginTop: -30,
   },
   disclaimerTitle: {
@@ -206,56 +112,30 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 20,
   },
-  tabsContainer: {
-    flexDirection: "row",
+  navigationContainer: {
+    gap: 16,
+  },
+  navCard: {
     backgroundColor: "#F8F9FA",
+    padding: 20,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    overflow: "hidden",
-    marginBottom: 5,
   },
-  activeTab: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "#2A7DE1",
-    alignItems: "center",
-  },
-  inactiveTab: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: "transparent",
-    alignItems: "center",
-  },
-  tabText: {
-    fontSize: 16,
+  navCardTitle: {
+    fontSize: 18,
     fontWeight: "600",
+    color: "#2A7DE1",
+    marginBottom: 8,
   },
-  activeTabText: {
-    color: "white",
-  },
-  inactiveTabText: {
+  navCardText: {
+    fontSize: 14,
     color: "#666",
+    lineHeight: 20,
   },
-  entriesContainer: {
-    backgroundColor: "#F8F9FA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-    marginBottom: 24,
-    minHeight: 300,
-  },
-  entriesText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  // Fixed button container at bottom
   addButtonContainer: {
     position: "absolute",
-    bottom: 70, // Position above bottom navigation
+    bottom: 100,
     left: 0,
     right: 0,
     paddingHorizontal: 24,
