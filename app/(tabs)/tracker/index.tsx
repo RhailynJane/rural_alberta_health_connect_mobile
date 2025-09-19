@@ -144,6 +144,13 @@ const renderTabContent = () => {
 
              {/* Tab content */}
             {renderTabContent()}
+
+            {/* Add new log entry button */}
+            <TouchableOpacity style={styles.addEntryButton}>
+              <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Add Log Entry
+              </Text>
+            </TouchableOpacity>
             
           </View>
         </ScrollView>
@@ -234,5 +241,22 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     lineHeight: 24, 
+  },
+  addEntryButton: {
+    backgroundColor: "#28A745",
+    paddingVertical: 18,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 32,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  addEntryButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });
