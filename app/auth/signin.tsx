@@ -34,7 +34,7 @@ export default function SignIn() {
   const handleSignIn = async (values: { email: string; password: string }) => {
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      router.push("/auth/personal-info");
+      router.push("/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);
       // Handle error (you can add error state here)
