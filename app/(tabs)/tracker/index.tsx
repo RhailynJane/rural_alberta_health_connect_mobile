@@ -53,6 +53,27 @@ export default function Tracker() {
     ]);
   };
 
+  // Render content based on active tab
+  const renderTabContent = () => {
+    if (activeTab === 'daily') {
+      return (
+        <View style={styles.entriesContainer}>
+          <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            No entries for today
+          </Text>
+        </View>
+      );
+    } else {
+      return (
+        <View style={styles.entriesContainer}>
+          <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            No historical entries
+          </Text>
+        </View>
+      );
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -119,6 +140,9 @@ export default function Tracker() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+             {/* Tab content */}
+            {renderTabContent()}
             
           </View>
         </ScrollView>
@@ -166,12 +190,12 @@ const styles = StyleSheet.create({
   },
    tabsContainer: {
     flexDirection: "row",
-    marginBottom: 24,
     backgroundColor: "#F8F9FA",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
     overflow: 'hidden',
+    marginBottom: 5,
   },
   activeTab: {
     flex: 1,
@@ -194,5 +218,19 @@ const styles = StyleSheet.create({
   },
   inactiveTabText: {
     color: "#666",
+  },
+  entriesContainer: {
+    backgroundColor: "#F8F9FA",
+    padding: 32,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  entriesText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
   },
 });
