@@ -9,8 +9,17 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 
-export default function Tracker() {
-  const [activeTab, setActiveTab] = useState<"daily" | "history">("daily");
+export default function AddHealthEntry() {
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTime, setSelectedTime] = useState(new Date());
+  const [symptoms, setSymptoms] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [notes, setNotes] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
+
+  const severityOptions = Array.from({ length: 10 }, (_, i) => (i + 1).toString());
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -42,7 +51,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 100, // Extra space for the fixed button
+    paddingBottom: 100, 
   },
   contentSection: {
     padding: 24,
