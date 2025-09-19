@@ -1,16 +1,20 @@
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
+import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
@@ -20,12 +24,32 @@ export default function MedicalHistory() {
   const [medicalConditions, setMedicalConditions] = useState('');
   const [currentMedications, setCurrentMedications] = useState('');
   const [allergies, setAllergies] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCompleteSetup = () => {
-    // Handle form submission logic here
-    console.log("Medical history form submitted");
-    // Navigate to dashboard
-    router.push("/dashboard");
+  const updateMedicalHistory = useMutation(api.medicalHistory.update.withAllConditions);
+  const updateCompleteUserOnboarding = useMutation(api.medicalHistory.update.completeUserOnboarding);
+
+  const handleCompleteSetup = async () => {
+    setIsSubmitting(true);
+    try {
+      await updateMedicalHistory({
+        medicalConditions: medicalConditions || undefined,
+        currentMedications: currentMedications || undefined,
+        allergies: allergies || undefined,
+      });
+      console.log("Medical history saved successfully, onboarding completed!");
+      // Navigate to dashboard
+      await updateCompleteUserOnboarding();
+      router.push("/(tabs)/dashboard");
+    } catch (error) {
+      console.error("Error saving medical history:", error);
+      Alert.alert(
+        "Error",
+        "Failed to save medical history. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleBack = () => {
@@ -133,13 +157,21 @@ export default function MedicalHistory() {
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                  style={styles.completeButton} 
+                <TouchableOpacity
+                  style={[
+                    styles.completeButton,
+                    isSubmitting && styles.completeButtonDisabled
+                  ]}
                   onPress={handleCompleteSetup}
+                  disabled={isSubmitting}
                 >
-                  <Text style={[styles.completeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Complete Setup
-                  </Text>
+                  {isSubmitting ? (
+                    <ActivityIndicator color="white" size="small" />
+                  ) : (
+                    <Text style={[styles.completeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Complete Setup
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -261,6 +293,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
+  },
+  completeButtonDisabled: {
+    backgroundColor: "#CCCCCC",
   },
   completeButtonText: {
     color: "white",
