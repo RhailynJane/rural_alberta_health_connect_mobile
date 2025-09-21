@@ -9,15 +9,29 @@ const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
 const secureStorage = {
   getItem: async (key: string) => {
-    return SecureStore.getItemAsync(key);
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch (error) {
+      console.error("SecureStore getItem Error:", error);
+      return null;
+    }
   },
-  setItem: async (key: string, value: any) => {
-    await SecureStore.setItemAsync(key, value);
+  setItem: async (key: string, value: string) => {
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch (error) {
+      console.error("SecureStore setItem Error:", error);
+    }
   },
   removeItem: async (key: string) => {
-    await SecureStore.deleteItemAsync(key);
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch (error) {
+      console.error("SecureStore removeItem Error:", error);
+    }
   },
 };
+
 
 export default function RootLayout() {
   return (
