@@ -1,4 +1,5 @@
 import { useMutation } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -26,6 +27,7 @@ export default function MedicalHistory() {
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { signOut } = useAuthActions();
   const updateMedicalHistory = useMutation(api.medicalHistory.update.withAllConditions);
   const updateCompleteUserOnboarding = useMutation(api.medicalHistory.update.completeUserOnboarding);
 
@@ -38,18 +40,28 @@ export default function MedicalHistory() {
         allergies: allergies || undefined,
       });
       console.log("Medical history saved successfully, onboarding completed!");
-      // Navigate to dashboard
+      
+      // Complete onboarding
       await updateCompleteUserOnboarding();
-      console.log("✅ Onboarding completed, waiting before navigation...");
-      // Small delay to ensure auth state propagates
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log("🚀 Navigating to dashboard now");
-      router.push("/(tabs)/dashboard");
+      console.log("✅ Onboarding completed!");
+      
+      // Force session refresh using sign-out/sign-in cycle
+      console.log("🔄 Refreshing session to prevent stale data...");
+      await signOut();
+      console.log("✅ Signed out successfully");
+      
+      // Small delay to ensure sign-out completes
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // The user will be redirected to sign-in by AuthWrapper
+      // This ensures fresh session data when they sign back in
+      console.log("🚀 User will be redirected to sign-in for fresh session");
+      
     } catch (error) {
-      console.error("Error saving medical history:", error);
+      console.error("Error completing onboarding:", error);
       Alert.alert(
         "Error",
-        "Failed to save medical history. Please try again."
+        "Failed to complete setup. Please try again."
       );
     } finally {
       setIsSubmitting(false);
