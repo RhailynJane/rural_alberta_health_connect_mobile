@@ -4,7 +4,7 @@ import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useState, createContext, useContext } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import AuthWrapper from "./components/AuthWrapper";
+// import AuthWrapper from "./components/AuthWrapper"; // Temporarily disabled for testing
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
@@ -60,17 +60,16 @@ export default function RootLayout() {
     <SessionRefreshContext.Provider value={{ refreshSession }}>
       <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
         <SafeAreaProvider>
-          <AuthWrapper>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="auth/signin" />
-              <Stack.Screen name="auth/signup" />
-              <Stack.Screen name="auth/personal-info" />
-              <Stack.Screen name="auth/emergency-contact" />
-              <Stack.Screen name="auth/medical-history" />
-            </Stack>
-          </AuthWrapper>
+          {/* AuthWrapper temporarily disabled for testing */}
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="auth/signin" />
+            <Stack.Screen name="auth/signup" />
+            <Stack.Screen name="auth/personal-info" />
+            <Stack.Screen name="auth/emergency-contact" />
+            <Stack.Screen name="auth/medical-history" />
+          </Stack>
         </SafeAreaProvider>
       </ConvexAuthProvider>
     </SessionRefreshContext.Provider>

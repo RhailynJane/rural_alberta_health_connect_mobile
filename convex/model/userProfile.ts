@@ -147,9 +147,11 @@ export async function completeOnboarding(
   });
 
   // Also update the user's hasCompletedOnboarding field
+  console.log("🔄 Updating users table hasCompletedOnboarding for userId:", userId);
   await ctx.db.patch(userId, {
     hasCompletedOnboarding: true,
   });
+  console.log("✅ Successfully updated users.hasCompletedOnboarding to true");
 
   return existingProfile._id;
 }
