@@ -148,9 +148,18 @@ export async function completeOnboarding(
 
   // Also update the user's hasCompletedOnboarding field
   console.log("🔄 Updating users table hasCompletedOnboarding for userId:", userId);
+  
+  // Check user before update
+  const userBefore = await ctx.db.get(userId);
+  console.log("👤 User BEFORE update:", userBefore);
+  
   await ctx.db.patch(userId, {
     hasCompletedOnboarding: true,
   });
+  
+  // Check user after update to verify the patch worked
+  const userAfter = await ctx.db.get(userId);
+  console.log("👤 User AFTER update:", userAfter);
   console.log("✅ Successfully updated users.hasCompletedOnboarding to true");
 
   return existingProfile._id;
