@@ -49,8 +49,8 @@ export default function MedicalHistory() {
       console.log("🔄 Refreshing session to prevent stale data...");
       refreshSession();
       
-      // Small delay to allow provider remount to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Longer delay to ensure backend state propagates before provider remount
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Navigate to dashboard with fresh session
       console.log("🚀 Navigating to dashboard with refreshed session");
