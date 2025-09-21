@@ -24,29 +24,15 @@ export default function Dashboard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const queryArgs = isAuthenticated ? {} : "skip";
-  console.log("🔧 Query args:", queryArgs);
   
-  // Try the simpler user query first to debug
+  // Get current user data
   const user = useQuery(api.users.getCurrentUser, queryArgs);
-  console.log("👤 Current user query result:", user);
   
+  // Keep userWithProfile query for future use (currently returns undefined)
   const userWithProfile = useQuery(
     api.dashboard.user.getUserWithProfile,
     queryArgs
   );
-  
-  // Check for query errors
-  const queryError = userWithProfile === null ? "Query returned null" : 
-                    userWithProfile === undefined ? "Query returned undefined" : null;
-  if (queryError) {
-    console.log("❌ Query issue:", queryError);
-  }
-
-  console.log("🔍 Dashboard Debug:");
-  console.log("📊 Auth state:", { isAuthenticated, isLoading });
-  console.log("📦 userWithProfile:", userWithProfile);
-  console.log("🔍 userWithProfile type:", typeof userWithProfile);
-  console.log("🔍 Query being executed?", queryArgs !== "skip");
 
   if (isLoading || (!isAuthenticated && user === undefined)) {
     return (

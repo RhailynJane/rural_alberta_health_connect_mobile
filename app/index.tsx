@@ -13,21 +13,15 @@ export default function Index() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      console.log("🕐 Splash screen timer fired - checking auth state");
-      console.log("📊 Auth state:", { isAuthenticated, isLoading, user });
-      
       if (isLoading) {
-        console.log("⏳ Auth still loading, staying on splash");
         return;
       }
       
       if (isAuthenticated && user) {
         // User is authenticated and exists - go to dashboard
-        console.log("✅ Authenticated user exists, navigating to dashboard");
         router.push('/(tabs)/dashboard');
       } else {
         // No authenticated user - show onboarding flow
-        console.log("❌ No authenticated user, showing onboarding");
         router.push('/onboarding');
       }
     }, 5000); // 5000ms = 5 seconds
