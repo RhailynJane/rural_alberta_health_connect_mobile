@@ -1,5 +1,5 @@
 // app/dashboard.tsx
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -21,10 +21,34 @@ import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const userWithProfile = useQuery(api.dashboard.user.getUserWithProfile);
+  const queryArgs = isAuthenticated ? {} : "skip";
+  console.log("🔧 Query args:", queryArgs);
+  
+  // Try the simpler user query first to debug
+  const user = useQuery(api.users.getCurrentUser, queryArgs);
+  console.log("👤 Current user query result:", user);
+  
+  const userWithProfile = useQuery(
+    api.dashboard.user.getUserWithProfile,
+    queryArgs
+  );
+  
+  // Check for query errors
+  const queryError = userWithProfile === null ? "Query returned null" : 
+                    userWithProfile === undefined ? "Query returned undefined" : null;
+  if (queryError) {
+    console.log("❌ Query issue:", queryError);
+  }
 
-  if (userWithProfile === undefined) {
+  console.log("🔍 Dashboard Debug:");
+  console.log("📊 Auth state:", { isAuthenticated, isLoading });
+  console.log("📦 userWithProfile:", userWithProfile);
+  console.log("🔍 userWithProfile type:", typeof userWithProfile);
+  console.log("🔍 Query being executed?", queryArgs !== "skip");
+
+  if (isLoading || (!isAuthenticated && userWithProfile === undefined)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -41,7 +65,7 @@ export default function Dashboard() {
     );
   }
 
-  if (userWithProfile === null) {
+  if (!isAuthenticated || userWithProfile === null) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
@@ -58,7 +82,7 @@ export default function Dashboard() {
     );
   }
 
-  const { userName, userEmail } = userWithProfile;
+  const { userName, userEmail } = userWithProfile!;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");

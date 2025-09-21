@@ -40,6 +40,10 @@ export default function MedicalHistory() {
       console.log("Medical history saved successfully, onboarding completed!");
       // Navigate to dashboard
       await updateCompleteUserOnboarding();
+      console.log("✅ Onboarding completed, waiting before navigation...");
+      // Small delay to ensure auth state propagates
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log("🚀 Navigating to dashboard now");
       router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("Error saving medical history:", error);

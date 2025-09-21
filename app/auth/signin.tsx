@@ -28,13 +28,13 @@ const SignInSchema = Yup.object().shape({
 });
 
 export default function SignIn() {
-  const router = useRouter();
   const { signIn } = useAuthActions();
+  const router = useRouter();
 
   const handleSignIn = async (values: { email: string; password: string }) => {
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      router.push("/dashboard");
+      // AuthWrapper will handle navigation based on auth state and onboarding status
     } catch (error) {
       console.error("Sign in failed:", error);
       // Handle error (you can add error state here)
