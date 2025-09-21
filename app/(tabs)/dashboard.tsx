@@ -48,7 +48,7 @@ export default function Dashboard() {
   console.log("🔍 userWithProfile type:", typeof userWithProfile);
   console.log("🔍 Query being executed?", queryArgs !== "skip");
 
-  if (isLoading || (!isAuthenticated && userWithProfile === undefined)) {
+  if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -65,7 +65,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!isAuthenticated || userWithProfile === null) {
+  if (!isAuthenticated || user === null || user === undefined) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
@@ -82,7 +82,9 @@ export default function Dashboard() {
     );
   }
 
-  const { userName, userEmail } = userWithProfile!;
+  // Use currentUser data instead of userWithProfile for now
+  const userName = user.firstName || user.name || "User";
+  const userEmail = user.email;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
