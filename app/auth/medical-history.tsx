@@ -1,5 +1,6 @@
 import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
+import { useSessionRefresh } from "../_layout";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -26,6 +27,7 @@ export default function MedicalHistory() {
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const { refreshSession } = useSessionRefresh();
   const updateMedicalHistory = useMutation(api.medicalHistory.update.withAllConditions);
   const updateCompleteUserOnboarding = useMutation(api.medicalHistory.update.completeUserOnboarding);
 
@@ -38,14 +40,27 @@ export default function MedicalHistory() {
         allergies: allergies || undefined,
       });
       console.log("Medical history saved successfully, onboarding completed!");
-      // Navigate to dashboard
+      
+      // Complete onboarding
       await updateCompleteUserOnboarding();
+      console.log("✅ Onboarding completed!");
+      
+      // Force session refresh using provider remount pattern
+      console.log("🔄 Refreshing session to prevent stale data...");
+      refreshSession();
+      
+      // Longer delay to ensure backend state propagates before provider remount
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Navigate to dashboard with fresh session
+      console.log("🚀 Navigating to dashboard with refreshed session");
       router.push("/(tabs)/dashboard");
+      
     } catch (error) {
-      console.error("Error saving medical history:", error);
+      console.error("Error completing onboarding:", error);
       Alert.alert(
         "Error",
-        "Failed to save medical history. Please try again."
+        "Failed to complete setup. Please try again."
       );
     } finally {
       setIsSubmitting(false);

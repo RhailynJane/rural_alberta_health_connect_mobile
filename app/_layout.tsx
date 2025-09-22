@@ -2,41 +2,76 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
+import { useState, createContext, useContext } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+// import AuthWrapper from "./components/AuthWrapper"; // Temporarily disabled for testing
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
 const secureStorage = {
   getItem: async (key: string) => {
-    return SecureStore.getItemAsync(key);
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch (error) {
+      console.error("SecureStore getItem Error:", error);
+      return null;
+    }
   },
-  setItem: async (key: string, value: any) => {
-    await SecureStore.setItemAsync(key, value);
+  setItem: async (key: string, value: string) => {
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch (error) {
+      console.error("SecureStore setItem Error:", error);
+    }
   },
   removeItem: async (key: string) => {
-    await SecureStore.deleteItemAsync(key);
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch (error) {
+      console.error("SecureStore removeItem Error:", error);
+    }
   },
 };
 
+// Create context for session refresh functionality
+interface SessionRefreshContextType {
+  refreshSession: () => void;
+}
+
+const SessionRefreshContext = createContext<SessionRefreshContextType | null>(null);
+
+export const useSessionRefresh = () => {
+  const context = useContext(SessionRefreshContext);
+  if (!context) {
+    throw new Error('useSessionRefresh must be used within SessionRefreshProvider');
+  }
+  return context;
+};
+
 export default function RootLayout() {
+  const [providerKey, setProviderKey] = useState(0);
+
+  const refreshSession = () => {
+    console.log('🔄 Refreshing session via provider remount...');
+    setProviderKey(k => k + 1);
+  };
+
   return (
-    <ConvexAuthProvider client={convex} storage={secureStorage}>
+    <SessionRefreshContext.Provider value={{ refreshSession }}>
+      <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
         <SafeAreaProvider>
+          {/* AuthWrapper temporarily disabled for testing */}
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
             <Stack.Screen name="auth/signin" />
             <Stack.Screen name="auth/signup" />
-            <Stack.Screen name="personal-info" />
-            <Stack.Screen name="emergency-contact" />
-            <Stack.Screen name="medical-history" />
-            <Stack.Screen name="dashboard" />
-            <Stack.Screen name="ai-assess" />
-            <Stack.Screen name="tracker" />
-            <Stack.Screen name="emergency" />
-            <Stack.Screen name="profile" />
-            <Stack.Screen name="symptom-assessment" />
+            <Stack.Screen name="auth/personal-info" />
+            <Stack.Screen name="auth/emergency-contact" />
+            <Stack.Screen name="auth/medical-history" />
           </Stack>
         </SafeAreaProvider>
-    </ConvexAuthProvider>
+      </ConvexAuthProvider>
+    </SessionRefreshContext.Provider>
   );
 }

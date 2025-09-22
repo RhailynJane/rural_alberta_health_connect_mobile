@@ -140,10 +140,15 @@ export async function completeOnboarding(
     throw new Error("User profile not found. Cannot complete onboarding.");
   }
 
-  // Mark onboarding as completed
+  // Mark onboarding as completed in userProfile
   await ctx.db.patch(existingProfile._id, {
     onboardingCompleted: true,
     updatedAt: Date.now(),
+  });
+
+  // Also update the user's hasCompletedOnboarding field
+  await ctx.db.patch(userId, {
+    hasCompletedOnboarding: true,
   });
 
   return existingProfile._id;

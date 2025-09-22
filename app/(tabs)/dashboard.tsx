@@ -1,5 +1,5 @@
 // app/dashboard.tsx
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -21,10 +21,20 @@ import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const userWithProfile = useQuery(api.dashboard.user.getUserWithProfile);
+  const queryArgs = isAuthenticated ? {} : "skip";
+  
+  // Get current user data
+  const user = useQuery(api.users.getCurrentUser, queryArgs);
+  
+  // Keep userWithProfile query for future use (currently returns undefined)
+  const userWithProfile = useQuery(
+    api.dashboard.user.getUserWithProfile,
+    queryArgs
+  );
 
-  if (userWithProfile === undefined) {
+  if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -41,7 +51,7 @@ export default function Dashboard() {
     );
   }
 
-  if (userWithProfile === null) {
+  if (!isAuthenticated || user === null || user === undefined) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
@@ -58,7 +68,9 @@ export default function Dashboard() {
     );
   }
 
-  const { userName, userEmail } = userWithProfile;
+  // Use currentUser data instead of userWithProfile for now
+  const userName = user.firstName || user.name || "User";
+  const userEmail = user.email;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");

@@ -8,6 +8,7 @@ const PasswordProvider = Password<DataModel>({
       email: params.email as string,
       firstName: params.firstName as string,
       lastName: params.lastName as string,
+      hasCompletedOnboarding: params.hasCompletedOnboarding as boolean,
     };
   },
 });

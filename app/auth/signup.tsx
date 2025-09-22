@@ -64,7 +64,8 @@ export default function SignUp() {
         password: values.password,
         firstName: values.firstName,
         lastName: values.lastName,
-        flow: "signUp",
+        hasCompletedOnboarding: false,
+        flow: "signUp"
       });
       router.push("/auth/personal-info");
     } catch (error) {
