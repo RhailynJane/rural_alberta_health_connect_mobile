@@ -76,7 +76,11 @@ export default function Onboarding() {
             {/* Get Started Button */}
             <TouchableOpacity
               style={styles.getStartedButton}
-              onPress={() => router.push("/auth/signin")}
+              onPress={() => {
+                console.log("🔘 Get Started button pressed!");
+                router.push("/auth/signin");
+                console.log("📤 router.push('/auth/signin') called");
+              }}
             >
               <Text style={[styles.getStartedText, {fontFamily: FONTS.BarlowSemiCondensed}]}>
                 Get Started
