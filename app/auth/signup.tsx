@@ -1,6 +1,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Formik } from 'formik';
+import { Formik } from "formik";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -11,30 +12,30 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
-import * as Yup from 'yup';
+import * as Yup from "yup";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
 // Validation schema
 const SignUpSchema = Yup.object().shape({
-  firstName: Yup.string()
-    .required('First name is required'),
-  lastName: Yup.string()
-    .required('Last name is required'),
+  firstName: Yup.string().required("First name is required"),
+  lastName: Yup.string().required("Last name is required"),
   email: Yup.string()
-    .email('Invalid email address')
-    .required('Email is required'),
+    .email("Invalid email address")
+    .required("Email is required"),
   password: Yup.string()
-    .min(6, 'Password must be at least 6 characters')
-    .required('Password is required'),
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
   confirmPassword: Yup.string()
-    .oneOf([Yup.ref('password')], 'Passwords must match')
-    .required('Confirm password is required'),
-  agreeToTerms: Yup.boolean()
-    .oneOf([true], 'You must agree to the terms and conditions')
+    .oneOf([Yup.ref("password")], "Passwords must match")
+    .required("Confirm password is required"),
+  agreeToTerms: Yup.boolean().oneOf(
+    [true],
+    "You must agree to the terms and conditions"
+  ),
 });
 
 interface SignUpFormValues {
@@ -50,6 +51,8 @@ export default function SignUp() {
   const router = useRouter();
   const { signIn } = useAuthActions();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignUp = async (values: SignUpFormValues) => {
     // Handle sign up logic here
@@ -61,16 +64,17 @@ export default function SignUp() {
         password: values.password,
         firstName: values.firstName,
         lastName: values.lastName,
-        flow: "signUp"
+        flow: "signUp",
       });
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
 
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Signup failed. Please try again.";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Signup failed. Please try again.";
       setSubmitError(errorMessage);
     }
   };
@@ -95,87 +99,128 @@ export default function SignUp() {
             />
 
             <View style={styles.contentSection}>
-              <Text style={[styles.welcomeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.welcomeText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Create Your Account
               </Text>
-              <Text style={[styles.subtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.subtitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Join Alberta Health Connect today
               </Text>
 
               <Formik
                 initialValues={{
-                  firstName: '',
-                  lastName: '',
-                  email: '',
-                  password: '',
-                  confirmPassword: '',
-                  agreeToTerms: false
+                  firstName: "",
+                  lastName: "",
+                  email: "",
+                  password: "",
+                  confirmPassword: "",
+                  agreeToTerms: false,
                 }}
                 validationSchema={SignUpSchema}
                 onSubmit={handleSignUp}
               >
-                {({ handleChange, handleBlur, handleSubmit, setFieldValue, values, errors, touched }) => (
+                {({
+                  handleChange,
+                  handleBlur,
+                  handleSubmit,
+                  setFieldValue,
+                  values,
+                  errors,
+                  touched,
+                }) => (
                   <View style={styles.formContainer}>
                     <View style={styles.nameRow}>
                       <View style={styles.nameInputContainer}>
-                        <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        <Text
+                          style={[
+                            styles.label,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
                           First Name
                         </Text>
                         <TextInput
                           style={[
                             styles.input,
                             { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.firstName && touched.firstName && styles.inputError
+                            errors.firstName &&
+                              touched.firstName &&
+                              styles.inputError,
                           ]}
                           placeholder="Enter your first name"
                           placeholderTextColor="#999"
                           value={values.firstName}
-                          onChangeText={handleChange('firstName')}
-                          onBlur={handleBlur('firstName')}
+                          onChangeText={handleChange("firstName")}
+                          onBlur={handleBlur("firstName")}
                           autoCapitalize="words"
                         />
                         {errors.firstName && touched.firstName && (
-                          <Text style={styles.errorText}>{errors.firstName}</Text>
+                          <Text style={styles.errorText}>
+                            {errors.firstName}
+                          </Text>
                         )}
                       </View>
 
                       <View style={styles.nameInputContainer}>
-                        <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        <Text
+                          style={[
+                            styles.label,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
                           Last Name
                         </Text>
                         <TextInput
                           style={[
                             styles.input,
                             { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.lastName && touched.lastName && styles.inputError
+                            errors.lastName &&
+                              touched.lastName &&
+                              styles.inputError,
                           ]}
                           placeholder="Enter your last name"
                           placeholderTextColor="#999"
                           value={values.lastName}
-                          onChangeText={handleChange('lastName')}
-                          onBlur={handleBlur('lastName')}
+                          onChangeText={handleChange("lastName")}
+                          onBlur={handleBlur("lastName")}
                           autoCapitalize="words"
                         />
                         {errors.lastName && touched.lastName && (
-                          <Text style={styles.errorText}>{errors.lastName}</Text>
+                          <Text style={styles.errorText}>
+                            {errors.lastName}
+                          </Text>
                         )}
                       </View>
                     </View>
 
-                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.label,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       Email
                     </Text>
                     <TextInput
                       style={[
                         styles.input,
                         { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.email && touched.email && styles.inputError
+                        errors.email && touched.email && styles.inputError,
                       ]}
                       placeholder="Enter your email"
                       placeholderTextColor="#999"
                       value={values.email}
-                      onChangeText={handleChange('email')}
-                      onBlur={handleBlur('email')}
+                      onChangeText={handleChange("email")}
+                      onBlur={handleBlur("email")}
                       keyboardType="email-address"
                       autoCapitalize="none"
                     />
@@ -183,80 +228,152 @@ export default function SignUp() {
                       <Text style={styles.errorText}>{errors.email}</Text>
                     )}
 
-                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.label,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       Password
                     </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.password && touched.password && styles.inputError
-                      ]}
-                      placeholder="Enter your password"
-                      placeholderTextColor="#999"
-                      value={values.password}
-                      onChangeText={handleChange('password')}
-                      onBlur={handleBlur('password')}
-                      secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                      <TextInput
+                        style={[
+                          styles.passwordInput,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          errors.password &&
+                            touched.password &&
+                            styles.inputError,
+                        ]}
+                        placeholder="Enter your password"
+                        placeholderTextColor="#999"
+                        value={values.password}
+                        onChangeText={handleChange("password")}
+                        onBlur={handleBlur("password")}
+                        secureTextEntry={!showPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeIcon}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <Ionicons
+                          name={showPassword ? "eye-off" : "eye"}
+                          size={24}
+                          color="#999"
+                        />
+                      </TouchableOpacity>
+                    </View>
                     {errors.password && touched.password && (
                       <Text style={styles.errorText}>{errors.password}</Text>
                     )}
 
-                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.label,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       Confirm Password
                     </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.confirmPassword && touched.confirmPassword && styles.inputError
-                      ]}
-                      placeholder="Confirm your password"
-                      placeholderTextColor="#999"
-                      value={values.confirmPassword}
-                      onChangeText={handleChange('confirmPassword')}
-                      onBlur={handleBlur('confirmPassword')}
-                      secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                      <TextInput
+                        style={[
+                          styles.passwordInput,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          errors.confirmPassword &&
+                            touched.confirmPassword &&
+                            styles.inputError,
+                        ]}
+                        placeholder="Confirm your password"
+                        placeholderTextColor="#999"
+                        value={values.confirmPassword}
+                        onChangeText={handleChange("confirmPassword")}
+                        onBlur={handleBlur("confirmPassword")}
+                        secureTextEntry={!showConfirmPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeIcon}
+                        onPress={() =>
+                          setShowConfirmPassword(!showConfirmPassword)
+                        }
+                      >
+                        <Ionicons
+                          name={showConfirmPassword ? "eye-off" : "eye"}
+                          size={24}
+                          color="#999"
+                        />
+                      </TouchableOpacity>
+                    </View>
                     {errors.confirmPassword && touched.confirmPassword && (
-                      <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                      <Text style={styles.errorText}>
+                        {errors.confirmPassword}
+                      </Text>
                     )}
 
                     <View style={styles.checkboxContainer}>
                       <TouchableOpacity
                         style={[
                           styles.customCheckbox,
-                          values.agreeToTerms && styles.customCheckboxChecked
+                          values.agreeToTerms && styles.customCheckboxChecked,
                         ]}
-                        onPress={() => setFieldValue('agreeToTerms', !values.agreeToTerms)}
+                        onPress={() =>
+                          setFieldValue("agreeToTerms", !values.agreeToTerms)
+                        }
                         activeOpacity={0.7}
                       >
-                        {values.agreeToTerms && <Text style={styles.checkboxCheck}>✓</Text>}
+                        {values.agreeToTerms && (
+                          <Text style={styles.checkboxCheck}>✓</Text>
+                        )}
                       </TouchableOpacity>
-                      <Text style={[styles.checkboxLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        I agree to the Terms of Service and Privacy Policy. I understand this app provides health information only and does not replace professional medical care
+                      <Text
+                        style={[
+                          styles.checkboxLabel,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        I agree to the Terms of Service and Privacy Policy. I
+                        understand this app provides health information only and
+                        does not replace professional medical care
                       </Text>
                     </View>
                     {errors.agreeToTerms && (
-                      <Text style={styles.errorText}>{errors.agreeToTerms}</Text>
+                      <Text style={styles.errorText}>
+                        {errors.agreeToTerms}
+                      </Text>
                     )}
 
                     <TouchableOpacity
                       style={styles.signUpButton}
                       onPress={() => handleSubmit()}
                     >
-                      <Text style={[styles.signUpButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      <Text
+                        style={[
+                          styles.signUpButtonText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
                         Sign Up
                       </Text>
                     </TouchableOpacity>
 
                     <View style={styles.signInContainer}>
-                      <Text style={[styles.signInText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      <Text
+                        style={[
+                          styles.signInText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
                         Already have an account?{" "}
                       </Text>
-                      <TouchableOpacity onPress={() => router.push("/auth/signin")}>
-                        <Text style={[styles.signInLink, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      <TouchableOpacity
+                        onPress={() => router.push("/auth/signin")}
+                      >
+                        <Text
+                          style={[
+                            styles.signInLink,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
                           Sign In
                         </Text>
                       </TouchableOpacity>
@@ -285,7 +402,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
+    paddingTop: 5,
   },
   welcomeText: {
     fontSize: 28,
@@ -400,5 +517,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 15,
+    paddingRight: 50,
+  },
+  eyeIcon: {
+    padding: 10,
   },
 });
