@@ -1,50 +1,58 @@
-# Welcome to your Expo app 👋
+# Alberta Health Connect
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Improving Healthcare Access in Rural Alberta
 
-## Get started
+Alberta Health Connect is a mobile application designed to improve access to healthcare information and guidance for residents of rural Alberta. Recognizing the unique challenges faced by these communities, the app provides an AI-powered triage system to help users assess their symptoms, understand their options, and connect with appropriate medical resources.
 
-1. Install dependencies
+## Key Features
 
-   ```bash
-   npm install
-   ```
+*   **AI-Powered Triage:** Users input their symptoms through a conversational interface, and the app provides guidance on potential causes and appropriate actions (self-care, contacting a clinic, seeking emergency care).
+*   **Rural-Focused:** The app considers the specific challenges of rural Alberta, such as limited access to healthcare facilities, transportation difficulties, and extreme weather conditions.
+*   **Secure & Private:** User data is encrypted and stored locally on the device to protect privacy. No data is shared without explicit user consent.
+*   **Offline Access:** Core app functionality, including access to the disclaimer and basic triage logic, is available even without an active internet connection.
+*   **[Future - Potential] Image Recognition:** Leverages machine learning (YOLOv8) to analyze user-submitted images of symptoms (e.g., rashes, wounds) for enhanced assessment accuracy. *(Currently in development)*
 
-2. Start the app
 
-   ```bash
-   npx expo start
-   ```
+## Target Audience
 
-In the output, you'll find options to open the app in a
+*   Residents of rural Alberta, particularly those with limited access to healthcare services or transportation options.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Goals
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+*   Enhance healthcare information accessibility for rural Albertans.
+*   Reduce the burden on emergency rooms and clinics by providing initial guidance for non-emergency conditions.
+*   Empower users to make informed decisions about their health and well-being.
+*   Improve awareness of available healthcare resources within rural communities.
 
-## Get a fresh project
+## Technology Stack
 
-When you're ready, run:
+*   Mobile App: [React Native](https://reactnative.dev/) (cross-platform development)
+*   Backend: [Convex](https://www.convex.dev/) (Realtime backend as a service)
+*   Database: [Convex's built-in data store](https://docs.convex.dev/database)
+*   AI/ML: [YOLOv8]
 
-```bash
-npm run reset-project
-```
+## Why Convex and YOLOv8?
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+*   **Convex:** We've chosen Convex as our backend for its realtime data synchronization, simplified development, and built-in security and scalability.
+*   **YOLOv8:** YOLOv8 is a state-of-the-art object detection model known for its speed and accuracy. We plan to use it to quickly and accurately identify key features in user-submitted images, improving the precision of our symptom assessment. We intend to deploy the model on-device via TensorFlow Lite, to ensure privacy and reduce the requirements for network connectivity.
 
-## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
+## License
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+This project is licensed under the [MIT License](LICENSE) - see the `LICENSE` file for details.
 
-## Join the community
+## Code of Conduct
 
-Join our community of developers creating universal apps.
+We expect all contributors to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md). Please read it carefully before participating.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Ethical Considerations
+
+*   We are committed to providing a safe and ethical healthcare support tool. The app is not a substitute for professional medical advice, diagnosis, or treatment.
+*   All user data is handled in accordance with applicable privacy regulations (PIPEDA, HIPAA, Alberta Health regulations).
+*   The limitations of the app's AI-powered triage system are clearly communicated to users.
+*   Object recognition models will be carefully trained and validated to minimize bias and ensure accurate results.
+
+## Contact
+
+Rhailyn Jane Cona - rhailynjane.cona@edu.sait.ca
+Yue Zhou - Yue.Zhou@edu.sait.ca
