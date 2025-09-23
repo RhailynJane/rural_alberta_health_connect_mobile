@@ -1,10 +1,18 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
 export default function TermsOfService() {
+  const router = useRouter();
+
+  const handleAgree = () => {
+    // Navigate back to sign-up page
+    router.push("/auth/signup");
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -13,7 +21,7 @@ export default function TermsOfService() {
           <CurvedHeader
             title="Terms of Service"
             height={120}
-            showLogo={true}
+            showLogo={false}
           />
 
           <View style={styles.contentSection}>
@@ -107,6 +115,18 @@ export default function TermsOfService() {
               Rhailyn Jane Cona - rhailynjane.cona@edu.sait.ca{"\n"}
               Yue Zhou - Yue.Zhou@edu.sait.ca
             </Text>
+
+            {/* I Agree Button - Now at the end of content */}
+            <View style={styles.agreeButtonContainer}>
+              <TouchableOpacity 
+                style={styles.agreeButton}
+                onPress={handleAgree}
+              >
+                <Text style={[styles.agreeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  I Agree
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </CurvedBackground>
@@ -124,6 +144,8 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
+    paddingTop: 30,
+    paddingBottom: 40, // Added padding at bottom
   },
   title: {
     fontSize: 24,
@@ -160,6 +182,26 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   bold: {
+    fontWeight: "600",
+  },
+  agreeButtonContainer: {
+    marginTop: 30,
+    marginBottom: 20,
+  },
+  agreeButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    borderRadius: 30,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  agreeButtonText: {
+    color: "white",
+    fontSize: 16,
     fontWeight: "600",
   },
 });
