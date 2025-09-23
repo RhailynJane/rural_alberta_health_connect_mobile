@@ -44,15 +44,19 @@ export default function SignIn() {
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
       // AuthWrapper will handle navigation based on auth state and onboarding status
+      // not for now
+      router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);
       
       // Determine the specific error message
       let message = "Sign in failed. Please try again.";
-      if (error.message?.includes("invalid email") || error.message?.includes("user not found")) {
-        message = "Invalid email address. Please check and try again.";
-      } else if (error.message?.includes("password") || error.message?.includes("credentials")) {
-        message = "Incorrect password. Please try again.";
+      if (error instanceof Error) {
+        if (error.message?.includes("invalid email") || error.message?.includes("user not found")) {
+          message = "Invalid email address. Please check and try again.";
+        } else if (error.message?.includes("password") || error.message?.includes("credentials")) {
+          message = "Incorrect password. Please try again.";
+        }
       }
       
       setErrorMessage(message);
