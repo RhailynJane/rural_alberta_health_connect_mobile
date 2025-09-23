@@ -152,7 +152,7 @@ export default function Dashboard() {
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Welcome, {userName} {userEmail}!!
+                Welcome, {userName}!!
               </Text>
               <View style={styles.healthStatusContainer}>
                 <Text
