@@ -5,6 +5,7 @@ import { Formik } from "formik";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -53,9 +54,13 @@ export default function SignUp() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [pendingAgreement, setPendingAgreement] = useState(false);
+  const [pendingSetFieldValue, setPendingSetFieldValue] = useState<
+    ((field: string, value: any) => void) | null
+  >(null);
 
   const handleSignUp = async (values: SignUpFormValues) => {
-    // Handle sign up logic here
     console.log("Sign up attempted with:", values);
     setSubmitError(null);
     try {
@@ -65,7 +70,7 @@ export default function SignUp() {
         firstName: values.firstName,
         lastName: values.lastName,
         hasCompletedOnboarding: false,
-        flow: "signUp"
+        flow: "signUp",
       });
       router.push("/auth/personal-info");
     } catch (error) {
@@ -78,6 +83,27 @@ export default function SignUp() {
           : "Signup failed. Please try again.";
       setSubmitError(errorMessage);
     }
+  };
+
+  const handleCheckboxPress = (setFieldValue: any, currentValue: boolean) => {
+    // Store the setFieldValue function for later use
+    setPendingSetFieldValue(() => setFieldValue);
+    setPendingAgreement(!currentValue);
+    setShowAgreementModal(true);
+  };
+
+  const confirmAgreement = () => {
+    if (pendingSetFieldValue) {
+      pendingSetFieldValue("agreeToTerms", pendingAgreement);
+    }
+    setShowAgreementModal(false);
+    setPendingSetFieldValue(null);
+  };
+
+  const cancelAgreement = () => {
+    setPendingAgreement(false);
+    setShowAgreementModal(false);
+    setPendingSetFieldValue(null);
   };
 
   return (
@@ -318,7 +344,10 @@ export default function SignUp() {
                           values.agreeToTerms && styles.customCheckboxChecked,
                         ]}
                         onPress={() =>
-                          setFieldValue("agreeToTerms", !values.agreeToTerms)
+                          handleCheckboxPress(
+                            setFieldValue,
+                            values.agreeToTerms
+                          )
                         }
                         activeOpacity={0.7}
                       >
@@ -332,9 +361,22 @@ export default function SignUp() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        I agree to the Terms of Service and Privacy Policy. I
-                        understand this app provides health information only and
-                        does not replace professional medical care
+                        I agree to the{" "}
+                        <Text
+                          style={styles.linkText}
+                          onPress={() => router.push("/auth/terms-of-service")}
+                        >
+                          Terms of Service
+                        </Text>{" "}
+                        and{" "}
+                        <Text
+                          style={styles.linkText}
+                          onPress={() => router.push("/auth/privacy-policy")}
+                        >
+                          Privacy Policy
+                        </Text>
+                        . I understand this app provides health information only
+                        and does not replace professional medical care.
                       </Text>
                     </View>
                     {errors.agreeToTerms && (
@@ -386,6 +428,95 @@ export default function SignUp() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Agreement Confirmation Modal */}
+      <Modal
+        visible={showAgreementModal}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="document-text" size={32} color="#2A7DE1" />
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Agreement Required
+              </Text>
+            </View>
+
+            <Text
+              style={[
+                styles.modalMessage,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+              ]}
+            >
+              Do you agree to our Terms of Service and Privacy Policy?
+            </Text>
+
+            <Text
+              style={[
+                styles.modalSubtext,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+              ]}
+            >
+              By agreeing, you acknowledge that you have read and understood
+              both documents.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={cancelAgreement}
+              >
+                <Text
+                  style={[
+                    styles.cancelButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={confirmAgreement}
+              >
+                <Text
+                  style={[
+                    styles.confirmButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  I Agree
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.readDocumentsButton}
+              onPress={() => {
+                setShowAgreementModal(false);
+                setPendingSetFieldValue(null);
+              }}
+            >
+              <Text
+                style={[
+                  styles.readDocumentsText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                I need to read the documents first
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -450,7 +581,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   inputError: {
-    borderColor: "#ff3b30", // Red border for errors
+    borderColor: "#ff3b30",
   },
   errorText: {
     color: "#ff3b30",
@@ -541,5 +672,97 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 10,
+  },
+  linkText: {
+    color: "#2A7DE1",
+    textDecorationLine: "underline",
+    fontWeight: "600",
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#dee2e6",
+  },
+  cancelButtonText: {
+    color: "#495057",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  confirmButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  readDocumentsButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  readDocumentsText: {
+    color: "#2A7DE1",
+    fontSize: 14,
+    textDecorationLine: "underline",
   },
 });
