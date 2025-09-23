@@ -48,15 +48,15 @@ export default function SignIn() {
       console.error("Sign in failed:", error);
       
       // Determine the specific error message
-      let message = "Sign in failed. Please try again.";
-      if (error.message?.includes("invalid email") || error.message?.includes("user not found")) {
-        message = "Invalid email address. Please check and try again.";
-      } else if (error.message?.includes("password") || error.message?.includes("credentials")) {
-        message = "Incorrect password. Please try again.";
-      }
+      // let message = "Sign in failed. Please try again.";
+      // if (error.message?.includes("invalid email") || error.message?.includes("user not found")) {
+      //   message = "Invalid email address. Please check and try again.";
+      // } else if (error.message?.includes("password") || error.message?.includes("credentials")) {
+      //   message = "Incorrect password. Please try again.";
+      // }
       
-      setErrorMessage(message);
-      setErrorModalVisible(true);
+      // setErrorMessage(message);
+      // setErrorModalVisible(true);
     } finally {
       setIsLoading(false);
     }

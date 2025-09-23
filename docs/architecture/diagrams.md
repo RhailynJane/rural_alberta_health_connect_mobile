@@ -4,22 +4,22 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                 MOBILE APP (React Native)              │
+│                 MOBILE APP (React Native)               │
 ├─────────────────────────────────────────────────────────┤
-│  📱 UI Layer                                           │
+│  📱 UI Layer                                            │
 │    • Camera Interface                                   │
-│    • Triage Results Display                            │
-│    • Consent Forms                                     │
+│    • Triage Results Display                             │
+│    • Consent Forms                                      │
 ├─────────────────────────────────────────────────────────┤
-│  🧠 Local AI Layer (react-native-executorch)          │
-│    • 6MB Computer Vision Model (.pte)                 │
-│    • Instant Image Classification                      │
-│    • No Network Required                               │
+│  🧠 Local AI Layer (react-native-executorch)            │
+│    • 6MB Computer Vision Model (.pte)                   │
+│    • Instant Image Classification                       │
+│    • No Network Required                                │
 ├─────────────────────────────────────────────────────────┤
-│  🌐 Network Layer (Convex Client)                     │
+│  🌐 Network Layer (Convex Client)                       │
 │    • Authentication                                     │
-│    • Consent Validation                                │
-│    • Results Submission                                │
+│    • Consent Validation                                 │
+│    • Results Submission                                 │
 └─────────────────┬───────────────────────────────────────┘
                   │ HTTPS/WebSockets
                   ▼
@@ -29,10 +29,34 @@
 │  • User Authentication & Sessions                      │
 │  • Consent & Terms Management                          │
 │  • Triage Results Storage                              │  
-│  • Audit Trails & Compliance Logging                  │
-│  • Real-time Data Sync                                │
+│  • Audit Trails & Compliance Logging                   │
+│  • Real-time Data Sync                                 │
 └─────────────────────────────────────────────────────────┘
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## User Flow
 
