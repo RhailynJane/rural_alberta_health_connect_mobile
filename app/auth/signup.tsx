@@ -336,7 +336,7 @@ export default function SignUp() {
                         <Text
                           style={styles.linkText}
                           onPress={() =>
-                            router.push("../terms-of-service")
+                            router.push("../../auth/terms-of-service")
                           }
                         >
                           Terms of Service
@@ -344,7 +344,7 @@ export default function SignUp() {
                         and{" "}
                         <Text
                           style={styles.linkText}
-                          onPress={() => router.push("../privacy-policy")}
+                          onPress={() => router.push("../../auth/privacy-policy")}
                         >
                           Privacy Policy
                         </Text>

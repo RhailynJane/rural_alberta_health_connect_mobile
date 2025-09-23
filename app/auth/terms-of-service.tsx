@@ -18,28 +18,28 @@ export default function TermsOfService() {
 
           <View style={styles.contentSection}>
             <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Terms of Service for Alberta Health Connect
+              Terms of Service for Rural Alberta Health Connect
             </Text>
             <Text style={[styles.effectiveDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Effective Date: [Insert Date]
+              Effective Date: September 23, 2025
             </Text>
 
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              <Text style={styles.bold}>PLEASE READ THESE TERMS OF SERVICE CAREFULLY BEFORE USING THE ALBERTA HEALTH CONNECT APPLICATION.</Text>
+              <Text style={styles.bold}>PLEASE READ THESE TERMS OF SERVICE CAREFULLY BEFORE USING THE Rural Alberta Health Connect APPLICATION.</Text>
             </Text>
 
             <Text style={[styles.heading, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               1. Acceptance of Terms
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              By creating an account or using the Alberta Health Connect application (&quot;the App&quot;), you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to these terms, you may not use the App.
+              By creating an account or using the Rural Alberta Health Connect application (&quot;the App&quot;), you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to these terms, you may not use the App.
             </Text>
 
             <Text style={[styles.heading, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               2. Nature of the Service (Critical Disclaimer)
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              <Text style={styles.bold}>The Alberta Health Connect App is a supportive information and guidance tool only.</Text> It is not a medical device and does not provide medical diagnosis, treatment, or advice.
+              <Text style={styles.bold}>The Rural Alberta Health Connect App is a supportive information and guidance tool only.</Text> It is not a medical device and does not provide medical diagnosis, treatment, or advice.
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               The App uses an AI-assisted system to provide general health information and suggestions for potential next steps based on user-inputted symptoms.{" "}
@@ -75,21 +75,21 @@ export default function TermsOfService() {
               4. Intellectual Property
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              The App, including its text, graphics, logos, and software, is the property of the Alberta Health Connect project team and its licensors and is protected by intellectual property laws. You are granted a limited license to use the App for its intended purposes.
+              The App, including its text, graphics, logos, and software, is the property of the Rural Alberta Health Connect project team and its licensors and is protected by intellectual property laws. You are granted a limited license to use the App for its intended purposes.
             </Text>
 
             <Text style={[styles.heading, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               5. Limitation of Liability
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              <Text style={styles.bold}>To the fullest extent permitted by law, the Alberta Health Connect project team, its members, and partners shall not be liable for any direct, indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the App, or any decisions made or actions taken based on information provided by the App.</Text>
+              <Text style={styles.bold}>To the fullest extent permitted by law, the Rural Alberta Health Connect project team, its members, and partners shall not be liable for any direct, indirect, incidental, special, consequential, or punitive damages resulting from your use of or inability to use the App, or any decisions made or actions taken based on information provided by the App.</Text>
             </Text>
 
             <Text style={[styles.heading, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               6. Project Status
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              You acknowledge that this version of the Alberta Health Connect App is part of an educational project. It is a prototype and not a commercially deployed medical product. Its primary purpose is for research and demonstration within an academic or project-based setting.
+              You acknowledge that this version of the Rural Alberta Health Connect App is part of an educational project. It is a prototype and not a commercially deployed medical product. Its primary purpose is for research and demonstration within an academic or project-based setting.
             </Text>
 
             <Text style={[styles.heading, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -103,7 +103,9 @@ export default function TermsOfService() {
               8. Contact Us
             </Text>
             <Text style={[styles.paragraph, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              If you have any questions about these Terms of Service, please contact us at: [Insert Project Email Address].
+              If you have any questions about these Terms of Service, please contact us at:{"\n"}
+              Rhailyn Jane Cona - rhailynjane.cona@edu.sait.ca{"\n"}
+              Yue Zhou - Yue.Zhou@edu.sait.ca
             </Text>
           </View>
         </ScrollView>
