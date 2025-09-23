@@ -65,7 +65,7 @@ export default function SignUp() {
         firstName: values.firstName,
         lastName: values.lastName,
         hasCompletedOnboarding: false,
-        flow: "signUp"
+        flow: "signUp",
       });
       router.push("/auth/personal-info");
     } catch (error) {
@@ -332,9 +332,24 @@ export default function SignUp() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        I agree to the Terms of Service and Privacy Policy. I
-                        understand this app provides health information only and
-                        does not replace professional medical care
+                        I agree to the{" "}
+                        <Text
+                          style={styles.linkText}
+                          onPress={() =>
+                            router.push("../terms-of-service")
+                          }
+                        >
+                          Terms of Service
+                        </Text>{" "}
+                        and{" "}
+                        <Text
+                          style={styles.linkText}
+                          onPress={() => router.push("../privacy-policy")}
+                        >
+                          Privacy Policy
+                        </Text>
+                        . I understand this app provides health information only
+                        and does not replace professional medical care.
                       </Text>
                     </View>
                     {errors.agreeToTerms && (
@@ -541,5 +556,10 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     padding: 10,
+  },
+  linkText: {
+    color: "#2A7DE1",
+    textDecorationLine: "underline",
+    fontWeight: "600",
   },
 });
