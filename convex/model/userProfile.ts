@@ -1,5 +1,5 @@
 import { Id } from "../_generated/dataModel";
-import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { safeString } from "../utils/sanitize";
 
 /**
@@ -157,16 +157,23 @@ export async function completeOnboarding(
 /**
  * Gets the user profile
  */
-export async function getUserProfile(
-  ctx: QueryCtx,
-  userId: Id<"users">
-) {
+export async function getUserProfile(ctx: QueryCtx, userId: Id<"users">) {
   const profile = await ctx.db
     .query("userProfiles")
     .withIndex("byUserId", (q) => q.eq("userId", userId))
     .unique();
 
-  return profile;
+  if (!profile) return null;
+  return {
+    _id: profile._id,
+    ageRange: profile.ageRange,
+    allergies: profile.allergies,
+    currentMedications: profile.currentMedications,
+    emergencyContactName: profile.emergencyContactName,
+    emergencyContactPhone: profile.emergencyContactPhone,
+    location: profile.location,
+    medicalConditions: profile.medicalConditions,
+  };
 }
 
 /**

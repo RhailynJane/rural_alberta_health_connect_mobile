@@ -21,7 +21,7 @@ import type * as medicalHistory_update from "../medicalHistory/update.js";
 import type * as model_user from "../model/user.js";
 import type * as model_userProfile from "../model/userProfile.js";
 import type * as personalInfo_update from "../personalInfo/update.js";
-import type * as profile_index from "../profile/index.js";
+import type * as profile_personalInfomation from "../profile/personalInfomation.js";
 import type * as users from "../users.js";
 import type * as utils_sanitize from "../utils/sanitize.js";
 
@@ -42,7 +42,7 @@ declare const fullApi: ApiFromModules<{
   "model/user": typeof model_user;
   "model/userProfile": typeof model_userProfile;
   "personalInfo/update": typeof personalInfo_update;
-  "profile/index": typeof profile_index;
+  "profile/personalInfomation": typeof profile_personalInfomation;
   users: typeof users;
   "utils/sanitize": typeof utils_sanitize;
 }>;
