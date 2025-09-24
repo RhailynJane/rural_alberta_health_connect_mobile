@@ -1,7 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { ConvexError } from "convex/values";
-import { query } from "../_generated/server";
-import { checkOnboardingStatus, getUserProfile } from "../model/userProfile";
+import { ConvexError, v } from "convex/values";
+import { mutation, query } from "../_generated/server";
+import {
+  checkOnboardingStatus,
+  getUserProfile,
+  updatePersonalInfoModel,
+} from "./userProfile";
 
 export const getOnboardingStatus = query({
   args: {},
@@ -23,5 +27,16 @@ export const getProfile = query({
       throw new ConvexError("User not authenticated");
     }
     return await getUserProfile(ctx, userId);
+  },
+});
+
+export const updatePersonalInfo = mutation({
+  args: { ageRange: v.string(), location: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("User not authenticated");
+    }
+    return await updatePersonalInfoModel(ctx, userId, args);
   },
 });

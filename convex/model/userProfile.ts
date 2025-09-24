@@ -5,7 +5,7 @@ import { safeString } from "../utils/sanitize";
 /**
  * Updates personal information for a user
  */
-export async function updatePersonalInfo(
+export async function updatePersonalInfoModel(
   ctx: MutationCtx,
   userId: Id<"users">,
   data: { ageRange: string; location: string }

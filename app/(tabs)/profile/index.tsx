@@ -15,6 +15,9 @@ import BottomNavigation from '../../components/bottomNavigation';
 import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
 import { COLORS, FONTS } from '../../constants/constants';
+import { useQuery } from 'convex/react';
+import { v } from 'convex/values';
+import { api } from '@/convex/_generated/api';
 
 export default function Profile() {
   // State for expandable sections
@@ -25,6 +28,7 @@ export default function Profile() {
     appSettings: false
   });
   
+
   // State for user data matching your schema
   const [userData, setUserData] = useState({
     ageRange: '25-34',
@@ -38,6 +42,7 @@ export default function Profile() {
     dataEncryption: true,
     locationServices: true
   });
+  
   
   // Toggle section expansion
   const toggleSection = (section: keyof typeof expandedSections) => {
