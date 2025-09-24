@@ -5,7 +5,7 @@ import {
   checkOnboardingStatus,
   getUserProfile,
   updatePersonalInfoModel,
-} from "./userProfile";
+} from "../model/userProfile";
 
 export const getOnboardingStatus = query({
   args: {},
@@ -31,7 +31,9 @@ export const getProfile = query({
 });
 
 export const updatePersonalInfo = mutation({
+
   args: { ageRange: v.string(), location: v.string() },
+
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
@@ -39,4 +41,5 @@ export const updatePersonalInfo = mutation({
     }
     return await updatePersonalInfoModel(ctx, userId, args);
   },
+
 });

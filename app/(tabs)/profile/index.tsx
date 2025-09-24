@@ -1,3 +1,6 @@
+import { api } from '@/convex/_generated/api';
+import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { ConvexError } from 'convex/values';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -15,11 +18,37 @@ import BottomNavigation from '../../components/bottomNavigation';
 import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
 import { COLORS, FONTS } from '../../constants/constants';
-import { useQuery } from 'convex/react';
-import { v } from 'convex/values';
-import { api } from '@/convex/_generated/api';
+
 
 export default function Profile() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  
+  const updatePersonalInfo = useMutation(api.profile.personalInformation.updatePersonalInfo);
+  const userProfile = useQuery(
+    api.profile.personalInformation.getProfile,
+    isAuthenticated && !isLoading ? {} : "skip"
+  );
+
+  const handleUpdatePersonalInfo = async () => {
+    try {
+      await updatePersonalInfo({
+        ageRange: userData.ageRange,
+        location: userData.location,
+      });
+      // Optionally show a success message or update UI state
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage = typeof error.data === "string"
+          ? error.data
+          : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+        Alert.alert("Error", errorMessage);
+      }
+    }
+  };
+
   // State for expandable sections
   const [expandedSections, setExpandedSections] = useState({
     personalInfo: false,
@@ -27,23 +56,23 @@ export default function Profile() {
     medicalInfo: false,
     appSettings: false
   });
-  
+
 
   // State for user data matching your schema
   const [userData, setUserData] = useState({
-    ageRange: '25-34',
-    allergies: 'Peanuts',
-    currentMedications: 'None',
-    emergencyContactName: 'Jane Cona',
-    emergencyContactPhone: '+1 (403) 234-4567',
-    location: 'Calgary, AB',
-    medicalConditions: 'Asthma',
-    symptomReminder: true,
-    dataEncryption: true,
-    locationServices: true
+    ageRange: userProfile?.ageRange ?? '25-34',
+    allergies: userProfile?.allergies ?? 'Peanuts',
+    currentMedications: userProfile?.currentMedications ?? 'None',
+    emergencyContactName: userProfile?.emergencyContactName ?? 'Jane Cona',
+    emergencyContactPhone: userProfile?.emergencyContactPhone ?? '+1 (403) 234-4567',
+    location: userProfile?.location ?? 'Calgary, AB',
+    medicalConditions: userProfile?.medicalConditions ?? 'Asthma',
+    symptomReminder: true,  // todo: add these to schema
+    dataEncryption: true,   // todo: add to schema
+    locationServices: true  // todo: add to schema
   });
-  
-  
+
+
   // Toggle section expansion
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -51,7 +80,7 @@ export default function Profile() {
       [section]: !prev[section]
     }));
   };
-  
+
   // Handle input changes
   const handleInputChange = (field: keyof typeof userData, value: string | boolean) => {
     setUserData(prev => ({
@@ -70,8 +99,8 @@ export default function Profile() {
           text: "Cancel",
           style: "cancel"
         },
-        { 
-          text: "Sign Out", 
+        {
+          text: "Sign Out",
           onPress: () => {
             console.log("User signed out");
             router.replace('/auth/signin');
@@ -99,16 +128,21 @@ export default function Profile() {
             <Text style={styles.cardTitle}>Privacy Protected</Text>
           </View>
           <Text style={styles.privacyText}>
-            Your personal information is encrypted and stored locally.  
+            Your personal information is encrypted and stored locally.
             No data is shared without your consent.
           </Text>
         </View>
 
         {/* Personal Information Card */}
         <View style={styles.card}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cardHeader}
-            onPress={() => toggleSection('personalInfo')}
+            onPress={async () => {
+              if (expandedSections.personalInfo) {
+                await handleUpdatePersonalInfo()
+              }
+              toggleSection('personalInfo')
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.cardTitle}>Personal Information</Text>
@@ -116,7 +150,7 @@ export default function Profile() {
               {expandedSections.personalInfo ? 'Done' : 'Edit'}
             </Text>
           </TouchableOpacity>
-          
+
           {expandedSections.personalInfo ? (
             <>
               <Text style={styles.sectionTitle}>Age Range</Text>
@@ -127,7 +161,7 @@ export default function Profile() {
                 placeholder="e.g., 25-34"
                 placeholderTextColor={COLORS.lightGray}
               />
-              
+
               <Text style={styles.sectionTitle}>Location</Text>
               <TextInput
                 style={styles.input}
@@ -139,15 +173,15 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Age Range:</Text> {userData.ageRange}</Text>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Location:</Text> {userData.location}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Age Range:</Text> {userData.ageRange}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Location:</Text> {userData.location}</Text>
             </>
           )}
         </View>
 
         {/* Emergency Contacts Card */}
         <View style={styles.card}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cardHeader}
             onPress={() => toggleSection('emergencyContacts')}
             activeOpacity={0.7}
@@ -157,7 +191,7 @@ export default function Profile() {
               {expandedSections.emergencyContacts ? 'Done' : 'Edit'}
             </Text>
           </TouchableOpacity>
-          
+
           {expandedSections.emergencyContacts ? (
             <>
               <Text style={styles.sectionTitle}>Contact Name</Text>
@@ -168,7 +202,7 @@ export default function Profile() {
                 placeholder="Emergency contact name"
                 placeholderTextColor={COLORS.lightGray}
               />
-              
+
               <Text style={styles.sectionTitle}>Phone Number</Text>
               <TextInput
                 style={styles.input}
@@ -181,15 +215,15 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Name:</Text> {userData.emergencyContactName}</Text>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Phone:</Text> {userData.emergencyContactPhone}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Name:</Text> {userData.emergencyContactName}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Phone:</Text> {userData.emergencyContactPhone}</Text>
             </>
           )}
         </View>
 
         {/* Medical Information Card */}
         <View style={styles.card}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cardHeader}
             onPress={() => toggleSection('medicalInfo')}
             activeOpacity={0.7}
@@ -199,7 +233,7 @@ export default function Profile() {
               {expandedSections.medicalInfo ? 'Done' : 'Edit'}
             </Text>
           </TouchableOpacity>
-          
+
           {expandedSections.medicalInfo ? (
             <>
               <Text style={styles.sectionTitle}>Allergies</Text>
@@ -211,7 +245,7 @@ export default function Profile() {
                 placeholderTextColor={COLORS.lightGray}
                 multiline
               />
-              
+
               <Text style={styles.sectionTitle}>Current Medications</Text>
               <TextInput
                 style={styles.input}
@@ -221,7 +255,7 @@ export default function Profile() {
                 placeholderTextColor={COLORS.lightGray}
                 multiline
               />
-              
+
               <Text style={styles.sectionTitle}>Medical Conditions</Text>
               <TextInput
                 style={styles.input}
@@ -238,23 +272,23 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Allergies:</Text> {userData.allergies}</Text>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Medications:</Text> {userData.currentMedications}</Text>
-              <Text style={styles.text}><Text style={{fontWeight: 'bold'}}>Conditions:</Text> {userData.medicalConditions}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Allergies:</Text> {userData.allergies}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Medications:</Text> {userData.currentMedications}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Conditions:</Text> {userData.medicalConditions}</Text>
             </>
           )}
         </View>
 
         {/* App Settings Card */}
         <View style={styles.card}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.cardHeader}
             onPress={() => toggleSection('appSettings')}
             activeOpacity={0.7}
           >
             <Text style={styles.cardTitle}>App Settings</Text>
           </TouchableOpacity>
-          
+
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
             <Switch
@@ -262,7 +296,7 @@ export default function Profile() {
               onValueChange={(value) => handleInputChange('symptomReminder', value)}
             />
           </View>
-          
+
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>Data Encryption</Text>
             <Switch
@@ -270,7 +304,7 @@ export default function Profile() {
               onValueChange={(value) => handleInputChange('dataEncryption', value)}
             />
           </View>
-          
+
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>Location Services</Text>
             <Switch
@@ -281,7 +315,7 @@ export default function Profile() {
         </View>
 
         {/* Sign Out Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.signOutButton}
           onPress={handleSignOut}
           activeOpacity={0.7}
