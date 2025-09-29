@@ -8,12 +8,114 @@ And transforming a model into TensorFlow, there is a quantification process. The
 
 Anyways, I'm going to test it right now. Here's the link to both the library.
 
+---
+
 ### RN - Fast TFLite
 
 https://github.com/mrousavy/react-native-fast-tflite
+<a href="https://github.com/mrousavy/react-native-fast-tflite">
+<picture>
 
-### For Testing and hosting
+<source media="(prefers-color-scheme: dark)" srcset="./img/banner-dark.png" />
+<source media="(prefers-color-scheme: light)" srcset="./img/banner-light.png" />
+<img alt="Fast TFLite" src="./img/banner-light.png" />
+</picture>
+</a>
+
+### For Testing and Hosting
+
+The library enables us for fast testing so that we don't need to deploy a new dev deployment using EAS build. qw can just replace the model in the cloud and test them directly.
+
+But if the fastTFLite library doesn't work on Expo, we don't need to do this testing in the first place. Because in that case, we may not using tflite.
 
 https://github.com/robmarkcole/tensorflow-lite-rest-server
 
-- yue sep 29, 10:20
+yue sep 29, 10:20
+
+---
+
+## Research 1
+
+**GPT5**: https://chatgpt.com/share/68dabf78-16c4-8007-8f6f-ad8283774f41
+
+**Gemini**: https://g.co/gemini/share/147739fc1569
+
+### 1. Lib Issue discussion
+
+This is a GitHub issue discussing the Axle compatibility. They talk about Metro bundle configurations.
+![paraFlux inc. Image](https://hallowed-ptarmigan-685.convex.cloud/api/storage/35f853f5-0c12-41ff-92ec-330425a88953)
+
+https://github.com/mrousavy/react-native-fast-tflite/issues/6?utm_source=chatgpt.com
+
+### 2. Token-classification in Expo ReactNative
+
+https://alfarruggia.medium.com/token-classification-in-react-62cc2cba1a37
+
+This is an article about how to integrate machine learning models into an Axeful React Native application using the exact library we're talking about.
+
+### 3. **Example** and **Tutorial**
+
+https://blog.swmansion.com/on-device-ai-ml-in-react-native-137918d0331b
+
+This tutorial is from Software mansion, they are the core contributors for React Native. This suggests our approach is validated by experts. It confirms the following four points:
+
+- react-native-fast-tflite with Expo
+- Real-time on-device inference
+- .tflite model loading with metro configuration
+- EAS workflow compatibility
+
+Claude 4.1, Metis:
+
+> The Critical Insight
+>
+> The tutorial shows production-ready implementation. Your burn classification model will work exactly like their segmentation model - just different input/output
+> processing.
+>
+> Key Technical Notes from Tutorial
+>
+> 1. iOS simulator arm64 issues confirmed - you'll need real device testing
+> 2. Metro configuration required - .tflite files need explicit asset registration
+> 3. Prebuild step necessary - npx expo prebuild --platform ios
+> 4. Real-time inference proven - performance will be adequate for your use case
+>
+> Afternoon Strategy Confirmed
+>
+> 2pm-4pm: Follow Software Mansion's exact pattern for your burn model
+> 4pm-6pm: Integrate with camera and image preprocessing6pm-9:30pm: Build complete assessment flow
+>
+> The FastAPI Backup Plan
+>
+> Still valuable for testing model accuracy, but no longer necessary for technical risk mitigation. The integration path is proven.
+>
+> Strategic Call
+>
+> Execute the 30-minute validation immediately. Software Mansion has provided your implementation roadmap. This afternoon becomes execution, not experimentation.
+>
+> Your technical instincts were correct. On-device deployment is validated. Sprint 1 with working burn classification is achievable.
+>
+> Test the basic package import now. Confirm at your 12pm meeting that the integration path is proven. The tutorial shows production-ready implementation. Your burn classification model will work exactly like their segmentation model - just different input/output
+> processing.
+>
+> Key Technical Notes from Tutorial
+>
+> 1. iOS simulator arm64 issues confirmed - you'll need real device testing
+> 2. Metro configuration required - .tflite files need explicit asset registration
+> 3. Prebuild step necessary - npx expo prebuild --platform ios
+> 4. Real-time inference proven - performance will be adequate for your use case
+>
+> Afternoon Strategy Confirmed
+>
+> 2pm-4pm: Follow Software Mansion's exact pattern for your burn model
+> 4pm-6pm: Integrate with camera and image preprocessing6pm-9:30pm: Build complete assessment flow
+>
+> The FastAPI Backup Plan
+>
+> Still valuable for testing model accuracy, but no longer necessary for technical risk mitigation. The integration path is proven.
+>
+> Strategic Call
+>
+> Execute the 30-minute validation immediately. Software Mansion has provided your implementation roadmap. This afternoon becomes execution, not experimentation.
+>
+> Your technical instincts were correct. On-device deployment is validated. Sprint 1 with working burn classification is achievable.
+>
+> Test the basic package import now. Confirm at your 12pm meeting that the integration path is proven.
