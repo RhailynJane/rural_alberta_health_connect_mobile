@@ -3,7 +3,7 @@ import { ConvexReactClient, useConvexAuth } from "convex/react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -49,6 +49,7 @@ export const useSessionRefresh = () => {
 };
 
 // Auth Guard Component
+// Auth Guard Component
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const router = useRouter();
@@ -63,30 +64,40 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
     if (!isAuthenticated) {
       // User not authenticated - redirect to signin if not already there
-      if (segments[0] !== "auth" || segments[1] === undefined) {
+      if (segments[0] !== "auth" || segments.length < 2 || (segments[1] as string) === "index") {
         console.log("🚫 Not authenticated, redirecting to signin");
         router.replace("/auth/signin");
       }
     } else {
       // User is authenticated
       const inAuthGroup = segments[0] === "auth";
-      const inOnboardingFlow = segments[1] === "personal-info" || 
-                              segments[1] === "emergency-contact" || 
-                              segments[1] === "medical-history";
+      const currentRoute = segments[1];
       
-      // For now, allow access to all routes when authenticated
-      // We'll handle onboarding redirection in each screen individually
-      if (inAuthGroup && segments[1] === "signin") {
-        console.log("✅ Authenticated, redirecting from signin to dashboard");
+      // Allow access to onboarding flow even when authenticated
+      
+      // If user is on signin page but authenticated, redirect appropriately
+      if (inAuthGroup && currentRoute === "signin") {
+        console.log("✅ Authenticated, redirecting from signin");
+        
+        // Instead of always going to dashboard, we should check onboarding status
+        // For now, let the individual screens handle onboarding status
+        // We'll redirect to a safe route - the tabs layout will handle the rest
+        router.replace("/(tabs)/dashboard");
+      }
+      
+      // If user is on signup page but authenticated, redirect to dashboard
+      if (inAuthGroup && currentRoute === "signup") {
+        console.log("✅ Authenticated, redirecting from signup to dashboard");
         router.replace("/(tabs)/dashboard");
       }
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, segments, router]);
 
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color="#2A7DE1" />
+        <Text style={{ marginTop: 10 }}>Loading...</Text>
       </View>
     );
   }

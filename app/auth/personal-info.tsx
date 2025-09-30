@@ -37,7 +37,7 @@ export default function PersonalInfo() {
       console.log("Onboarding already completed, redirecting to dashboard");
       router.replace("/(tabs)/dashboard");
     }
-  }, [onboardingStatus]);
+  }, [onboardingStatus, router]);
 
   // Show loading while checking status
   if (onboardingStatus === undefined) {
