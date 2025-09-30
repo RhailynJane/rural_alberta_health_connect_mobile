@@ -25,6 +25,12 @@ export default defineSchema({
     medicalConditions: v.optional(v.string()),
     currentMedications: v.optional(v.string()),
     allergies: v.optional(v.string()),
+    
+    // App settings
+    symptomReminder: v.optional(v.boolean()),
+    dataEncryption: v.optional(v.boolean()),
+    locationServicesEnabled: v.optional(v.boolean()), // NEW FIELD
+    
     onboardingCompleted: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
