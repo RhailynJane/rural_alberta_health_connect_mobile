@@ -14,7 +14,7 @@ export default defineSchema({
     isAnonymous: v.optional(v.boolean()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
-    hasCompletedOnboarding: v.optional(v.boolean()),
+    hasCompletedOnboarding: v.optional(v.boolean()), 
   }).index("email", ["email"]),
   userProfiles: defineTable({
     userId: v.id("users"),
