@@ -323,6 +323,11 @@ function filterMedicalFacilities(
     "spa",
     "salon",
     "pharmacy",
+    "laboratory",
+    "lab",
+    "vet",
+    "veterinary",
+    "passport",
   ];
 
   return facilities.filter((facility) => {
@@ -376,7 +381,7 @@ async function fetchFromNewFoursquareAPI(
     }
 
     // PROPER MEDICAL CATEGORIES FOR FOURSQUARE
-    const categories = "15014,15015,15016,15017";
+    const categories = "15014,15015,15017"; // Hospital, Doctor/GP, Emergency Room
     const searchUrl = `https://places-api.foursquare.com/places/search?ll=${coords.lat},${coords.lon}&radius=${radius}&categories=${categories}&limit=20&sort=DISTANCE`;
 
     console.log("🌐 Making NEW Foursquare API request to:", searchUrl);
@@ -440,14 +445,15 @@ async function fetchFromNewFoursquareAPI(
           locationInfo.formatted_address ||
           [
             locationInfo.address,
+            locationInfo.cross_street,
             locationInfo.locality,
             locationInfo.region,
             locationInfo.postcode,
           ]
             .filter(Boolean)
             .join(", ") ||
-          `${locationInfo.address || ""}, ${locationInfo.locality || ""}, ${locationInfo.region || ""}`.trim() ||
-          locationInfo.cross_street ||
+          `${locationInfo.address || ""}, ${locationInfo.locality || ""}`.trim() ||
+          place.location?.formatted_address ||
           "Address not available";
 
         console.log(`🏥 Clinic ${index + 1}:`, {
@@ -455,6 +461,16 @@ async function fetchFromNewFoursquareAPI(
           address: address,
           distance: distance,
           phone: place.tel,
+        });
+
+        console.log("📍 Address data:", {
+          formatted_address: locationInfo.formatted_address,
+          address: locationInfo.address,
+          cross_street: locationInfo.cross_street,
+          locality: locationInfo.locality,
+          region: locationInfo.region,
+          postcode: locationInfo.postcode,
+          fullLocation: place.location,
         });
 
         return {
@@ -568,18 +584,26 @@ async function fetchFromOpenStreetMap(
           return null;
         }
 
+        const addressParts = [
+          tags["addr:housenumber"],
+          tags["addr:street"],
+          tags["addr:unit"] ? `Unit ${tags["addr:unit"]}` : null,
+          tags["addr:city"] ||
+            tags["addr:town"] ||
+            tags["addr:suburb"] ||
+            "Calgary",
+          tags["addr:postcode"],
+          tags["addr:province"] || "AB",
+        ].filter(Boolean);
+
         const address =
-          [
-            tags["addr:housenumber"],
-            tags["addr:street"],
-            tags["addr:city"] || tags["addr:town"] || tags["addr:suburb"],
-            tags["addr:postcode"],
-          ]
-            .filter(Boolean)
-            .join(" ") ||
-          tags["operator"] ||
-          tags["description"] ||
-          "Address not available";
+          addressParts.length > 0
+            ? addressParts.join(", ")
+            : tags["operator"] ||
+              tags["description"] ||
+              "Address not available";
+
+        console.log("📍 Built address:", address, "from parts:", addressParts);
 
         // Determine facility type
         let facilityType = "medical";
