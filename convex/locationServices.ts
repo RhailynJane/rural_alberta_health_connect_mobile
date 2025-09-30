@@ -302,11 +302,8 @@ function filterMedicalFacilities(
     "clinic",
     "medical",
     "health",
-    "doctor",
-    "physician",
     "surgery",
     "care",
-    "wellness",
     "urgent",
     "emergency",
   ];
@@ -507,10 +504,8 @@ async function fetchFromOpenStreetMap(
         // Hospitals and major medical facilities
         node["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
         node["amenity"="clinic"](around:${radius},${coords.lat},${coords.lon});
-        node["amenity"="doctors"](around:${radius},${coords.lat},${coords.lon});
         node["healthcare"="hospital"](around:${radius},${coords.lat},${coords.lon});
         node["healthcare"="clinic"](around:${radius},${coords.lat},${coords.lon});
-        node["healthcare"="doctor"](around:${radius},${coords.lat},${coords.lon});
         
         // Exclude non-medical facilities
         way["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
@@ -592,8 +587,6 @@ async function fetchFromOpenStreetMap(
           facilityType = "hospital";
         else if (amenity === "clinic" || healthcare === "clinic")
           facilityType = "clinic";
-        else if (amenity === "doctors" || healthcare === "doctor")
-          facilityType = "doctor";
 
         console.log(`🏥 Medical Facility ${index + 1}:`, {
           name: tags.name || "Unnamed Medical Facility",
