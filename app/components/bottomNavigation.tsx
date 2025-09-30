@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#2A7DE1',
   },
   tabText: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#666',
     fontFamily: FONTS.BarlowSemiCondensed,
     marginTop: 4,
