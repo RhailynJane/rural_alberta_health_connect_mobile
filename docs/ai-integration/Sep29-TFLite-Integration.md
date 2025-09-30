@@ -117,5 +117,34 @@ Claude 4.1, Metis:
 > Execute the 30-minute validation immediately. Software Mansion has provided your implementation roadmap. This afternoon becomes execution, not experimentation.
 >
 > Your technical instincts were correct. On-device deployment is validated. Sprint 1 with working burn classification is achievable.
->
+****>
 > Test the basic package import now. Confirm at your 12pm meeting that the integration path is proven.
+
+
+### 4. Another Example
+https://www.reddit.com/r/reactnative/comments/14n96x7/running_a_tensorflow_object_detector_model_and/
+![paraFlux inc. Image](https://hallowed-ptarmigan-685.convex.cloud/api/storage/d2e73bf9-3846-4e90-9ffe-8e63b06a157b)
+
+
+
+## Config Metro bundler
+Metro Bundler only recognizes certain file types, and by default, TFLite model files are not included.
+
+https://docs.expo.dev/guides/customizing-metro/
+
+```
+const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+
+// example
+config.resolver.assetExts.push(
+  // Adds support for `.db` files for SQLite databases
+  'db'
+);
+
+// What we need
+config.resolver.assetExts.push('tflite');
+
+module.exports = config;
+```
