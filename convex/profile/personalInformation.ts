@@ -26,7 +26,10 @@ export const getProfile = query({
     if (!userId) {
       throw new ConvexError("User not authenticated");
     }
-    return await getUserProfile(ctx, userId);
+    
+    const profile = await getUserProfile(ctx, userId);
+    console.log("Profile query result:", profile); 
+    return profile;
   },
 });
 

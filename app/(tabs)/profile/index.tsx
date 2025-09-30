@@ -2,7 +2,7 @@ import { api } from '@/convex/_generated/api';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { ConvexError } from 'convex/values';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -19,7 +19,6 @@ import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
 import { COLORS, FONTS } from '../../constants/constants';
 
-
 export default function Profile() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   
@@ -29,25 +28,36 @@ export default function Profile() {
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
-  const handleUpdatePersonalInfo = async () => {
-    try {
-      await updatePersonalInfo({
-        ageRange: userData.ageRange,
-        location: userData.location,
-      });
-      // Optionally show a success message or update UI state
-    } catch (error) {
-      let errorMessage;
-      if (error instanceof ConvexError) {
-        errorMessage = typeof error.data === "string"
-          ? error.data
-          : error.data?.message || "An error occurred";
-      } else {
-        errorMessage = "Unexpected error occurred";
-        Alert.alert("Error", errorMessage);
-      }
+  // State for user data - NO HARDCODED DEFAULTS
+  const [userData, setUserData] = useState({
+    ageRange: '',
+    allergies: '',
+    currentMedications: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    location: '',
+    medicalConditions: '',
+    symptomReminder: true,
+    dataEncryption: true,
+    locationServices: true
+  });
+
+  // Update state when userProfile loads
+  useEffect(() => {
+    if (userProfile) {
+      console.log("📥 Loading user profile data:", userProfile);
+      setUserData(prev => ({
+        ...prev,
+        ageRange: userProfile.ageRange || '',
+        allergies: userProfile.allergies || '',
+        currentMedications: userProfile.currentMedications || '',
+        emergencyContactName: userProfile.emergencyContactName || '',
+        emergencyContactPhone: userProfile.emergencyContactPhone || '',
+        location: userProfile.location || '',
+        medicalConditions: userProfile.medicalConditions || '',
+      }));
     }
-  };
+  }, [userProfile]);
 
   // State for expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -57,24 +67,34 @@ export default function Profile() {
     appSettings: false
   });
 
-
-  // State for user data matching your schema
-  const [userData, setUserData] = useState({
-    ageRange: userProfile?.ageRange ?? '25-34',
-    allergies: userProfile?.allergies ?? 'Peanuts',
-    currentMedications: userProfile?.currentMedications ?? 'None',
-    emergencyContactName: userProfile?.emergencyContactName ?? 'Jane Cona',
-    emergencyContactPhone: userProfile?.emergencyContactPhone ?? '+1 (403) 234-4567',
-    location: userProfile?.location ?? 'Calgary, AB',
-    medicalConditions: userProfile?.medicalConditions ?? 'Asthma',
-    symptomReminder: true,  // todo: add these to schema
-    dataEncryption: true,   // todo: add to schema
-    locationServices: true  // todo: add to schema
-  });
-
+  const handleUpdatePersonalInfo = async () => {
+    try {
+      await updatePersonalInfo({
+        ageRange: userData.ageRange,
+        location: userData.location,
+      });
+      Alert.alert("Success", "Personal information updated successfully");
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage = typeof error.data === "string"
+          ? error.data
+          : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      Alert.alert("Error", errorMessage);
+    }
+  };
 
   // Toggle section expansion
   const toggleSection = (section: keyof typeof expandedSections) => {
+    if (expandedSections[section]) {
+      // If we're closing the section and it's personal info, save the data
+      if (section === 'personalInfo') {
+        handleUpdatePersonalInfo();
+      }
+    }
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -111,6 +131,18 @@ export default function Profile() {
     );
   };
 
+  // Show loading while profile is loading
+  if (isLoading || !userProfile) {
+    return (
+      <CurvedBackground>
+        <CurvedHeader title="Profile" height={120} showLogo={true} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </CurvedBackground>
+    );
+  }
+
   return (
     <CurvedBackground>
       <CurvedHeader
@@ -137,12 +169,7 @@ export default function Profile() {
         <View style={styles.card}>
           <TouchableOpacity
             style={styles.cardHeader}
-            onPress={async () => {
-              if (expandedSections.personalInfo) {
-                await handleUpdatePersonalInfo()
-              }
-              toggleSection('personalInfo')
-            }}
+            onPress={() => toggleSection('personalInfo')}
             activeOpacity={0.7}
           >
             <Text style={styles.cardTitle}>Personal Information</Text>
@@ -173,8 +200,12 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Age Range:</Text> {userData.ageRange}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Location:</Text> {userData.location}</Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Age Range:</Text> {userData.ageRange || 'Not set'}
+              </Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Location:</Text> {userData.location || 'Not set'}
+              </Text>
             </>
           )}
         </View>
@@ -215,8 +246,12 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Name:</Text> {userData.emergencyContactName}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Phone:</Text> {userData.emergencyContactPhone}</Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Name:</Text> {userData.emergencyContactName || 'Not set'}
+              </Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Phone:</Text> {userData.emergencyContactPhone || 'Not set'}
+              </Text>
             </>
           )}
         </View>
@@ -265,16 +300,18 @@ export default function Profile() {
                 placeholderTextColor={COLORS.lightGray}
                 multiline
               />
-
-              <TouchableOpacity style={styles.saveButton} onPress={() => toggleSection('medicalInfo')}>
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </TouchableOpacity>
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Allergies:</Text> {userData.allergies}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Medications:</Text> {userData.currentMedications}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Conditions:</Text> {userData.medicalConditions}</Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Allergies:</Text> {userData.allergies || 'Not set'}
+              </Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Medications:</Text> {userData.currentMedications || 'Not set'}
+              </Text>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: 'bold' }}>Conditions:</Text> {userData.medicalConditions || 'Not set'}
+              </Text>
             </>
           )}
         </View>
@@ -335,6 +372,16 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "transparent",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: COLORS.darkGray,
+  },
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 12,
@@ -345,6 +392,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  debugCard: {
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderColor: '#ffeaa7',
+    borderWidth: 1,
+  },
+  debugTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: '#856404',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: '#856404',
+    marginBottom: 4,
   },
   cardHeader: {
     flexDirection: 'row',
