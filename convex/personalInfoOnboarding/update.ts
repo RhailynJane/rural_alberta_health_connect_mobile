@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
-import { updatePersonalInfo } from "../model/userProfile";
+import { updatePersonalInfoModel } from "../model/userProfile";
 
 export const withAgeRangeAndLocation = mutation({
   args: {
@@ -14,7 +14,7 @@ export const withAgeRangeAndLocation = mutation({
       throw new Error("Not authenticated");
     }
 
-    return await updatePersonalInfo(ctx, userId, {
+    return await updatePersonalInfoModel(ctx, userId, {
       ageRange: args.ageRange,
       location: args.location,
     });

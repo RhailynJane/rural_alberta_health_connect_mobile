@@ -25,7 +25,7 @@ export default function EmergencyContact() {
   const [contactPhone, setContactPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updateEmergencyContact = useMutation(api.emergencyContact.update.withNameAndPhone);
+  const updateEmergencyContact = useMutation(api.emergencyContactOnboarding.update.withNameAndPhone);
 
   const handleContinue = async () => {
     if (!contactName || !contactPhone) {
@@ -100,7 +100,7 @@ export default function EmergencyContact() {
                 </Text>
                 <TextInput
                   style={[
-                    styles.input, 
+                    styles.input,
                     { fontFamily: FONTS.BarlowSemiCondensed }
                   ]}
                   placeholder="Enter emergency contact name"
@@ -114,7 +114,7 @@ export default function EmergencyContact() {
                 </Text>
                 <TextInput
                   style={[
-                    styles.input, 
+                    styles.input,
                     { fontFamily: FONTS.BarlowSemiCondensed }
                   ]}
                   placeholder="Enter emergency contact phone"
@@ -126,8 +126,8 @@ export default function EmergencyContact() {
               </View>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={styles.backButton} 
+                <TouchableOpacity
+                  style={styles.backButton}
                   onPress={handleBack}
                 >
                   <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -225,8 +225,8 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
     borderRadius: 10,
     padding: 16,
-    fontSize: 15, 
-    marginBottom: 8, 
+    fontSize: 15,
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
