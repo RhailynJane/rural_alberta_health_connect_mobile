@@ -37,11 +37,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    marginLeft: 8,
+    marginLeft: 20,
   },
   statusText: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'capitalize',
   },
