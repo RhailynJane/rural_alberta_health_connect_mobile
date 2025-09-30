@@ -13,7 +13,7 @@ export const getLocationServicesStatus = query({
 
     const profile = await ctx.db
       .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .withIndex("byUserId", (q) => q.eq("userId", userId)) // Fixed index name
       .first();
 
     if (!profile) {
@@ -41,7 +41,7 @@ export const toggleLocationServices = mutation({
 
     const profile = await ctx.db
       .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
     if (!profile) {
@@ -50,6 +50,33 @@ export const toggleLocationServices = mutation({
 
     await ctx.db.patch(profile._id, {
       locationServicesEnabled: args.enabled,
+    });
+
+    return { success: true };
+  },
+});
+
+// Mutation to update user location
+export const updateUserLocation = mutation({
+  args: { location: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("User not authenticated");
+    }
+
+    const profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("byUserId", (q) => q.eq("userId", userId))
+      .first();
+
+    if (!profile) {
+      throw new ConvexError("Profile not found");
+    }
+
+    await ctx.db.patch(profile._id, {
+      location: args.location,
+      updatedAt: Date.now(),
     });
 
     return { success: true };
@@ -67,7 +94,7 @@ export const getEmergencyLocationDetails = query({
 
     const profile = await ctx.db
       .query("userProfiles")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
     if (!profile || !profile.locationServicesEnabled) {
@@ -82,7 +109,6 @@ export const getEmergencyLocationDetails = query({
 });
 
 // Helper function to map locations to clinic data
-// In a real app, this would query a database or external API
 function getLocationBasedData(location: string | undefined) {
   if (!location) {
     return {
