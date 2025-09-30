@@ -1,10 +1,10 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient } from "convex/react";
-import { Stack } from "expo-router";
+import { ConvexReactClient, useConvexAuth } from "convex/react";
+import { Stack, useRouter, useSegments } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { useState, createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-// import AuthWrapper from "./components/AuthWrapper"; // Temporarily disabled for testing
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
@@ -48,6 +48,52 @@ export const useSessionRefresh = () => {
   return context;
 };
 
+// Auth Guard Component
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const router = useRouter();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (isLoading) {
+      return; // Still loading auth state
+    }
+
+    console.log("🔐 Auth Guard - Auth state:", { isAuthenticated, segments });
+
+    if (!isAuthenticated) {
+      // User not authenticated - redirect to signin if not already there
+      if (segments[0] !== "auth" || segments[1] === undefined) {
+        console.log("🚫 Not authenticated, redirecting to signin");
+        router.replace("/auth/signin");
+      }
+    } else {
+      // User is authenticated
+      const inAuthGroup = segments[0] === "auth";
+      const inOnboardingFlow = segments[1] === "personal-info" || 
+                              segments[1] === "emergency-contact" || 
+                              segments[1] === "medical-history";
+      
+      // For now, allow access to all routes when authenticated
+      // We'll handle onboarding redirection in each screen individually
+      if (inAuthGroup && segments[1] === "signin") {
+        console.log("✅ Authenticated, redirecting from signin to dashboard");
+        router.replace("/(tabs)/dashboard");
+      }
+    }
+  }, [isAuthenticated, isLoading, segments]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2A7DE1" />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
 
@@ -60,16 +106,18 @@ export default function RootLayout() {
     <SessionRefreshContext.Provider value={{ refreshSession }}>
       <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
         <SafeAreaProvider>
-          {/* AuthWrapper temporarily disabled for testing */}
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/signin" />
-            <Stack.Screen name="auth/signup" />
-            <Stack.Screen name="auth/personal-info" />
-            <Stack.Screen name="auth/emergency-contact" />
-            <Stack.Screen name="auth/medical-history" />
-          </Stack>
+          <AuthGuard>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="auth/signin" />
+              <Stack.Screen name="auth/signup" />
+              <Stack.Screen name="auth/personal-info" />
+              <Stack.Screen name="auth/emergency-contact" />
+              <Stack.Screen name="auth/medical-history" />
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          </AuthGuard>
         </SafeAreaProvider>
       </ConvexAuthProvider>
     </SessionRefreshContext.Provider>
