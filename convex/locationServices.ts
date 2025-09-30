@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "../_generated/server";
+import { mutation, query } from "./_generated/server";
 
 // Query to get location services settings
 export const getLocationServicesStatus = query({
@@ -13,9 +13,10 @@ export const getLocationServicesStatus = query({
 
     const profile = await ctx.db
       .query("userProfiles")
-      .withIndex("byUserId", (q) => q.eq("userId", userId)) // Fixed index name
+      .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Return default values if profile doesn't exist
     if (!profile) {
       return {
         locationServicesEnabled: false,
@@ -30,7 +31,7 @@ export const getLocationServicesStatus = query({
   },
 });
 
-// Mutation to toggle location services
+// Mutation to toggle location services - FIXED NULL CHECKING
 export const toggleLocationServices = mutation({
   args: { enabled: v.boolean() },
   handler: async (ctx, args) => {
@@ -39,24 +40,39 @@ export const toggleLocationServices = mutation({
       throw new ConvexError("User not authenticated");
     }
 
-    const profile = await ctx.db
+    let profile = await ctx.db
       .query("userProfiles")
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Create profile if it doesn't exist
     if (!profile) {
-      throw new ConvexError("Profile not found");
+      const profileId = await ctx.db.insert("userProfiles", {
+        userId,
+        locationServicesEnabled: args.enabled,
+        onboardingCompleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      profile = await ctx.db.get(profileId);
+      
+      // Check if profile was successfully created
+      if (!profile) {
+        throw new ConvexError("Failed to create user profile");
+      }
     }
 
+    // Update existing profile
     await ctx.db.patch(profile._id, {
       locationServicesEnabled: args.enabled,
+      updatedAt: Date.now(),
     });
 
     return { success: true };
   },
 });
 
-// Mutation to update user location
+// Mutation to update user location - FIXED NULL CHECKING
 export const updateUserLocation = mutation({
   args: { location: v.string() },
   handler: async (ctx, args) => {
@@ -65,15 +81,29 @@ export const updateUserLocation = mutation({
       throw new ConvexError("User not authenticated");
     }
 
-    const profile = await ctx.db
+    let profile = await ctx.db
       .query("userProfiles")
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Create profile if it doesn't exist
     if (!profile) {
-      throw new ConvexError("Profile not found");
+      const profileId = await ctx.db.insert("userProfiles", {
+        userId,
+        location: args.location,
+        onboardingCompleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      profile = await ctx.db.get(profileId);
+      
+      // Check if profile was successfully created
+      if (!profile) {
+        throw new ConvexError("Failed to create user profile");
+      }
     }
 
+    // Update existing profile
     await ctx.db.patch(profile._id, {
       location: args.location,
       updatedAt: Date.now(),
@@ -83,7 +113,7 @@ export const updateUserLocation = mutation({
   },
 });
 
-// Query to get emergency location details based on user's location
+// Query to get emergency location details
 export const getEmergencyLocationDetails = query({
   args: {},
   handler: async (ctx) => {
@@ -97,6 +127,7 @@ export const getEmergencyLocationDetails = query({
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Return null if no profile or location services disabled
     if (!profile || !profile.locationServicesEnabled) {
       return null;
     }

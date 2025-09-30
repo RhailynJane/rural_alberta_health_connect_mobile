@@ -35,8 +35,40 @@ export const getProfile = query({
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Return null instead of throwing an error if profile doesn't exist
     if (!profile) {
-      throw new ConvexError("Profile not found");
+      return null;
+    }
+
+    return profile;
+  },
+});
+
+// Remove the getProfileOrCreate query since queries can't insert
+// We'll handle profile creation in mutations only
+
+export const ensureProfileExists = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("User not authenticated");
+    }
+
+    let profile = await ctx.db
+      .query("userProfiles")
+      .withIndex("byUserId", (q) => q.eq("userId", userId))
+      .first();
+
+    // Create profile if it doesn't exist
+    if (!profile) {
+      const profileId = await ctx.db.insert("userProfiles", {
+        userId,
+        onboardingCompleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      profile = await ctx.db.get(profileId);
     }
 
     return profile;
@@ -51,7 +83,7 @@ export const updatePersonalInfo = mutation({
       throw new ConvexError("User not authenticated");
     }
 
-    const profile = await ctx.db
+    let profile = await ctx.db
       .query("userProfiles")
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
@@ -92,15 +124,26 @@ export const updateMedicalInfo = mutation({
       throw new ConvexError("User not authenticated");
     }
 
-    const profile = await ctx.db
+    let profile = await ctx.db
       .query("userProfiles")
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Create profile if it doesn't exist
     if (!profile) {
-      throw new ConvexError("Profile not found");
+      await ctx.db.insert("userProfiles", {
+        userId,
+        allergies: args.allergies,
+        currentMedications: args.currentMedications,
+        medicalConditions: args.medicalConditions,
+        onboardingCompleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      return { success: true, message: "Medical information created successfully" };
     }
 
+    // Update existing profile
     await ctx.db.patch(profile._id, {
       allergies: args.allergies,
       currentMedications: args.currentMedications,
@@ -123,15 +166,25 @@ export const updateEmergencyContact = mutation({
       throw new ConvexError("User not authenticated");
     }
 
-    const profile = await ctx.db
+    let profile = await ctx.db
       .query("userProfiles")
       .withIndex("byUserId", (q) => q.eq("userId", userId))
       .first();
 
+    // Create profile if it doesn't exist
     if (!profile) {
-      throw new ConvexError("Profile not found");
+      await ctx.db.insert("userProfiles", {
+        userId,
+        emergencyContactName: args.emergencyContactName,
+        emergencyContactPhone: args.emergencyContactPhone,
+        onboardingCompleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      return { success: true, message: "Emergency contact created successfully" };
     }
 
+    // Update existing profile
     await ctx.db.patch(profile._id, {
       emergencyContactName: args.emergencyContactName,
       emergencyContactPhone: args.emergencyContactPhone,

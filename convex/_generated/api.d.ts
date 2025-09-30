@@ -17,6 +17,7 @@ import type * as auth from "../auth.js";
 import type * as dashboard_user from "../dashboard/user.js";
 import type * as emergencyContactOnboarding_update from "../emergencyContactOnboarding/update.js";
 import type * as http from "../http.js";
+import type * as locationServices from "../locationServices.js";
 import type * as medicalHistoryOnboarding_update from "../medicalHistoryOnboarding/update.js";
 import type * as model_user from "../model/user.js";
 import type * as model_userProfile from "../model/userProfile.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "dashboard/user": typeof dashboard_user;
   "emergencyContactOnboarding/update": typeof emergencyContactOnboarding_update;
   http: typeof http;
+  locationServices: typeof locationServices;
   "medicalHistoryOnboarding/update": typeof medicalHistoryOnboarding_update;
   "model/user": typeof model_user;
   "model/userProfile": typeof model_userProfile;

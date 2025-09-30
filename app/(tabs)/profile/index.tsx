@@ -2,7 +2,7 @@ import { api } from '@/convex/_generated/api';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { ConvexError } from 'convex/values';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -19,35 +19,24 @@ import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';
 import { COLORS, FONTS } from '../../constants/constants';
 
-
 export default function Profile() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   
-  const updatePersonalInfo = useMutation(api.profile.personalInformation.updatePersonalInfo);
+  // Queries
   const userProfile = useQuery(
     api.profile.personalInformation.getProfile,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !authLoading ? {} : "skip"
+  );
+  const locationStatus = useQuery(
+    api.locationServices.getLocationServicesStatus,
+    isAuthenticated && !authLoading ? {} : "skip"
   );
 
-  const handleUpdatePersonalInfo = async () => {
-    try {
-      await updatePersonalInfo({
-        ageRange: userData.ageRange,
-        location: userData.location,
-      });
-      // Optionally show a success message or update UI state
-    } catch (error) {
-      let errorMessage;
-      if (error instanceof ConvexError) {
-        errorMessage = typeof error.data === "string"
-          ? error.data
-          : error.data?.message || "An error occurred";
-      } else {
-        errorMessage = "Unexpected error occurred";
-        Alert.alert("Error", errorMessage);
-      }
-    }
-  };
+  // Mutations
+  const updatePersonalInfo = useMutation(api.profile.personalInformation.updatePersonalInfo);
+  const updateMedicalInfo = useMutation(api.profile.personalInformation.updateMedicalInfo);
+  const updateEmergencyContact = useMutation(api.profile.personalInformation.updateEmergencyContact);
+  const toggleLocationServices = useMutation(api.locationServices.toggleLocationServices);
 
   // State for expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -57,21 +46,108 @@ export default function Profile() {
     appSettings: false
   });
 
-
-  // State for user data matching your schema
+  // State for user data
   const [userData, setUserData] = useState({
-    ageRange: userProfile?.ageRange ?? '25-34',
-    allergies: userProfile?.allergies ?? 'Peanuts',
-    currentMedications: userProfile?.currentMedications ?? 'None',
-    emergencyContactName: userProfile?.emergencyContactName ?? 'Jane Cona',
-    emergencyContactPhone: userProfile?.emergencyContactPhone ?? '+1 (403) 234-4567',
-    location: userProfile?.location ?? 'Calgary, AB',
-    medicalConditions: userProfile?.medicalConditions ?? 'Asthma',
-    symptomReminder: true,  // todo: add these to schema
-    dataEncryption: true,   // todo: add to schema
-    locationServices: true  // todo: add to schema
+    ageRange: '',
+    allergies: '',
+    currentMedications: '',
+    emergencyContactName: '',
+    emergencyContactPhone: '',
+    location: '',
+    medicalConditions: '',
+    symptomReminder: true,
+    dataEncryption: true,
   });
 
+  // Initialize user data when profile loads
+  useEffect(() => {
+    if (userProfile) {
+      setUserData({
+        ageRange: userProfile.ageRange ?? '',
+        allergies: userProfile.allergies ?? '',
+        currentMedications: userProfile.currentMedications ?? '',
+        emergencyContactName: userProfile.emergencyContactName ?? '',
+        emergencyContactPhone: userProfile.emergencyContactPhone ?? '',
+        location: userProfile.location ?? '',
+        medicalConditions: userProfile.medicalConditions ?? '',
+        symptomReminder: userProfile.symptomReminder ?? true,
+        dataEncryption: userProfile.dataEncryption ?? true,
+      });
+    }
+  }, [userProfile]);
+
+  // Handle personal info update
+  const handleUpdatePersonalInfo = async () => {
+    try {
+      await updatePersonalInfo({
+        ageRange: userData.ageRange,
+        location: userData.location,
+      });
+      Alert.alert("Success", "Personal information updated successfully");
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage = typeof error.data === "string"
+          ? error.data
+          : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      Alert.alert("Error", errorMessage);
+    }
+  };
+
+  // Handle medical info update
+  const handleUpdateMedicalInfo = async () => {
+    try {
+      await updateMedicalInfo({
+        allergies: userData.allergies,
+        currentMedications: userData.currentMedications,
+        medicalConditions: userData.medicalConditions,
+      });
+      Alert.alert("Success", "Medical information updated successfully");
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage = typeof error.data === "string"
+          ? error.data
+          : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      Alert.alert("Error", errorMessage);
+    }
+  };
+
+  // Handle emergency contact update
+  const handleUpdateEmergencyContact = async () => {
+    try {
+      await updateEmergencyContact({
+        emergencyContactName: userData.emergencyContactName,
+        emergencyContactPhone: userData.emergencyContactPhone,
+      });
+      Alert.alert("Success", "Emergency contact updated successfully");
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage = typeof error.data === "string"
+          ? error.data
+          : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      Alert.alert("Error", errorMessage);
+    }
+  };
+
+  // Handle location services toggle
+  const handleToggleLocationServices = async (enabled: boolean) => {
+    try {
+      await toggleLocationServices({ enabled });
+    } catch (error) {
+      Alert.alert("Error", "Failed to update location services");
+    }
+  };
 
   // Toggle section expansion
   const toggleSection = (section: keyof typeof expandedSections) => {
@@ -111,6 +187,17 @@ export default function Profile() {
     );
   };
 
+  if (authLoading) {
+    return (
+      <CurvedBackground>
+        <CurvedHeader title="Profile" height={120} showLogo={true} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </CurvedBackground>
+    );
+  }
+
   return (
     <CurvedBackground>
       <CurvedHeader
@@ -139,9 +226,9 @@ export default function Profile() {
             style={styles.cardHeader}
             onPress={async () => {
               if (expandedSections.personalInfo) {
-                await handleUpdatePersonalInfo()
+                await handleUpdatePersonalInfo();
               }
-              toggleSection('personalInfo')
+              toggleSection('personalInfo');
             }}
             activeOpacity={0.7}
           >
@@ -173,8 +260,8 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Age Range:</Text> {userData.ageRange}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Location:</Text> {userData.location}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Age Range:</Text> {userData.ageRange || 'Not set'}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Location:</Text> {userData.location || 'Not set'}</Text>
             </>
           )}
         </View>
@@ -183,7 +270,12 @@ export default function Profile() {
         <View style={styles.card}>
           <TouchableOpacity
             style={styles.cardHeader}
-            onPress={() => toggleSection('emergencyContacts')}
+            onPress={async () => {
+              if (expandedSections.emergencyContacts) {
+                await handleUpdateEmergencyContact();
+              }
+              toggleSection('emergencyContacts');
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.cardTitle}>Emergency Contact</Text>
@@ -215,8 +307,8 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Name:</Text> {userData.emergencyContactName}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Phone:</Text> {userData.emergencyContactPhone}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Name:</Text> {userData.emergencyContactName || 'Not set'}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Phone:</Text> {userData.emergencyContactPhone || 'Not set'}</Text>
             </>
           )}
         </View>
@@ -225,7 +317,12 @@ export default function Profile() {
         <View style={styles.card}>
           <TouchableOpacity
             style={styles.cardHeader}
-            onPress={() => toggleSection('medicalInfo')}
+            onPress={async () => {
+              if (expandedSections.medicalInfo) {
+                await handleUpdateMedicalInfo();
+              }
+              toggleSection('medicalInfo');
+            }}
             activeOpacity={0.7}
           >
             <Text style={styles.cardTitle}>Medical Information</Text>
@@ -265,16 +362,12 @@ export default function Profile() {
                 placeholderTextColor={COLORS.lightGray}
                 multiline
               />
-
-              <TouchableOpacity style={styles.saveButton} onPress={() => toggleSection('medicalInfo')}>
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </TouchableOpacity>
             </>
           ) : (
             <>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Allergies:</Text> {userData.allergies}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Medications:</Text> {userData.currentMedications}</Text>
-              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Conditions:</Text> {userData.medicalConditions}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Allergies:</Text> {userData.allergies || 'None'}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Medications:</Text> {userData.currentMedications || 'None'}</Text>
+              <Text style={styles.text}><Text style={{ fontWeight: 'bold' }}>Conditions:</Text> {userData.medicalConditions || 'None'}</Text>
             </>
           )}
         </View>
@@ -308,8 +401,8 @@ export default function Profile() {
           <View style={styles.toggleRow}>
             <Text style={styles.toggleText}>Location Services</Text>
             <Switch
-              value={userData.locationServices}
-              onValueChange={(value) => handleInputChange('locationServices', value)}
+              value={locationStatus?.locationServicesEnabled ?? false}
+              onValueChange={handleToggleLocationServices}
             />
           </View>
         </View>
@@ -334,6 +427,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: "transparent",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: COLORS.darkText,
   },
   card: {
     backgroundColor: COLORS.white,

@@ -1,3 +1,5 @@
+import { api } from '@/convex/_generated/api';
+import { useMutation, useQuery } from 'convex/react';
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -22,26 +24,29 @@ interface ClinicInfo {
   distance?: string;
 }
 
+interface LocationDetails {
+  approximateLocation: string;
+  nearestHospital: string;
+  emergencyResponseTime: string;
+  localClinic: ClinicInfo;
+}
+
 export default function Emergency() {
-  const [clinicInfo, setClinicInfo] = useState<ClinicInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Get location services status and emergency details
+  const locationStatus = useQuery(api.locationServices.getLocationServicesStatus);
+  const emergencyDetails = useQuery(api.locationServices.getEmergencyLocationDetails);
+  
+  // Mutation to toggle location services
+  const toggleLocationServices = useMutation(api.locationServices.toggleLocationServices);
 
-  // Simulate fetching clinic information
   useEffect(() => {
-    // Mock fetching data
-    const simulateFetchClinicData = () => {
-      setTimeout(() => {
-        setClinicInfo({
-          name: "Rural Health Centre",
-          number: "(780) 555-0123",
-          distance: "Approx. 45 minutes away",
-        });
-        setIsLoading(false);
-      }, 1500); // Simulate network delay
-    };
-
-    simulateFetchClinicData();
-  }, []);
+    // Only set loading to false when we have actual data
+    if (locationStatus !== undefined && emergencyDetails !== undefined) {
+      setIsLoading(false);
+    }
+  }, [locationStatus, emergencyDetails]);
 
   // Function to handle emergency calls
   const handleEmergencyCall = (number: string) => {
@@ -49,6 +54,19 @@ export default function Emergency() {
       Alert.alert("Error", "Could not make the call. Please check your device.")
     );
   };
+
+  // Function to toggle location services
+  const handleToggleLocationServices = async () => {
+    if (locationStatus) {
+      try {
+        await toggleLocationServices({ enabled: !locationStatus.locationServicesEnabled });
+      } catch (error) {
+        Alert.alert("Error", "Failed to update location services");
+      }
+    }
+  };
+
+  const locationData = emergencyDetails as LocationDetails | null;
 
   return (
     <CurvedBackground>
@@ -119,22 +137,22 @@ export default function Emergency() {
             {isLoading ? (
               <View style={styles.loadingContainer}>
                 <Text style={styles.loadingText}>
-                  Finding nearest clinic...
+                  Loading clinic information...
                 </Text>
               </View>
-            ) : clinicInfo ? (
+            ) : locationStatus?.locationServicesEnabled && locationData ? (
               <>
-                <Text style={styles.cardDescription}>{clinicInfo.name}</Text>
-                {clinicInfo.distance && (
-                  <Text style={styles.distanceText}>{clinicInfo.distance}</Text>
+                <Text style={styles.cardDescription}>{locationData.localClinic.name}</Text>
+                {locationData.localClinic.distance && (
+                  <Text style={styles.distanceText}>{locationData.localClinic.distance}</Text>
                 )}
                 <View style={styles.cardFooter}>
-                  <Text style={styles.cardNumber}>{clinicInfo.number}</Text>
+                  <Text style={styles.cardNumber}>{locationData.localClinic.number}</Text>
                   <TouchableOpacity
                     style={[styles.callButton, styles.clinicButton]}
                     onPress={() =>
                       handleEmergencyCall(
-                        clinicInfo.number.replace(/[^0-9]/g, "")
+                        locationData.localClinic.number.replace(/[^0-9]/g, "")
                       )
                     }
                   >
@@ -144,7 +162,7 @@ export default function Emergency() {
               </>
             ) : (
               <Text style={styles.cardDescription}>
-                Clinic information not available
+                Enable location services to see local clinic information
               </Text>
             )}
           </View>
@@ -156,31 +174,48 @@ export default function Emergency() {
           <View style={styles.cardContent}>
             <View style={styles.locationHeader}>
               <Text style={styles.locationTitle}>Location Services</Text>
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>Currently Enabled</Text>
-              </View>
+              <TouchableOpacity onPress={handleToggleLocationServices}>
+                <View style={[
+                  styles.statusBadge, 
+                  locationStatus?.locationServicesEnabled ? styles.statusEnabled : styles.statusDisabled
+                ]}>
+                  <Text style={styles.statusText}>
+                    {locationStatus?.locationServicesEnabled ? 'Enabled' : 'Disabled'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
             <Text style={styles.locationDescription}>
-              Emergency services can locate you faster with location sharing
-              enabled
+              Emergency services can locate you faster with location sharing enabled
             </Text>
 
-            <View style={styles.locationDetails}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>
-                  Your approximate location:
-                </Text>
-                <Text style={styles.detailValue}>Rural Alberta</Text>
+            {!isLoading && locationStatus?.locationServicesEnabled && locationData && (
+              <View style={styles.locationDetails}>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>
+                    Your approximate location:
+                  </Text>
+                  <Text style={styles.detailValue}>{locationData.approximateLocation}</Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Nearest hospital:</Text>
+                  <Text style={styles.detailValue}>{locationData.nearestHospital}</Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Emergency response time:</Text>
+                  <Text style={styles.detailValue}>{locationData.emergencyResponseTime}</Text>
+                </View>
               </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Nearest hospital:</Text>
-                <Text style={styles.detailValue}>45 minutes away</Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Emergency response time:</Text>
-                <Text style={styles.detailValue}>15-20 minutes</Text>
-              </View>
-            </View>
+            )}
+
+            {!isLoading && !locationStatus?.locationServicesEnabled && (
+              <TouchableOpacity 
+                style={styles.enableButton}
+                onPress={handleToggleLocationServices}
+              >
+                <Text style={styles.enableButtonText}>Enable Location Services</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -255,7 +290,7 @@ const styles = StyleSheet.create({
     }),
   },
   rememberCard: {
-    marginBottom: 30, // Added space below the Remember section
+    marginBottom: 30,
   },
   cardContent: {
     padding: 20,
@@ -345,10 +380,15 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   statusBadge: {
-    backgroundColor: '#2DE16B',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 20,
+  },
+  statusEnabled: {
+    backgroundColor: '#2DE16B',
+  },
+  statusDisabled: {
+    backgroundColor: '#FF6B6B',
   },
   statusText: {
     color: '#FFF',
@@ -380,6 +420,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#333',
+  },
+  enableButton: {
+    backgroundColor: '#2D89E1',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  enableButtonText: {
+    color: '#FFF',
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    fontWeight: '600',
   },
   reminderItem: {
     flexDirection: 'row',
