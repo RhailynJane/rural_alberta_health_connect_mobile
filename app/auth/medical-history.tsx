@@ -1,4 +1,3 @@
-import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -23,13 +22,12 @@ import { FONTS } from "../constants/constants";
 
 export default function MedicalHistory() {
   const router = useRouter();
-  const { refresh } = useAuthActions(); 
+  const { refreshSession } = useSessionRefresh(); 
   const [medicalConditions, setMedicalConditions] = useState('');
   const [currentMedications, setCurrentMedications] = useState('');
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { refreshSession } = useSessionRefresh();
   const updateMedicalHistory = useMutation(api.medicalHistoryOnboarding.update.withAllConditions);
   const updateCompleteUserOnboarding = useMutation(api.medicalHistoryOnboarding.update.completeUserOnboarding);
 
@@ -44,16 +42,16 @@ export default function MedicalHistory() {
       });
       console.log("✅ Medical history saved successfully");
 
-      // Complete onboarding - wait for this to finish
+      // Complete onboarding
       await updateCompleteUserOnboarding();
       console.log("✅ Onboarding marked as completed");
 
-      // Force a session refresh to ensure latest state
-      console.log("🔄 Refreshing authentication session...");
-      await refresh();
+      // Use custom session refresh instead of Convex refresh
+      console.log("🔄 Refreshing session via custom method...");
+      refreshSession();
 
-      // Short delay to ensure state propagation
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait a moment for the session to refresh
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Navigate to dashboard
       console.log("🚀 Navigating to dashboard");
