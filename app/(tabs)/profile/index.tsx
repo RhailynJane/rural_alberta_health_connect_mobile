@@ -164,19 +164,18 @@ export default function Profile() {
         text: "Sign Out",
         onPress: async () => {
           try {
-            console.log("🔄 Starting sign out process...");
+            console.log("🔄 Signing out...");
             
-            // Sign out first
+            // Simple sign out without refreshSession
             await signOut();
-            console.log("✅ Successfully signed out from Convex");
+            console.log("✅ Signed out successfully");
             
-            // Then navigate
-            console.log("🚀 Navigating to signin page");
+            // Navigate to signin
             router.replace("/auth/signin");
             
           } catch (error) {
             console.error("❌ Sign out failed:", error);
-            // Still try to navigate even if signOut fails
+            // Still navigate to signin even if signOut fails
             router.replace("/auth/signin");
           }
         },
@@ -184,6 +183,7 @@ export default function Profile() {
       },
     ]);
   };
+
 
   // Show loading while auth is loading
   if (isLoading) {
