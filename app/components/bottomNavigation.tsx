@@ -76,7 +76,12 @@ const BottomNavigation: React.FC = () => {
               size={24} 
               color={isFocused ? '#2A7DE1' : '#666'} 
             />
-            <Text style={[styles.tabText, isFocused && styles.tabTextFocused]}>
+            <Text 
+              style={[styles.tabText, isFocused && styles.tabTextFocused]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {tab.label}
             </Text>
           </TouchableOpacity>
@@ -103,17 +108,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
   },
   tabFocused: {
     borderTopWidth: 2,
     borderTopColor: '#2A7DE1',
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 9,
     color: '#666',
     fontFamily: FONTS.BarlowSemiCondensed,
     marginTop: 4,
+    textAlign: 'center',
+    width: '100%',
   },
   tabTextFocused: {
     color: '#2A7DE1',

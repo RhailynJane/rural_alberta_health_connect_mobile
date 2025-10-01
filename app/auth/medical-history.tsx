@@ -22,42 +22,43 @@ import { FONTS } from "../constants/constants";
 
 export default function MedicalHistory() {
   const router = useRouter();
+  const { refreshSession } = useSessionRefresh(); 
   const [medicalConditions, setMedicalConditions] = useState('');
   const [currentMedications, setCurrentMedications] = useState('');
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { refreshSession } = useSessionRefresh();
   const updateMedicalHistory = useMutation(api.medicalHistoryOnboarding.update.withAllConditions);
   const updateCompleteUserOnboarding = useMutation(api.medicalHistoryOnboarding.update.completeUserOnboarding);
 
   const handleCompleteSetup = async () => {
     setIsSubmitting(true);
     try {
+      // Save medical history
       await updateMedicalHistory({
         medicalConditions: medicalConditions || undefined,
         currentMedications: currentMedications || undefined,
         allergies: allergies || undefined,
       });
-      console.log("Medical history saved successfully, onboarding completed!");
+      console.log("✅ Medical history saved successfully");
 
       // Complete onboarding
       await updateCompleteUserOnboarding();
-      console.log("✅ Onboarding completed!");
+      console.log("✅ Onboarding marked as completed");
 
-      // Force session refresh using provider remount pattern
-      console.log("🔄 Refreshing session to prevent stale data...");
+      // Use custom session refresh instead of Convex refresh
+      console.log("🔄 Refreshing session via custom method...");
       refreshSession();
 
-      // Longer delay to ensure backend state propagates before provider remount
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait a moment for the session to refresh
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Navigate to dashboard with fresh session
-      console.log("🚀 Navigating to dashboard with refreshed session");
-      router.push("/(tabs)/dashboard");
+      // Navigate to dashboard
+      console.log("🚀 Navigating to dashboard");
+      router.replace("/(tabs)/dashboard");
 
     } catch (error) {
-      console.error("Error completing onboarding:", error);
+      console.error("❌ Error completing onboarding:", error);
       Alert.alert(
         "Error",
         "Failed to complete setup. Please try again."

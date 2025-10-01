@@ -12,8 +12,8 @@ export const getUserWithProfile = query({
     console.log("🆔 User ID from auth:", userId);
     
     if (!userId) {
-      console.log("❌ No user ID found, throwing error");
-      throw new Error("Not authenticated");
+      console.log("❌ No user ID found, returning null");
+      return null; // Return null instead of throwing error
     }
 
     console.log("✅ User authenticated, calling model function");

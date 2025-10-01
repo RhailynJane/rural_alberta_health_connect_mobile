@@ -25,6 +25,7 @@ export default defineSchema({
     medicalConditions: v.optional(v.string()),
     currentMedications: v.optional(v.string()),
     allergies: v.optional(v.string()),
+    locationServicesEnabled: v.optional(v.boolean()), 
     onboardingCompleted: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

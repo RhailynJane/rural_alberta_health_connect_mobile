@@ -1,7 +1,7 @@
 import { Picker } from "@react-native-picker/picker";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
+
 export default function PersonalInfo() {
   const router = useRouter();
   const [ageRange, setAgeRange] = useState("");
@@ -27,27 +28,51 @@ export default function PersonalInfo() {
 
   const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
 
+  // Check onboarding status
+  const onboardingStatus = useQuery(api.profile.personalInformation.getOnboardingStatus);
+
+  // Redirect if onboarding is already completed
+  React.useEffect(() => {
+    if (onboardingStatus?.isCompleted) {
+      console.log("Onboarding already completed, redirecting to dashboard");
+      router.replace("/(tabs)/dashboard");
+    }
+  }, [onboardingStatus, router]);
+
+  // Show loading while checking status
+  if (onboardingStatus === undefined) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#2A7DE1" />
+      </View>
+    );
+  }
+
+
   const handleContinue = async () => {
     if (!ageRange || !location) {
       Alert.alert("Required Fields", "Please select both age range and location to continue.");
       return;
     }
 
+    console.log("🔄 Personal Info - Starting submission");
     setIsSubmitting(true);
+    
     try {
       await updatePersonalInfo({ ageRange, location });
-      console.log("Personal info saved successfully");
+      console.log("✅ Personal Info - Saved successfully");
+      
+      console.log("➡️ Navigating to emergency contact");
       router.push("/auth/emergency-contact");
+      
     } catch (error) {
-      console.error("Error saving personal info:", error);
-      Alert.alert(
-        "Error",
-        "Failed to save personal information. Please try again."
-      );
+      console.error("❌ Personal Info - Error:", error);
+      Alert.alert("Error", "Failed to save personal information. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
