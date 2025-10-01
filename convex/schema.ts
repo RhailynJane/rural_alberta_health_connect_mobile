@@ -16,6 +16,7 @@ export default defineSchema({
     image: v.optional(v.string()),
     hasCompletedOnboarding: v.optional(v.boolean()),
   }).index("email", ["email"]),
+
   userProfiles: defineTable({
     userId: v.id("users"),
     ageRange: v.optional(v.string()),
