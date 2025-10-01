@@ -1,4 +1,5 @@
 import { api } from "@/convex/_generated/api";
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { router } from "expo-router";
@@ -21,18 +22,21 @@ import { COLORS, FONTS } from "../../constants/constants";
 
 export default function Profile() {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { signOut } = useAuthActions();
 
   const updatePersonalInfo = useMutation(
     api.profile.personalInformation.updatePersonalInfo
   );
+  // Skip queries if not authenticated
   const userProfile = useQuery(
     api.profile.personalInformation.getProfile,
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
   // Get location services status
-  const locationStatus = useQuery(
-    api.locationServices.getLocationServicesStatus
+   const locationStatus = useQuery(
+    api.locationServices.getLocationServicesStatus,
+    isAuthenticated && !isLoading ? {} : "skip"
   );
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
@@ -150,7 +154,7 @@ export default function Profile() {
   };
 
   // Handle sign out
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       {
         text: "Cancel",
@@ -158,17 +162,57 @@ export default function Profile() {
       },
       {
         text: "Sign Out",
-        onPress: () => {
-          console.log("User signed out");
-          router.replace("/auth/signin");
+        onPress: async () => {
+          try {
+            console.log("🔄 Starting sign out process...");
+            
+            // Navigate first, then sign out to avoid query errors
+            console.log("🚀 Navigating to signin page");
+            router.replace("/auth/signin");
+            
+            // Small delay to ensure navigation happens
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Then sign out from Convex
+            await signOut();
+            console.log("✅ Successfully signed out from Convex");
+            
+          } catch (error) {
+            console.error("❌ Sign out failed:", error);
+            // Even if signOut fails, we're already on signin page
+          }
         },
         style: "destructive",
       },
     ]);
   };
 
+  // Show loading while auth is loading
+  if (isLoading) {
+    return (
+      <CurvedBackground>
+        <CurvedHeader title="Profile" height={120} showLogo={true} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </CurvedBackground>
+    );
+  }
+
+  // Redirect if not authenticated (shouldn't happen but as a safeguard)
+  if (!isAuthenticated) {
+    return (
+      <CurvedBackground>
+        <CurvedHeader title="Profile" height={120} showLogo={true} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Redirecting to sign in...</Text>
+        </View>
+      </CurvedBackground>
+    );
+  }
+
   // Show loading while profile is loading
-  if (isLoading || !userProfile) {
+  if (!userProfile) {
     return (
       <CurvedBackground>
         <CurvedHeader title="Profile" height={120} showLogo={true} />
