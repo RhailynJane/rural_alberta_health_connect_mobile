@@ -49,7 +49,6 @@ export const useSessionRefresh = () => {
 };
 
 // Auth Guard Component
-// Auth Guard Component
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const router = useRouter();
@@ -63,33 +62,27 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     console.log("🔐 Auth Guard - Auth state:", { isAuthenticated, segments });
 
     if (!isAuthenticated) {
-      // User not authenticated - redirect to signin if not already there
-      if (segments[0] !== "auth" || segments.length < 2 || (segments[1] as string) === "index") {
+      // User NOT authenticated
+      const inAuthGroup = segments[0] === "auth";
+      const inOnboarding = segments[0] === "onboarding";
+      
+      // Only redirect if NOT in auth pages or onboarding
+      if (!inAuthGroup && !inOnboarding) {
         console.log("🚫 Not authenticated, redirecting to signin");
         router.replace("/auth/signin");
       }
     } else {
-      // User is authenticated
+      // User IS authenticated
       const inAuthGroup = segments[0] === "auth";
+      const inTabsGroup = segments[0] === "(tabs)";
       const currentRoute = segments[1];
       
-      // Allow access to onboarding flow even when authenticated
-      
-      // If user is on signin page but authenticated, redirect appropriately
-      if (inAuthGroup && currentRoute === "signin") {
-        console.log("✅ Authenticated, redirecting from signin");
-        
-        // Instead of always going to dashboard, we should check onboarding status
-        // For now, let the individual screens handle onboarding status
-        // We'll redirect to a safe route - the tabs layout will handle the rest
+      // If user is authenticated and on signin/signup pages, redirect to dashboard
+      if (inAuthGroup && (currentRoute === "signin" || currentRoute === "signup")) {
+        console.log("✅ Authenticated, redirecting from auth page to dashboard");
         router.replace("/(tabs)/dashboard");
       }
       
-      // If user is on signup page but authenticated, redirect to dashboard
-      if (inAuthGroup && currentRoute === "signup") {
-        console.log("✅ Authenticated, redirecting from signup to dashboard");
-        router.replace("/(tabs)/dashboard");
-      }
     }
   }, [isAuthenticated, isLoading, segments, router]);
 
