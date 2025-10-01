@@ -1,5 +1,11 @@
 # Auth Session Timing Issue
 
+**Created**: 2025-09-20 22:10:42
+**Branch**: N/A
+**Related Commits**: N/A
+
+---
+
 ## Problem
 
 When users create a new account, they sometimes see the wrong user's email on the dashboard. This happens only during first-time account creation, not when signing in later.

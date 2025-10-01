@@ -1,5 +1,12 @@
 # Convex Auth Session Refresh Workaround
 
+**Created**: 2025-09-22 15:41:28
+**Branch**: N/A
+**Related Commits**:
+- `b8d1983` - Fix auth session timing issues with AuthWrapper and schema updates
+
+---
+
 ## Problem
 
 Convex Auth in React Native Expo has session staleness issues with SecureStore.

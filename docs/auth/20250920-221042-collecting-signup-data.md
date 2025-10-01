@@ -1,5 +1,11 @@
 # Collecting Additional Data During Signup
 
+**Created**: 2025-09-20 22:10:42
+**Branch**: N/A
+**Related Commits**: N/A
+
+---
+
 This approach stores extra user information (like firstName, lastName) transactionally during account creation and works with all providers (Google, email/password, etc.).
 
 ## Implementation Steps

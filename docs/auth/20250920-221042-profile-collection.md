@@ -1,5 +1,11 @@
 # Collecting Optional Profile Information
 
+**Created**: 2025-09-20 22:10:42
+**Branch**: N/A
+**Related Commits**: N/A
+
+---
+
 ## What is this about?
 
 When users sign up, we want to collect extra information like age, location, and medical history. This information helps us provide better healthcare services.
