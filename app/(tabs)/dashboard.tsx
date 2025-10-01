@@ -3,6 +3,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Linking,
   SafeAreaView,
@@ -54,14 +55,15 @@ export default function Dashboard() {
   if (!isAuthenticated || user === null || user === undefined) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2A7DE1" />
           <Text
             style={[
-              styles.errorText,
+              styles.loadingText,
               { fontFamily: FONTS.BarlowSemiCondensed },
             ]}
           >
-            Please sign in to view your dashboard
+            Loading your dashboard...
           </Text>
         </View>
       </SafeAreaView>

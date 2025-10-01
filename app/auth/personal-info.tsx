@@ -1,7 +1,7 @@
 import { Picker } from "@react-native-picker/picker";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -27,26 +27,6 @@ export default function PersonalInfo() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
-
-  // Check onboarding status
-  const onboardingStatus = useQuery(api.profile.personalInformation.getOnboardingStatus);
-
-  // Redirect if onboarding is already completed
-  React.useEffect(() => {
-    if (onboardingStatus?.isCompleted) {
-      console.log("Onboarding already completed, redirecting to dashboard");
-      router.replace("/(tabs)/dashboard");
-    }
-  }, [onboardingStatus, router]);
-
-  // Show loading while checking status
-  if (onboardingStatus === undefined) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#2A7DE1" />
-      </View>
-    );
-  }
 
 
   const handleContinue = async () => {

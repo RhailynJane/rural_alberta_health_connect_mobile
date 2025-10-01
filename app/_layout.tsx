@@ -1,9 +1,8 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexReactClient, useConvexAuth } from "convex/react";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { ConvexReactClient } from "convex/react";
+import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { createContext, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -36,6 +35,7 @@ const secureStorage = {
 // Create context for session refresh functionality
 interface SessionRefreshContextType {
   refreshSession: () => void;
+  isRefreshing: boolean;
 }
 
 const SessionRefreshContext = createContext<SessionRefreshContextType | null>(null);
@@ -48,79 +48,37 @@ export const useSessionRefresh = () => {
   return context;
 };
 
-// Auth Guard Component
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (isLoading) {
-      return; // Still loading auth state
-    }
-
-    console.log("🔐 Auth Guard - Auth state:", { isAuthenticated, segments });
-
-    if (!isAuthenticated) {
-      // User NOT authenticated
-      const inAuthGroup = segments[0] === "auth";
-      const inOnboarding = segments[0] === "onboarding";
-      
-      // Only redirect if NOT in auth pages or onboarding
-      if (!inAuthGroup && !inOnboarding) {
-        console.log("🚫 Not authenticated, redirecting to signin");
-        router.replace("/auth/signin");
-      }
-    } else {
-      // User IS authenticated
-      const inAuthGroup = segments[0] === "auth";
-      const currentRoute = segments[1];
-      
-      // If user is authenticated and on signin/signup pages, redirect to dashboard
-      if (inAuthGroup && (currentRoute === "signin" || currentRoute === "signup")) {
-        console.log("✅ Authenticated, redirecting from auth page to dashboard");
-        router.replace("/(tabs)/dashboard");
-      }
-      
-    }
-  }, [isAuthenticated, isLoading, segments, router]);
-
-  if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#2A7DE1" />
-        <Text style={{ marginTop: 10 }}>Loading...</Text>
-      </View>
-    );
-  }
-
-  return <>{children}</>;
-}
 
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
+    console.log('🚦 isRefreshing: false → true');
+    setIsRefreshing(true);
     setProviderKey(k => k + 1);
+    // Reset isRefreshing after remount completes
+    setTimeout(() => {
+      console.log('🚦 isRefreshing: true → false');
+      setIsRefreshing(false);
+    }, 500);
   };
 
   return (
-    <SessionRefreshContext.Provider value={{ refreshSession }}>
+    <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
       <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
         <SafeAreaProvider>
-          <AuthGuard>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="auth/signin" />
-              <Stack.Screen name="auth/signup" />
-              <Stack.Screen name="auth/personal-info" />
-              <Stack.Screen name="auth/emergency-contact" />
-              <Stack.Screen name="auth/medical-history" />
-              <Stack.Screen name="(tabs)" />
-            </Stack>
-          </AuthGuard>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="auth/signin" />
+            <Stack.Screen name="auth/signup" />
+            <Stack.Screen name="auth/personal-info" />
+            <Stack.Screen name="auth/emergency-contact" />
+            <Stack.Screen name="auth/medical-history" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
         </SafeAreaProvider>
       </ConvexAuthProvider>
     </SessionRefreshContext.Provider>
