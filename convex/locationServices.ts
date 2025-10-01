@@ -73,7 +73,7 @@ export const getEmergencyLocationDetails = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      return null;
+      return null; // Return null instead of undefined
     }
 
     const profile = await ctx.db
