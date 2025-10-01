@@ -3,17 +3,24 @@ import { query } from "./_generated/server";
 
 export const getCurrentUser = query({
   args: {},
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new Error("Not authenticated");
+      console.log("📊 getCurrentUser: User not authenticated, returning null");
+      return null; 
     }
 
     const user = await ctx.db.get(userId);
     if (!user) {
-      throw new Error("User not found");
+      return null;
     }
 
-    return user;
+    return {
+      _id: user._id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      hasCompletedOnboarding: user.hasCompletedOnboarding,
+    };
   },
 });

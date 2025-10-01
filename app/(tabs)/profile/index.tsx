@@ -166,20 +166,18 @@ export default function Profile() {
           try {
             console.log("🔄 Starting sign out process...");
             
-            // Navigate first, then sign out to avoid query errors
-            console.log("🚀 Navigating to signin page");
-            router.replace("/auth/signin");
-            
-            // Small delay to ensure navigation happens
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Then sign out from Convex
+            // Sign out first
             await signOut();
             console.log("✅ Successfully signed out from Convex");
             
+            // Then navigate
+            console.log("🚀 Navigating to signin page");
+            router.replace("/auth/signin");
+            
           } catch (error) {
             console.error("❌ Sign out failed:", error);
-            // Even if signOut fails, we're already on signin page
+            // Still try to navigate even if signOut fails
+            router.replace("/auth/signin");
           }
         },
         style: "destructive",
@@ -199,25 +197,40 @@ export default function Profile() {
     );
   }
 
-  // Redirect if not authenticated (shouldn't happen but as a safeguard)
+  // Redirect if not authenticated
   if (!isAuthenticated) {
+    // This should trigger automatically due to your AuthGuard, but as a safeguard:
     return (
       <CurvedBackground>
         <CurvedHeader title="Profile" height={120} showLogo={true} />
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Redirecting to sign in...</Text>
+          <Text style={styles.loadingText}>Redirecting...</Text>
         </View>
       </CurvedBackground>
     );
   }
 
-  // Show loading while profile is loading
-  if (!userProfile) {
+  // Show loading while profile data is loading
+  // Note: userProfile will be null if the query returns null (unauthenticated)
+  // but since we're checking isAuthenticated above, it should load data
+  if (userProfile === undefined) {
     return (
       <CurvedBackground>
         <CurvedHeader title="Profile" height={120} showLogo={true} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </CurvedBackground>
+    );
+  }
+
+  // Handle case where profile is null (shouldn't happen due to auth check above)
+  if (userProfile === null) {
+    return (
+      <CurvedBackground>
+        <CurvedHeader title="Profile" height={120} showLogo={true} />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Profile not found...</Text>
         </View>
       </CurvedBackground>
     );
