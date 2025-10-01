@@ -42,20 +42,32 @@ export default function Profile() {
     api.locationServices.toggleLocationServices
   );
 
+  // Track if we have a pending toggle to prevent query overwrites
+  const [isPendingLocationToggle, setIsPendingLocationToggle] = useState(false);
+
   useEffect(() => {
-    if (locationStatus !== undefined) {
+    // Only update from query if there's no pending toggle
+    if (locationStatus !== undefined && !isPendingLocationToggle) {
       setUserData((prev) => ({
         ...prev,
         locationServices: locationStatus.locationServicesEnabled || false,
       }));
     }
-  }, [locationStatus]);
+  }, [locationStatus, isPendingLocationToggle]);
 
   // Handler for location services toggle
   const handleLocationServicesToggle = async (enabled: boolean) => {
+    // Mark as pending to prevent query from overwriting optimistic update
+    setIsPendingLocationToggle(true);
+
+    // Optimistically update the local state immediately for responsive UI
+    setUserData((prev) => ({
+      ...prev,
+      locationServices: enabled,
+    }));
+
     try {
       await toggleLocationServices({ enabled });
-      // The state will automatically update via the useQuery above
       console.log(`📍 Location services ${enabled ? "enabled" : "disabled"}`);
     } catch (error) {
       console.error("Error toggling location services:", error);
@@ -63,8 +75,11 @@ export default function Profile() {
       // Revert the local state on error
       setUserData((prev) => ({
         ...prev,
-        locationServices: !enabled, // Revert to previous state
+        locationServices: !enabled,
       }));
+    } finally {
+      // Clear pending flag after mutation completes (success or error)
+      setIsPendingLocationToggle(false);
     }
   };
 
