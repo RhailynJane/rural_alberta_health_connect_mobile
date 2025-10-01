@@ -5,9 +5,18 @@ import { getCurrentUserWithProfile } from "../model/user";
 export const getUserWithProfile = query({
   args: {},
   handler: async (ctx, args) => {
+    console.log("🔥 getUserWithProfile API called!");
+    console.log("🔍 Auth context:", ctx.auth);
+    
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    console.log("🆔 User ID from auth:", userId);
+    
+    if (!userId) {
+      console.log("❌ No user ID found, returning null");
+      return null; // Return null instead of throwing error
+    }
 
+    console.log("✅ User authenticated, calling model function");
     return await getCurrentUserWithProfile(ctx, userId);
   },
 });

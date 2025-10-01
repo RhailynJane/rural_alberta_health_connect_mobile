@@ -15,37 +15,53 @@ import {
   View
 } from "react-native";
 import { api } from "../../convex/_generated/api";
+import { useSessionRefresh } from "../_layout";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
 export default function MedicalHistory() {
   const router = useRouter();
+  const { refreshSession } = useSessionRefresh(); 
   const [medicalConditions, setMedicalConditions] = useState('');
   const [currentMedications, setCurrentMedications] = useState('');
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updateMedicalHistory = useMutation(api.medicalHistory.update.withAllConditions);
-  const updateCompleteUserOnboarding = useMutation(api.medicalHistory.update.completeUserOnboarding);
+  const updateMedicalHistory = useMutation(api.medicalHistoryOnboarding.update.withAllConditions);
+  const updateCompleteUserOnboarding = useMutation(api.medicalHistoryOnboarding.update.completeUserOnboarding);
 
   const handleCompleteSetup = async () => {
     setIsSubmitting(true);
     try {
+      // Save medical history
       await updateMedicalHistory({
         medicalConditions: medicalConditions || undefined,
         currentMedications: currentMedications || undefined,
         allergies: allergies || undefined,
       });
-      console.log("Medical history saved successfully, onboarding completed!");
-      // Navigate to dashboard
+      console.log("✅ Medical history saved successfully");
+
+      // Complete onboarding
       await updateCompleteUserOnboarding();
-      router.push("/(tabs)/dashboard");
+      console.log("✅ Onboarding marked as completed");
+
+      // Use custom session refresh instead of Convex refresh
+      console.log("🔄 Refreshing session via custom method...");
+      refreshSession();
+
+      // Wait a moment for the session to refresh
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Navigate to dashboard
+      console.log("🚀 Navigating to dashboard");
+      router.replace("/(tabs)/dashboard");
+
     } catch (error) {
-      console.error("Error saving medical history:", error);
+      console.error("❌ Error completing onboarding:", error);
       Alert.alert(
         "Error",
-        "Failed to save medical history. Please try again."
+        "Failed to complete setup. Please try again."
       );
     } finally {
       setIsSubmitting(false);
@@ -100,7 +116,7 @@ export default function MedicalHistory() {
                 </Text>
                 <TextInput
                   style={[
-                    styles.textArea, 
+                    styles.textArea,
                     { fontFamily: FONTS.BarlowSemiCondensed }
                   ]}
                   placeholder="List any medical conditions you have"
@@ -117,7 +133,7 @@ export default function MedicalHistory() {
                 </Text>
                 <TextInput
                   style={[
-                    styles.textArea, 
+                    styles.textArea,
                     { fontFamily: FONTS.BarlowSemiCondensed }
                   ]}
                   placeholder="List any current medications"
@@ -134,7 +150,7 @@ export default function MedicalHistory() {
                 </Text>
                 <TextInput
                   style={[
-                    styles.textArea, 
+                    styles.textArea,
                     { fontFamily: FONTS.BarlowSemiCondensed }
                   ]}
                   placeholder="List any allergies you have"
@@ -148,8 +164,8 @@ export default function MedicalHistory() {
               </View>
 
               <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={styles.backButton} 
+                <TouchableOpacity
+                  style={styles.backButton}
                   onPress={handleBack}
                 >
                   <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>

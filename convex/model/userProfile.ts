@@ -1,11 +1,11 @@
 import { Id } from "../_generated/dataModel";
-import type { QueryCtx, MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { safeString } from "../utils/sanitize";
 
 /**
  * Updates personal information for a user
  */
-export async function updatePersonalInfo(
+export async function updatePersonalInfoModel(
   ctx: MutationCtx,
   userId: Id<"users">,
   data: { ageRange: string; location: string }
@@ -140,10 +140,15 @@ export async function completeOnboarding(
     throw new Error("User profile not found. Cannot complete onboarding.");
   }
 
-  // Mark onboarding as completed
+  // Mark onboarding as completed in userProfile
   await ctx.db.patch(existingProfile._id, {
     onboardingCompleted: true,
     updatedAt: Date.now(),
+  });
+
+  // Also update the user's hasCompletedOnboarding field
+  await ctx.db.patch(userId, {
+    hasCompletedOnboarding: true,
   });
 
   return existingProfile._id;
@@ -152,16 +157,23 @@ export async function completeOnboarding(
 /**
  * Gets the user profile
  */
-export async function getUserProfile(
-  ctx: QueryCtx,
-  userId: Id<"users">
-) {
+export async function getUserProfile(ctx: QueryCtx, userId: Id<"users">) {
   const profile = await ctx.db
     .query("userProfiles")
     .withIndex("byUserId", (q) => q.eq("userId", userId))
     .unique();
 
-  return profile;
+  if (!profile) return null;
+  return {
+    _id: profile._id,
+    ageRange: profile.ageRange,
+    allergies: profile.allergies,
+    currentMedications: profile.currentMedications,
+    emergencyContactName: profile.emergencyContactName,
+    emergencyContactPhone: profile.emergencyContactPhone,
+    location: profile.location,
+    medicalConditions: profile.medicalConditions,
+  };
 }
 
 /**

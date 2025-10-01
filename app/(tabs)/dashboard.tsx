@@ -1,9 +1,10 @@
 // app/dashboard.tsx
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -20,14 +21,29 @@ import { FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const userWithProfile = useQuery(api.dashboard.user.getUserWithProfile);
+  const queryArgs = isAuthenticated ? {} : "skip";
+  
+  // Get current user data
+  const user = useQuery(api.users.getCurrentUser, queryArgs);
+  
+  // Keep userWithProfile query for future use (currently returns undefined)
+  const userWithProfile = useQuery(
+    api.dashboard.user.getUserWithProfile,
+    queryArgs
+  );
 
-  if (userWithProfile === undefined) {
+  if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text
+            style={[
+              styles.loadingText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
             Loading...
           </Text>
         </View>
@@ -35,11 +51,16 @@ export default function Dashboard() {
     );
   }
 
-  if (userWithProfile === null) {
+  if (!isAuthenticated || user === null || user === undefined) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text
+            style={[
+              styles.errorText,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
             Please sign in to view your dashboard
           </Text>
         </View>
@@ -47,7 +68,9 @@ export default function Dashboard() {
     );
   }
 
-  const { userName, userEmail } = userWithProfile;
+  // Use currentUser data instead of userWithProfile for now
+  const userName = user.firstName || user.name || "User";
+  const userEmail = user.email;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
@@ -65,28 +88,45 @@ export default function Dashboard() {
         {
           text: "Call 911",
           onPress: () => {
-            // This would actually call 911 in a real app
-            console.log("Calling 911...");
+            Linking.openURL("tel:911").catch((err) => {
+              console.error("Error calling 911:", err);
+              Alert.alert(
+                "Error",
+                "Could not make the call. Please check your device."
+              );
+            });
           },
+          style: "destructive",
         },
-      ]
+      ],
+      { cancelable: true }
     );
   };
 
   const callHealthLink = (): void => {
-    Alert.alert("Health Link Alberta", "Call 811 for urgent health concerns?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Call 811",
-        onPress: () => {
-          // This would actually call 811 in a real app
-          console.log("Calling Health Link Alberta at 811...");
+    Alert.alert(
+      "Health Link Alberta",
+      "Call 811 for non-emergency health advice?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]);
+        {
+          text: "Call 811",
+          onPress: () => {
+            Linking.openURL("tel:811").catch((err) => {
+              console.error("Error calling 811:", err);
+              Alert.alert(
+                "Error",
+                "Could not make the call. Please check your device."
+              );
+            });
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   return (
@@ -112,7 +152,7 @@ export default function Dashboard() {
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Welcome, {userName} {userEmail}!!
+                Welcome, {userName}!
               </Text>
               <View style={styles.healthStatusContainer}>
                 <Text
@@ -222,7 +262,6 @@ export default function Dashboard() {
               </View>
             </View>
           </View>
-
         </ScrollView>
 
         {/* Bottom Navigation */}
@@ -246,7 +285,8 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   welcomeContainer: {
-    marginBottom: 32,
+    marginBottom: 25,
+    marginTop: -20,
   },
   welcomeText: {
     fontSize: 28,
@@ -262,6 +302,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
+    marginBottom: -10,
   },
   healthStatusLabel: {
     fontSize: 16,
@@ -434,5 +475,4 @@ const styles = StyleSheet.create({
     color: "#856404",
     textAlign: "center",
   },
-
 });

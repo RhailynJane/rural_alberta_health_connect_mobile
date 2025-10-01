@@ -1,9 +1,13 @@
 import { useAuthActions } from "@convex-dev/auth/react";
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import { Formik } from 'formik';
+import { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -28,17 +32,42 @@ const SignInSchema = Yup.object().shape({
 });
 
 export default function SignIn() {
-  const router = useRouter();
   const { signIn } = useAuthActions();
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleSignIn = async (values: { email: string; password: string }) => {
+    setIsLoading(true);
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      router.push("/auth/personal-info");
+      // AuthWrapper will handle navigation based on auth state and onboarding status
+      // not for now
+      router.push("/(tabs)/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);
-      // Handle error (you can add error state here)
+      
+      // Determine the specific error message
+      let message = "Sign in failed. Please try again.";
+      if (error instanceof Error) {
+        if (error.message?.includes("invalid email") || error.message?.includes("user not found")) {
+          message = "Invalid email address. Please check and try again.";
+        } else if (error.message?.includes("password") || error.message?.includes("credentials")) {
+          message = "Incorrect password. Please try again.";
+        }
+      }
+      
+      setErrorMessage(message);
+      setErrorModalVisible(true);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    router.push("/auth/forgot-password");
   };
 
   return (
@@ -99,29 +128,51 @@ export default function SignIn() {
                     <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                       Password
                     </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.password && touched.password && styles.inputError
-                      ]}
-                      placeholder="Enter your password"
-                      placeholderTextColor="#999"
-                      value={values.password}
-                      onChangeText={handleChange('password')}
-                      onBlur={handleBlur('password')}
-                      secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                      <TextInput
+                        style={[
+                          styles.passwordInput,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          errors.password && touched.password && styles.inputError
+                        ]}
+                        placeholder="Enter your password"
+                        placeholderTextColor="#999"
+                        value={values.password}
+                        onChangeText={handleChange('password')}
+                        onBlur={handleBlur('password')}
+                        secureTextEntry={!showPassword}
+                      />
+                      <TouchableOpacity 
+                        style={styles.eyeIcon}
+                        onPress={() => setShowPassword(!showPassword)}
+                      >
+                        <Ionicons 
+                          name={showPassword ? "eye-off" : "eye"} 
+                          size={24} 
+                          color="#999" 
+                        />
+                      </TouchableOpacity>
+                    </View>
                     {errors.password && touched.password && (
                       <Text style={styles.errorText}>{errors.password}</Text>
                     )}
 
                     <TouchableOpacity
-                      style={styles.signInButton}
+                      style={[styles.signInButton, isLoading && styles.signInButtonDisabled]}
                       onPress={() => handleSubmit()}
+                      disabled={isLoading}
                     >
                       <Text style={[styles.signInButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Sign In
+                        {isLoading ? "Signing In..." : "Sign In"}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      style={styles.forgotPassword}
+                      onPress={handleForgotPassword}
+                    >
+                      <Text style={[styles.forgotPasswordText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Forgot Password?
                       </Text>
                     </TouchableOpacity>
 
@@ -142,6 +193,31 @@ export default function SignIn() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Error Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={errorModalVisible}
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.modalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Sign In Error
+            </Text>
+            <Text style={[styles.modalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {errorMessage}
+            </Text>
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={[styles.modalButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -221,8 +297,31 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  passwordContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  passwordInput: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 16,
+    paddingRight: 50,
+    fontSize: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+  },
   inputError: {
-    borderColor: "#ff3b30", // Red border for errors
+    borderColor: "#ff3b30",
   },
   errorText: {
     color: "#ff3b30",
@@ -236,16 +335,28 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     alignItems: "center",
     marginTop: 90,
-    marginBottom: 20,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 3,
   },
+  signInButtonDisabled: {
+    backgroundColor: "#9ec5f0",
+  },
   signInButtonText: {
     color: "white",
     fontSize: 16,
+    fontWeight: "600",
+  },
+  forgotPassword: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    color: "#2A7DE1",
     fontWeight: "600",
   },
   signUpContainer: {
@@ -261,5 +372,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    width: '80%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: '#1A1A1A',
+  },
+  modalMessage: {
+    fontSize: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+    color: '#666',
+  },
+  modalButton: {
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    backgroundColor: "#2A7DE1",
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

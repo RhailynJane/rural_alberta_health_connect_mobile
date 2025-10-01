@@ -19,6 +19,6 @@ export async function getCurrentUserWithProfile(
   return {
     ...userProfile,
     userEmail: user.email,
-    userName: user.name,
+    userName: user.firstName || user.name,
   };
 }

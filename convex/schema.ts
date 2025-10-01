@@ -14,7 +14,9 @@ export default defineSchema({
     isAnonymous: v.optional(v.boolean()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
+    hasCompletedOnboarding: v.optional(v.boolean()),
   }).index("email", ["email"]),
+
   userProfiles: defineTable({
     userId: v.id("users"),
     ageRange: v.optional(v.string()),
@@ -24,6 +26,7 @@ export default defineSchema({
     medicalConditions: v.optional(v.string()),
     currentMedications: v.optional(v.string()),
     allergies: v.optional(v.string()),
+    locationServicesEnabled: v.optional(v.boolean()), 
     onboardingCompleted: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

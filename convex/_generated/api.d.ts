@@ -15,13 +15,15 @@ import type {
 } from "convex/server";
 import type * as auth from "../auth.js";
 import type * as dashboard_user from "../dashboard/user.js";
-import type * as emergencyContact_update from "../emergencyContact/update.js";
+import type * as emergencyContactOnboarding_update from "../emergencyContactOnboarding/update.js";
 import type * as http from "../http.js";
-import type * as medicalHistory_update from "../medicalHistory/update.js";
+import type * as locationServices from "../locationServices.js";
+import type * as medicalHistoryOnboarding_update from "../medicalHistoryOnboarding/update.js";
 import type * as model_user from "../model/user.js";
 import type * as model_userProfile from "../model/userProfile.js";
-import type * as personalInfo_update from "../personalInfo/update.js";
-import type * as profile_index from "../profile/index.js";
+import type * as personalInfoOnboarding_update from "../personalInfoOnboarding/update.js";
+import type * as profile_personalInformation from "../profile/personalInformation.js";
+import type * as users from "../users.js";
 import type * as utils_sanitize from "../utils/sanitize.js";
 
 /**
@@ -35,13 +37,15 @@ import type * as utils_sanitize from "../utils/sanitize.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   "dashboard/user": typeof dashboard_user;
-  "emergencyContact/update": typeof emergencyContact_update;
+  "emergencyContactOnboarding/update": typeof emergencyContactOnboarding_update;
   http: typeof http;
-  "medicalHistory/update": typeof medicalHistory_update;
+  locationServices: typeof locationServices;
+  "medicalHistoryOnboarding/update": typeof medicalHistoryOnboarding_update;
   "model/user": typeof model_user;
   "model/userProfile": typeof model_userProfile;
-  "personalInfo/update": typeof personalInfo_update;
-  "profile/index": typeof profile_index;
+  "personalInfoOnboarding/update": typeof personalInfoOnboarding_update;
+  "profile/personalInformation": typeof profile_personalInformation;
+  users: typeof users;
   "utils/sanitize": typeof utils_sanitize;
 }>;
 export declare const api: FilterApi<
