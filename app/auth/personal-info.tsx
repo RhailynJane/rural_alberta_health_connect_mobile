@@ -1,7 +1,7 @@
 import { Picker } from "@react-native-picker/picker";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,41 +19,20 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
+
 export default function PersonalInfo() {
   const router = useRouter();
-  const { isAuthenticated } = useConvexAuth();
   const [ageRange, setAgeRange] = useState("");
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
-  const ensureProfileExists = useMutation(api.profile.personalInformation.ensureProfileExists);
 
-  // Check onboarding status and profile
+  // Check onboarding status
   const onboardingStatus = useQuery(api.profile.personalInformation.getOnboardingStatus);
-  const userProfile = useQuery(
-    api.profile.personalInformation.getProfile,
-    isAuthenticated ? {} : "skip"
-  );
-
-  // Automatically create profile if it doesn't exist
-  useEffect(() => {
-    if (isAuthenticated && !userProfile) {
-      console.log('🔄 PersonalInfo: Profile not found, creating one automatically...');
-      ensureProfileExists().then(result => {
-        if (result) {
-          console.log('✅ PersonalInfo: Profile created successfully');
-        } else {
-          console.log('❌ PersonalInfo: Profile creation failed');
-        }
-      }).catch(error => {
-        console.error('❌ PersonalInfo: Failed to create profile:', error);
-      });
-    }
-  }, [isAuthenticated, userProfile, ensureProfileExists]);
 
   // Redirect if onboarding is already completed
-  useEffect(() => {
+  React.useEffect(() => {
     if (onboardingStatus?.isCompleted) {
       console.log("Onboarding already completed, redirecting to dashboard");
       router.replace("/(tabs)/dashboard");
@@ -69,6 +48,7 @@ export default function PersonalInfo() {
     );
   }
 
+
   const handleContinue = async () => {
     if (!ageRange || !location) {
       Alert.alert("Required Fields", "Please select both age range and location to continue.");
@@ -79,12 +59,6 @@ export default function PersonalInfo() {
     setIsSubmitting(true);
     
     try {
-      // Ensure profile exists before updating
-      if (!userProfile) {
-        console.log("🔄 Personal Info - Creating profile before update...");
-        await ensureProfileExists();
-      }
-      
       await updatePersonalInfo({ ageRange, location });
       console.log("✅ Personal Info - Saved successfully");
       
@@ -98,6 +72,7 @@ export default function PersonalInfo() {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
