@@ -2,7 +2,6 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -32,46 +31,21 @@ const secureStorage = {
   },
 };
 
-// Create context for session refresh functionality
-interface SessionRefreshContextType {
-  refreshSession: () => void;
-}
-
-const SessionRefreshContext = createContext<SessionRefreshContextType | null>(null);
-
-export const useSessionRefresh = () => {
-  const context = useContext(SessionRefreshContext);
-  if (!context) {
-    throw new Error('useSessionRefresh must be used within SessionRefreshProvider');
-  }
-  return context;
-};
-
 export default function RootLayout() {
-  const [providerKey, setProviderKey] = useState(0);
-
-  const refreshSession = () => {
-    console.log('🔄 Refreshing session via provider remount...');
-    setProviderKey(k => k + 1);
-  };
-
   return (
-    <SessionRefreshContext.Provider value={{ refreshSession }}>
-      <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
-        <SafeAreaProvider>
-          {/* AuthGuard removed - authentication will be handled per screen */}
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/signin" />
-            <Stack.Screen name="auth/signup" />
-            <Stack.Screen name="auth/personal-info" />
-            <Stack.Screen name="auth/emergency-contact" />
-            <Stack.Screen name="auth/medical-history" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
-        </SafeAreaProvider>
-      </ConvexAuthProvider>
-    </SessionRefreshContext.Provider>
+    <ConvexAuthProvider client={convex} storage={secureStorage}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="auth/signin" />
+          <Stack.Screen name="auth/signup" />
+          <Stack.Screen name="auth/personal-info" />
+          <Stack.Screen name="auth/emergency-contact" />
+          <Stack.Screen name="auth/medical-history" />
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+      </SafeAreaProvider>
+    </ConvexAuthProvider>
   );
 }
