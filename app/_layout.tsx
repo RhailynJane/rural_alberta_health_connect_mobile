@@ -74,7 +74,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     } else {
       // User IS authenticated
       const inAuthGroup = segments[0] === "auth";
-      const inTabsGroup = segments[0] === "(tabs)";
       const currentRoute = segments[1];
       
       // If user is authenticated and on signin/signup pages, redirect to dashboard
