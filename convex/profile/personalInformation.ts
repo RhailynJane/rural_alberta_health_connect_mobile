@@ -24,11 +24,12 @@ export const getProfile = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new ConvexError("User not authenticated");
+      console.log("📊 getProfile: User not authenticated, returning null");
+      return null; // Return null instead of throwing error
     }
     
     const profile = await getUserProfile(ctx, userId);
-    console.log("Profile query result:", profile); 
+    console.log("📊 getProfile query result:", profile); 
     return profile;
   },
 });
