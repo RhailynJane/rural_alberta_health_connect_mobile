@@ -47,3 +47,42 @@ export const updatePersonalInfo = mutation({
   },
 
 });
+
+export const ensureProfileExists = mutation({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      const userId = await getAuthUserId(ctx);
+      if (!userId) {
+        console.log("❌ User not authenticated in ensureProfileExists");
+        return null;
+      }
+
+      console.log("🔍 Checking for existing profile for user:", userId);
+      let profile = await ctx.db
+        .query("userProfiles")
+        .withIndex("byUserId", (q) => q.eq("userId", userId))
+        .first();
+
+      // Create profile if it doesn't exist
+      if (!profile) {
+        console.log("🔄 Creating new profile for user:", userId);
+        const profileId = await ctx.db.insert("userProfiles", {
+          userId,
+          onboardingCompleted: false,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+        profile = await ctx.db.get(profileId);
+        console.log("✅ Profile created:", profileId);
+      } else {
+        console.log("✅ Profile already exists:", profile._id);
+      }
+
+      return profile;
+    } catch (error) {
+      console.error("❌ Error in ensureProfileExists:", error);
+      return null;
+    }
+  },
+});
