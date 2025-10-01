@@ -27,7 +27,7 @@ export default defineSchema({
     currentMedications: v.optional(v.string()),
     allergies: v.optional(v.string()),
     locationServicesEnabled: v.optional(v.boolean()), 
-    onboardingCompleted: v.boolean(),
+    onboardingCompleted: v.boolean(), // this is lagacy code.
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("byUserId", ["userId"]),
