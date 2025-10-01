@@ -360,6 +360,9 @@ function filterMedicalFacilities(
     "vet",
     "veterinary",
     "passport",
+    "lasik",
+    "optical",
+    "optometrist",
   ];
 
   return facilities.filter((facility) => {
