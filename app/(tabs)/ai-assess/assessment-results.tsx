@@ -12,7 +12,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -31,35 +31,89 @@ export default function AssessmentResults() {
     ? JSON.parse(params.aiContext as string)
     : null;
 
-  const generateContext = useMutation(api.aiAssessment.generateContextWithGemini);
+  useEffect(() => {
+    console.log("Received params:", {
+      description: params.description,
+      severity: params.severity,
+      duration: params.duration,
+      category: params.category,
+      hasAiContext: !!params.aiContext,
+    });
 
+    if (params.aiContext) {
+      const parsedContext = JSON.parse(params.aiContext as string);
+      console.log("Parsed AI Context:", parsedContext);
+    }
+  }, []);
+
+  const generateContext = useMutation(
+    api.aiAssessment.generateContextWithGemini
+  );
   useEffect(() => {
     const fetchAIAssessment = async () => {
       try {
         setIsLoading(true);
         setAssessmentError(false);
-        
+
+        // Extract parameters with proper fallbacks
+        const description = Array.isArray(params.description)
+          ? params.description[0]
+          : params.description || "";
+
+        const severity = parseInt(
+          Array.isArray(params.severity)
+            ? params.severity[0]
+            : params.severity || "5"
+        );
+
+        const duration = Array.isArray(params.duration)
+          ? params.duration[0]
+          : params.duration || "";
+
+        const category =
+          aiContext?.category ||
+          (Array.isArray(params.category)
+            ? params.category[0]
+            : params.category) ||
+          "General Symptoms";
+
+        console.log("Calling Gemini with:", {
+          description: description.substring(0, 50),
+          severity,
+          duration,
+          category,
+          symptomsCount: aiContext?.symptoms?.length || 0,
+        });
+
         const res = await generateContext({
-          description: params.description as string || "",
-          severity: parseInt(
-            Array.isArray(params.severity)
-              ? params.severity[0]
-              : params.severity || "5"
-          ),
-          duration: params.duration as string || "",
+          description,
+          severity,
+          duration,
           environmentalFactors: aiContext?.environmentalFactors || [],
-          category: aiContext?.category || "General Symptoms",
+          category,
           symptoms: aiContext?.symptoms || [],
           images: aiContext?.uploadedPhotos || [],
         });
-        
+
         setSymptomContext(res.context);
       } catch (error) {
         console.error("AI assessment error:", error);
         setAssessmentError(true);
-        setSymptomContext(
-          "We're experiencing high demand for assessments. Based on your reported symptoms, we recommend contacting Health Link Alberta at 811 for professional medical guidance tailored to your rural location."
+
+        // Use the actual severity for fallback
+        const severity = parseInt(
+          Array.isArray(params.severity)
+            ? params.severity[0]
+            : params.severity || "5"
         );
+
+        const category = aiContext?.category || "General Symptoms";
+        const duration = Array.isArray(params.duration)
+          ? params.duration[0]
+          : params.duration || "";
+
+        const fallback = getFallbackAssessment(category, severity, duration);
+        setSymptomContext(fallback.context);
       } finally {
         setIsLoading(false);
       }
@@ -67,6 +121,25 @@ export default function AssessmentResults() {
 
     fetchAIAssessment();
   }, []);
+
+  const getFallbackAssessment = (
+    category: string,
+    severity: number,
+    duration: string
+  ): { context: string } => {
+    const severityDesc =
+      severity >= 7 ? "severe" : severity >= 4 ? "moderate" : "mild";
+
+    return {
+      context: `Based on your ${category.toLowerCase()} symptoms with ${severityDesc} severity (${severity}/10), ${
+        severity >= 7
+          ? "urgent medical attention is recommended. Contact Health Link Alberta at 811 for guidance."
+          : severity >= 4
+            ? "medical consultation within 24 hours is advised. Monitor symptoms closely."
+            : "self-care measures may be appropriate but seek medical advice if symptoms persist."
+      }`,
+    };
+  };
 
   const handleCall911 = () => Linking.openURL("tel:911");
   const handleCall811 = () => Linking.openURL("tel:811");
@@ -157,14 +230,16 @@ export default function AssessmentResults() {
 
             {/* Urgency Indicator */}
             <View style={styles.urgencyContainer}>
-              <View style={[
-                styles.urgencyIndicator, 
-                { backgroundColor: getUrgencyColor(severity) }
-              ]}>
-                <Ionicons 
-                  name={getUrgencyIcon(severity) as any} 
-                  size={24} 
-                  color="white" 
+              <View
+                style={[
+                  styles.urgencyIndicator,
+                  { backgroundColor: getUrgencyColor(severity) },
+                ]}
+              >
+                <Ionicons
+                  name={getUrgencyIcon(severity) as any}
+                  size={24}
+                  color="white"
                 />
                 <Text style={styles.urgencyText}>
                   {getUrgencyText(severity)}
@@ -180,7 +255,12 @@ export default function AssessmentResults() {
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#2A7DE1" />
-                  <Text style={[styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  <Text
+                    style={[
+                      styles.loadingText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
                     Analyzing your symptoms with Google Gemini...
                   </Text>
                 </View>
@@ -196,9 +276,19 @@ export default function AssessmentResults() {
                   </Text>
                   {assessmentError && (
                     <View style={styles.errorNote}>
-                      <Ionicons name="information-circle" size={16} color="#FF6B35" />
-                      <Text style={[styles.errorNoteText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Using fallback assessment. For precise guidance, contact Health Link Alberta.
+                      <Ionicons
+                        name="information-circle"
+                        size={16}
+                        color="#FF6B35"
+                      />
+                      <Text
+                        style={[
+                          styles.errorNoteText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        Using fallback assessment. For precise guidance, contact
+                        Health Link Alberta.
                       </Text>
                     </View>
                   )}
@@ -211,27 +301,57 @@ export default function AssessmentResults() {
               <ResultCard title="Symptom Summary" icon="document-text">
                 <View style={styles.summaryGrid}>
                   <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.summaryLabel,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       Category
                     </Text>
-                    <Text style={[styles.summaryValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       {aiContext.category}
                     </Text>
                   </View>
                   <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.summaryLabel,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       Duration
                     </Text>
-                    <Text style={[styles.summaryValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
                       {aiContext.duration}
                     </Text>
                   </View>
                   {aiContext.symptoms?.length > 0 && (
                     <View style={styles.summaryItem}>
-                      <Text style={[styles.summaryLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      <Text
+                        style={[
+                          styles.summaryLabel,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
                         Detected Symptoms
                       </Text>
-                      <Text style={[styles.summaryValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
                         {aiContext.symptoms.slice(0, 3).join(", ")}
                         {aiContext.symptoms.length > 3 && "..."}
                       </Text>
@@ -244,8 +364,14 @@ export default function AssessmentResults() {
             {/* Uploaded Photos */}
             {aiContext?.uploadedPhotos?.length > 0 && (
               <ResultCard title="Medical Photos" icon="camera">
-                <Text style={[styles.cardText, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>
-                  {aiContext.uploadedPhotos.length} photo(s) analyzed for symptom assessment
+                <Text
+                  style={[
+                    styles.cardText,
+                    { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 },
+                  ]}
+                >
+                  {aiContext.uploadedPhotos.length} photo(s) analyzed for
+                  symptom assessment
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {aiContext.uploadedPhotos.map(
@@ -255,7 +381,12 @@ export default function AssessmentResults() {
                           source={{ uri: photo }}
                           style={styles.assessmentPhoto}
                         />
-                        <Text style={[styles.photoLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        <Text
+                          style={[
+                            styles.photoLabel,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
                           Photo {index + 1}
                         </Text>
                       </View>
@@ -274,7 +405,8 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Nearest hospital may be 30+ minutes away - plan travel accordingly
+                  • Nearest hospital may be 30+ minutes away - plan travel
+                  accordingly
                 </Text>
                 <Text
                   style={[
@@ -282,7 +414,8 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Weather conditions may impact road access to medical facilities
+                  • Weather conditions may impact road access to medical
+                  facilities
                 </Text>
                 <Text
                   style={[
@@ -290,7 +423,8 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Keep emergency kit and communication devices charged and ready
+                  • Keep emergency kit and communication devices charged and
+                  ready
                 </Text>
                 <TouchableOpacity
                   style={styles.healthLinkButton}
@@ -310,8 +444,11 @@ export default function AssessmentResults() {
             </ResultCard>
 
             {/* Emergency Section - Show more prominently for high severity */}
-            {(severity >= 6) && (
-              <ResultCard title="🚨 Immediate Action Recommended" icon="alert-circle">
+            {severity >= 6 && (
+              <ResultCard
+                title="🚨 Immediate Action Recommended"
+                icon="alert-circle"
+              >
                 <View style={styles.emergencyList}>
                   <EmergencyItem text="Severe difficulty breathing or chest pain" />
                   <EmergencyItem text="Signs of stroke (face drooping, arm weakness, speech difficulty)" />
@@ -401,9 +538,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   urgencyIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 16,
     borderRadius: 12,
     shadowColor: "#000",
@@ -458,38 +595,38 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   loadingContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
     color: "#666",
-    textAlign: 'center',
+    textAlign: "center",
   },
   errorNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E0',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E0",
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#FF6B35',
+    borderLeftColor: "#FF6B35",
   },
   errorNoteText: {
     fontSize: 12,
-    color: '#E65100',
+    color: "#E65100",
     marginLeft: 8,
     flex: 1,
   },
   summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   summaryItem: {
-    width: '48%',
+    width: "48%",
     marginBottom: 12,
   },
   summaryLabel: {
@@ -504,7 +641,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   photoContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginRight: 12,
   },
   assessmentPhoto: {

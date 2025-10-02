@@ -26,7 +26,7 @@ export default function SymptomSeverity() {
     pathname: "/(tabs)/ai-assess/symptom-duration",
     params: {
       ...params,
-      severity: severityLevel.toString(), 
+      severity: severityLevel.toString(),
     },
   });
 };
