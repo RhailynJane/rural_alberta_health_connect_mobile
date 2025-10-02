@@ -1,8 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -43,30 +45,69 @@ export default function SymptomAssessment() {
     });
   };
 
-  const handleTakePhoto = () => {
-    Alert.alert("Camera", "Camera functionality would be implemented here", [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Simulate Photo", 
-        onPress: () => {
-          const newPhoto = `photo_${Date.now()}.jpg`;
-          setUploadedPhotos(prev => [...prev, newPhoto]);
-        }
-      }
-    ]);
+  const requestCameraPermission = async (): Promise<boolean> => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need camera permissions to take photos.');
+      return false;
+    }
+    return true;
   };
 
-  const handleUploadPhoto = () => {
-    Alert.alert("Photo Upload", "Photo gallery would be opened here", [
-      { text: "Cancel", style: "cancel" },
-      { 
-        text: "Simulate Upload", 
-        onPress: () => {
-          const newPhoto = `uploaded_${Date.now()}.jpg`;
-          setUploadedPhotos(prev => [...prev, newPhoto]);
-        }
+  const requestGalleryPermission = async (): Promise<boolean> => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Sorry, we need gallery permissions to upload photos.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const hasPermission = await requestCameraPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const newPhoto = result.assets[0].uri;
+        setUploadedPhotos(prev => [...prev, newPhoto]);
+        console.log("Photo taken:", newPhoto);
       }
-    ]);
+    } catch (error) {
+      console.error("Error taking photo:", error);
+      Alert.alert("Error", "Failed to take photo. Please try again.");
+    }
+  };
+
+  const handleUploadPhoto = async () => {
+    try {
+      const hasPermission = await requestGalleryPermission();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const newPhotos = result.assets.map(asset => asset.uri);
+        setUploadedPhotos(prev => [...prev, ...newPhotos]);
+        console.log("Photos uploaded:", newPhotos);
+      }
+    } catch (error) {
+      console.error("Error uploading photos:", error);
+      Alert.alert("Error", "Failed to upload photos. Please try again.");
+    }
   };
 
   const handleRemovePhoto = (photoToRemove: string) => {
@@ -99,6 +140,11 @@ export default function SymptomAssessment() {
     }
   };
 
+  // Function to get filename from URI for display
+  const getFileName = (uri: string) => {
+    return uri.split('/').pop() || 'photo.jpg';
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -121,7 +167,7 @@ export default function SymptomAssessment() {
               Select a category or describe what you&#39;re experiencing
             </Text>
 
-            {/* Cold Weather Injuries Card Button */}
+            {/* Category cards remain the same */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -145,7 +191,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* Burns & Heat Injuries Card Button */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -169,7 +214,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* Trauma & Injuries Card Button */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -216,17 +260,28 @@ export default function SymptomAssessment() {
                 Photos can help better understand your symptoms. Only upload photos you&#39;re comfortable sharing.
               </Text>
               
-              {/* Display uploaded photos */}
+              {/* Display uploaded photos with thumbnails */}
               {uploadedPhotos.length > 0 && (
                 <View style={styles.uploadedPhotosContainer}>
+                  <Text style={[styles.uploadedPhotosTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Added Photos ({uploadedPhotos.length})
+                  </Text>
                   {uploadedPhotos.map((photo, index) => (
                     <View key={index} style={styles.uploadedPhotoItem}>
-                      <Ionicons name="image" size={16} color="#2A7DE1" />
-                      <Text style={[styles.uploadedPhotoText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        {photo}
-                      </Text>
-                      <TouchableOpacity onPress={() => handleRemovePhoto(photo)}>
-                        <Ionicons name="close-circle" size={20} color="#DC3545" />
+                      <Image source={{ uri: photo }} style={styles.photoThumbnail} />
+                      <View style={styles.photoInfo}>
+                        <Text style={[styles.uploadedPhotoText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {getFileName(photo)}
+                        </Text>
+                        <Text style={[styles.photoSizeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Photo {index + 1}
+                        </Text>
+                      </View>
+                      <TouchableOpacity 
+                        style={styles.removeButton}
+                        onPress={() => handleRemovePhoto(photo)}
+                      >
+                        <Ionicons name="close-circle" size={24} color="#DC3545" />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -394,21 +449,43 @@ const styles = StyleSheet.create({
   uploadedPhotosContainer: {
     marginBottom: 16,
   },
+  uploadedPhotosTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 8,
+  },
   uploadedPhotoItem: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 6,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: "#E9ECEF",
   },
-  uploadedPhotoText: {
+  photoThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  photoInfo: {
     flex: 1,
+  },
+  uploadedPhotoText: {
+    fontSize: 14,
+    color: "#1A1A1A",
+    fontWeight: "500",
+  },
+  photoSizeText: {
     fontSize: 12,
     color: "#666",
-    marginLeft: 8,
+    marginTop: 2,
+  },
+  removeButton: {
+    padding: 4,
   },
   photoButtons: {
     flexDirection: "row",
