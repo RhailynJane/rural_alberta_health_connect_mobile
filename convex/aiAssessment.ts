@@ -145,7 +145,6 @@ function getSeverityLevel(severity: number): string {
 
 // MUCH more detailed fallback assessments
 function getDetailedFallbackAssessment(category: string, severity: number, duration: string, symptoms: string[]): { context: string } {
-  const severityLevel = getSeverityLevel(severity);
   const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "reported symptoms";
 
   // Category-specific assessments
