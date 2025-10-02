@@ -26,63 +26,72 @@ export default function AssessmentResults() {
   const [symptomContext, setSymptomContext] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [assessmentError, setAssessmentError] = useState(false);
+  const [actualSeverity, setActualSeverity] = useState(5);
+
+  // Debug: Log all received parameters
+  useEffect(() => {
+    console.log("📋 ALL RECEIVED PARAMS:", {
+      description: params.description,
+      severity: params.severity,
+      duration: params.duration,
+      category: params.category,
+      hasAiContext: !!params.aiContext
+    });
+    
+    // Extract severity with proper debugging
+    const rawSeverity = params.severity;
+    console.log("🔍 Raw severity value:", rawSeverity);
+    
+    const severity = parseInt(
+      Array.isArray(rawSeverity) ? rawSeverity[0] : (rawSeverity || "5")
+    );
+    
+    console.log("✅ Parsed severity:", severity);
+    setActualSeverity(severity);
+
+    if (params.aiContext) {
+      const parsedContext = JSON.parse(params.aiContext as string);
+      console.log("📦 Parsed AI Context:", parsedContext);
+    }
+  }, []);
 
   const aiContext = params.aiContext
     ? JSON.parse(params.aiContext as string)
     : null;
 
-  useEffect(() => {
-    console.log("Received params:", {
-      description: params.description,
-      severity: params.severity,
-      duration: params.duration,
-      category: params.category,
-      hasAiContext: !!params.aiContext,
-    });
+  const generateContext = useMutation(api.aiAssessment.generateContextWithGemini);
 
-    if (params.aiContext) {
-      const parsedContext = JSON.parse(params.aiContext as string);
-      console.log("Parsed AI Context:", parsedContext);
-    }
-  }, []);
-
-  const generateContext = useMutation(
-    api.aiAssessment.generateContextWithGemini
-  );
   useEffect(() => {
     const fetchAIAssessment = async () => {
       try {
         setIsLoading(true);
         setAssessmentError(false);
-
+        
         // Extract parameters with proper fallbacks
-        const description = Array.isArray(params.description)
-          ? params.description[0]
+        const description = Array.isArray(params.description) 
+          ? params.description[0] 
           : params.description || "";
-
+          
         const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
+          Array.isArray(params.severity) 
+            ? params.severity[0] 
             : params.severity || "5"
         );
-
+        
         const duration = Array.isArray(params.duration)
           ? params.duration[0]
           : params.duration || "";
-
-        const category =
-          aiContext?.category ||
-          (Array.isArray(params.category)
-            ? params.category[0]
-            : params.category) ||
+        
+        const category = aiContext?.category || 
+          (Array.isArray(params.category) ? params.category[0] : params.category) || 
           "General Symptoms";
 
-        console.log("Calling Gemini with:", {
+        console.log("🚀 Calling Gemini with:", {
           description: description.substring(0, 50),
           severity,
           duration,
           category,
-          symptomsCount: aiContext?.symptoms?.length || 0,
+          symptomsCount: aiContext?.symptoms?.length || 0
         });
 
         const res = await generateContext({
@@ -94,25 +103,25 @@ export default function AssessmentResults() {
           symptoms: aiContext?.symptoms || [],
           images: aiContext?.uploadedPhotos || [],
         });
-
+        
         setSymptomContext(res.context);
       } catch (error) {
-        console.error("AI assessment error:", error);
+        console.error("❌ AI assessment error:", error);
         setAssessmentError(true);
-
+        
         // Use the actual severity for fallback
         const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
+          Array.isArray(params.severity) 
+            ? params.severity[0] 
             : params.severity || "5"
         );
-
+        
         const category = aiContext?.category || "General Symptoms";
         const duration = Array.isArray(params.duration)
           ? params.duration[0]
           : params.duration || "";
-
-        const fallback = getFallbackAssessment(category, severity, duration);
+        
+        const fallback = getDetailedFallbackAssessment(category, severity, duration, aiContext?.symptoms || []);
         setSymptomContext(fallback.context);
       } finally {
         setIsLoading(false);
@@ -122,23 +131,95 @@ export default function AssessmentResults() {
     fetchAIAssessment();
   }, []);
 
-  const getFallbackAssessment = (
-    category: string,
-    severity: number,
-    duration: string
-  ): { context: string } => {
-    const severityDesc =
-      severity >= 7 ? "severe" : severity >= 4 ? "moderate" : "mild";
+  // Enhanced fallback assessment function
+  const getDetailedFallbackAssessment = (category: string, severity: number, duration: string, symptoms: string[]): { context: string } => {
+    const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "reported symptoms";
+
+    // Category-specific detailed fallback assessments
+    const categoryAssessments = {
+      "Cold Weather Injuries": getColdWeatherAssessment(severity, mainSymptoms, duration),
+      "Burns & Heat Injuries": getBurnAssessment(severity, mainSymptoms, duration),
+      "Trauma & Injuries": getTraumaAssessment(severity, mainSymptoms, duration),
+      "Rash & Skin Conditions": getRashAssessment(severity, mainSymptoms, duration),
+      "Infections": getInfectionAssessment(severity, mainSymptoms, duration),
+      "General Symptoms": getGeneralAssessment(severity, mainSymptoms, duration)
+    };
 
     return {
-      context: `Based on your ${category.toLowerCase()} symptoms with ${severityDesc} severity (${severity}/10), ${
-        severity >= 7
-          ? "urgent medical attention is recommended. Contact Health Link Alberta at 811 for guidance."
-          : severity >= 4
-            ? "medical consultation within 24 hours is advised. Monitor symptoms closely."
-            : "self-care measures may be appropriate but seek medical advice if symptoms persist."
-      }`,
+      context: categoryAssessments[category as keyof typeof categoryAssessments] || 
+               getGeneralAssessment(severity, mainSymptoms, duration)
     };
+  };
+
+  // Specific assessment functions
+  const getColdWeatherAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 9) {
+      return `🚨 CRITICAL: Your cold injury symptoms (${symptoms}) with ${severity}/10 severity indicate potential tissue damage. This requires IMMEDIATE emergency care - call 911. Do not rub affected areas or use direct heat. Begin gentle rewarming while awaiting transport.`;
+    } else if (severity >= 7) {
+      return `⚠️ SEVERE: Your cold exposure symptoms (${symptoms}) at ${severity}/10 severity suggest significant tissue involvement. Seek URGENT care within 2-4 hours. Contact Health Link Alberta (811) for specific rewarming instructions. Monitor for color changes to blue/black.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your cold-related symptoms (${symptoms}) at ${severity}/10 severity require medical evaluation within 24 hours. Gradual rewarming and protection from further cold exposure are essential. Watch for increased pain or skin discoloration.`;
+    } else {
+      return `✅ MILD: Your cold exposure symptoms (${symptoms}) at ${severity}/10 severity can be managed with self-care. Warm the area gradually, avoid further exposure, and monitor for worsening. Seek care if numbness persists beyond 2 hours.`;
+    }
+  };
+
+  const getBurnAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 9) {
+      return `🚨 CRITICAL: Your burn symptoms (${symptoms}) at ${severity}/10 severity indicate deep tissue involvement. This is a medical emergency - call 911 immediately. Do not apply creams or break blisters. Cover with clean, dry cloth.`;
+    } else if (severity >= 7) {
+      return `⚠️ SEVERE: Your burn injury (${symptoms}) at ${severity}/10 severity requires urgent medical care within 4 hours. Contact Health Link Alberta (811) for specific wound care instructions. Monitor for signs of infection like increased redness or pus.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your burn symptoms (${symptoms}) at ${severity}/10 severity need medical evaluation within 24 hours. Keep the area clean and covered. Watch for infection signs and avoid popping any blisters.`;
+    } else {
+      return `✅ MILD: Your minor burn (${symptoms}) at ${severity}/10 severity can be managed with cool compresses and over-the-counter pain relief. Protect from further injury and monitor for healing. Seek care if pain increases or redness spreads.`;
+    }
+  };
+
+  const getTraumaAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 9) {
+      return `🚨 CRITICAL: Your traumatic injury (${symptoms}) at ${severity}/10 severity indicates potential serious damage. This is an emergency - call 911 immediately. Do not move if spinal injury is suspected. Control bleeding with direct pressure.`;
+    } else if (severity >= 7) {
+      return `⚠️ SEVERE: Your injury (${symptoms}) at ${severity}/10 severity requires urgent medical evaluation within 4-6 hours. Immobilize the area and apply ice. Watch for signs of internal bleeding like dizziness or swelling.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your injury (${symptoms}) at ${severity}/10 severity should be assessed within 24 hours. Rest, ice, compression, and elevation are recommended. Monitor for increased swelling or inability to use the affected area.`;
+    } else {
+      return `✅ MILD: Your minor injury (${symptoms}) at ${severity}/10 severity can be managed with self-care. Use RICE protocol (rest, ice, compression, elevation). Seek care if pain worsens or function doesn't improve in 48 hours.`;
+    }
+  };
+
+  const getRashAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 7) {
+      return `⚠️ SEVERE: Your skin condition (${symptoms}) at ${severity}/10 severity with extensive involvement requires medical evaluation within 24 hours. Avoid scratching and keep the area clean and dry. Watch for signs of infection like pus or fever.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your rash/skin symptoms (${symptoms}) at ${severity}/10 severity should be evaluated within 48 hours. Use gentle, fragrance-free products and avoid known irritants. Monitor for spreading or worsening.`;
+    } else {
+      return `✅ MILD: Your skin symptoms (${symptoms}) at ${severity}/10 severity may respond to self-care with gentle cleansing and moisturizing. If condition persists beyond 3 days or worsens, seek medical advice.`;
+    }
+  };
+
+  const getInfectionAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 9) {
+      return `🚨 CRITICAL: Your infection symptoms (${symptoms}) at ${severity}/10 severity with systemic involvement indicate a medical emergency. Call 911 immediately if experiencing fever with confusion, difficulty breathing, or severe pain.`;
+    } else if (severity >= 7) {
+      return `⚠️ SEVERE: Your infection (${symptoms}) at ${severity}/10 severity requires urgent medical care within 4-6 hours. Contact Health Link Alberta (811) for guidance. Watch for red streaks spreading from the area or high fever.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your infection symptoms (${symptoms}) at ${severity}/10 severity need medical evaluation within 24 hours. Keep the area clean and monitor for spreading redness, increased swelling, or fever.`;
+    } else {
+      return `✅ MILD: Your minor infection symptoms (${symptoms}) at ${severity}/10 severity may be managed with careful monitoring. Practice good hygiene and watch for worsening signs. Seek care if symptoms progress.`;
+    }
+  };
+
+  const getGeneralAssessment = (severity: number, symptoms: string, duration: string): string => {
+    if (severity >= 9) {
+      return `🚨 CRITICAL: Your symptoms (${symptoms}) at ${severity}/10 severity indicate a potential medical emergency. Seek immediate care - call 911 or proceed to nearest emergency department. Do not delay due to rural location concerns.`;
+    } else if (severity >= 7) {
+      return `⚠️ SEVERE: Your symptoms (${symptoms}) at ${severity}/10 severity require urgent medical attention within 4-6 hours. Contact Health Link Alberta (811) for specific guidance. Have a travel plan ready considering weather conditions.`;
+    } else if (severity >= 4) {
+      return `🔶 MODERATE: Your symptoms (${symptoms}) at ${severity}/10 severity should be evaluated within 24-48 hours. Schedule a clinic visit and monitor for any worsening. Keep emergency contacts accessible.`;
+    } else {
+      return `✅ MILD: Your symptoms (${symptoms}) at ${severity}/10 severity may be managed with self-care and monitoring. If symptoms persist beyond 3 days or worsen, contact healthcare services. Remember rural access may require advance planning.`;
+    }
   };
 
   const handleCall911 = () => Linking.openURL("tel:911");
@@ -147,22 +228,22 @@ export default function AssessmentResults() {
   const handleReturnHome = () => router.replace("/(tabs)/dashboard");
 
   const getUrgencyColor = (severity: number) => {
-    if (severity >= 8) return "#DC3545"; // Emergency - Red
-    if (severity >= 6) return "#FF6B35"; // Urgent - Orange
+    if (severity >= 9) return "#DC3545"; // Critical - Red
+    if (severity >= 7) return "#FF6B35"; // Severe - Orange
     if (severity >= 4) return "#FFC107"; // Moderate - Yellow
-    return "#28A745"; // Low - Green
+    return "#28A745"; // Mild - Green
   };
 
   const getUrgencyText = (severity: number) => {
-    if (severity >= 8) return "Emergency Care Needed";
-    if (severity >= 6) return "Urgent Care Recommended";
-    if (severity >= 4) return "Moderate Urgency";
-    return "Routine Care";
+    if (severity >= 9) return "Critical Emergency";
+    if (severity >= 7) return "Severe - Urgent Care";
+    if (severity >= 4) return "Moderate - Prompt Care";
+    return "Mild - Self Care";
   };
 
   const getUrgencyIcon = (severity: number) => {
-    if (severity >= 8) return "alert-circle";
-    if (severity >= 6) return "warning";
+    if (severity >= 9) return "alert-circle";
+    if (severity >= 7) return "warning";
     if (severity >= 4) return "information-circle";
     return "checkmark-circle";
   };
@@ -203,8 +284,6 @@ export default function AssessmentResults() {
     </View>
   );
 
-  const severity = aiContext?.severity || 5;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -228,30 +307,30 @@ export default function AssessmentResults() {
               AI Health Assessment
             </Text>
 
-            {/* Urgency Indicator */}
+            {/* Urgency Indicator - Using actualSeverity from state */}
             <View style={styles.urgencyContainer}>
               <View
                 style={[
                   styles.urgencyIndicator,
-                  { backgroundColor: getUrgencyColor(severity) },
+                  { backgroundColor: getUrgencyColor(actualSeverity) },
                 ]}
               >
                 <Ionicons
-                  name={getUrgencyIcon(severity) as any}
+                  name={getUrgencyIcon(actualSeverity) as any}
                   size={24}
                   color="white"
                 />
                 <Text style={styles.urgencyText}>
-                  {getUrgencyText(severity)}
+                  {getUrgencyText(actualSeverity)}
                 </Text>
                 <Text style={styles.severityText}>
-                  Severity Level: {severity}/10
+                  Severity Level: {actualSeverity}/10
                 </Text>
               </View>
             </View>
 
             {/* AI Assessment */}
-            <ResultCard title="Gemini Health Assessment" icon="medical">
+            <ResultCard title="Medical Triage Assessment" icon="medical">
               {isLoading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#2A7DE1" />
@@ -261,7 +340,7 @@ export default function AssessmentResults() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Analyzing your symptoms with Google Gemini...
+                    Analyzing your symptoms with AI assessment...
                   </Text>
                 </View>
               ) : (
@@ -269,7 +348,7 @@ export default function AssessmentResults() {
                   <Text
                     style={[
                       styles.cardText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      { fontFamily: FONTS.BarlowSemiCondensed, lineHeight: 22 },
                     ]}
                   >
                     {symptomContext}
@@ -287,8 +366,7 @@ export default function AssessmentResults() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        Using fallback assessment. For precise guidance, contact
-                        Health Link Alberta.
+                        Note: Using enhanced assessment. For precise medical guidance, contact Health Link Alberta at 811.
                       </Text>
                     </View>
                   )}
@@ -336,15 +414,37 @@ export default function AssessmentResults() {
                       {aiContext.duration}
                     </Text>
                   </View>
+                  <View style={styles.summaryItem}>
+                    <Text
+                      style={[
+                        styles.summaryLabel,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Severity
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryValue,
+                        { 
+                          fontFamily: FONTS.BarlowSemiCondensed,
+                          color: getUrgencyColor(actualSeverity),
+                          fontWeight: '700'
+                        },
+                      ]}
+                    >
+                      {actualSeverity}/10
+                    </Text>
+                  </View>
                   {aiContext.symptoms?.length > 0 && (
-                    <View style={styles.summaryItem}>
+                    <View style={styles.summaryFullWidth}>
                       <Text
                         style={[
                           styles.summaryLabel,
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        Detected Symptoms
+                        Key Symptoms
                       </Text>
                       <Text
                         style={[
@@ -352,8 +452,8 @@ export default function AssessmentResults() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        {aiContext.symptoms.slice(0, 3).join(", ")}
-                        {aiContext.symptoms.length > 3 && "..."}
+                        {aiContext.symptoms.slice(0, 5).join(", ")}
+                        {aiContext.symptoms.length > 5 && "..."}
                       </Text>
                     </View>
                   )}
@@ -370,8 +470,7 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 },
                   ]}
                 >
-                  {aiContext.uploadedPhotos.length} photo(s) analyzed for
-                  symptom assessment
+                  {aiContext.uploadedPhotos.length} photo(s) included in assessment
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   {aiContext.uploadedPhotos.map(
@@ -405,8 +504,7 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Nearest hospital may be 30+ minutes away - plan travel
-                  accordingly
+                  • Nearest hospital may be 30+ minutes away - plan travel accordingly
                 </Text>
                 <Text
                   style={[
@@ -414,8 +512,7 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Weather conditions may impact road access to medical
-                  facilities
+                  • Weather conditions may impact road access to medical facilities
                 </Text>
                 <Text
                   style={[
@@ -423,8 +520,7 @@ export default function AssessmentResults() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Keep emergency kit and communication devices charged and
-                  ready
+                  • Keep emergency kit and communication devices charged and ready
                 </Text>
                 <TouchableOpacity
                   style={styles.healthLinkButton}
@@ -444,7 +540,7 @@ export default function AssessmentResults() {
             </ResultCard>
 
             {/* Emergency Section - Show more prominently for high severity */}
-            {severity >= 6 && (
+            {actualSeverity >= 6 && (
               <ResultCard
                 title="🚨 Immediate Action Recommended"
                 icon="alert-circle"
@@ -455,6 +551,7 @@ export default function AssessmentResults() {
                   <EmergencyItem text="Heavy bleeding that won't stop" />
                   <EmergencyItem text="Severe burns or traumatic injury" />
                   <EmergencyItem text="Loss of consciousness or confusion" />
+                  <EmergencyItem text="Severe allergic reaction with swelling or breathing trouble" />
                 </View>
                 <TouchableOpacity
                   style={styles.emergencyButton}
@@ -627,6 +724,10 @@ const styles = StyleSheet.create({
   },
   summaryItem: {
     width: "48%",
+    marginBottom: 12,
+  },
+  summaryFullWidth: {
+    width: "100%",
     marginBottom: 12,
   },
   summaryLabel: {
