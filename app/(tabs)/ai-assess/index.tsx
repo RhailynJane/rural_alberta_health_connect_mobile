@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: "#666",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     marginLeft: 8,
   },
@@ -698,7 +698,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#2A7DE1",
     paddingVertical: 16,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     borderRadius: 30,
     flex: 1,
     marginLeft: 12,
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     color: "white",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     marginRight: 8,
   },
