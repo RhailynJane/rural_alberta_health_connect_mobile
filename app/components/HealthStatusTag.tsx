@@ -18,6 +18,8 @@ const HealthStatusTag: React.FC<HealthStatusTagProps> = ({ status }) => {
         return '#DC3545'; // Red
       case 'excellent':
         return '#17A2B8'; // Teal
+      case 'unknown':
+        return '#6C757D'; // Gray for unknown/no data
       default:
         return '#6C757D'; // Gray for unknown status
     }

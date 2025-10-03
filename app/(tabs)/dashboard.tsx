@@ -26,41 +26,46 @@ export default function Dashboard() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const queryArgs = isAuthenticated ? {} : "skip";
-  
+
   // Get current user data
   const user = useQuery(api.users.getCurrentUser, queryArgs);
-  
+
   // Get entries for the last 7 days to calculate health score
   const getLast7DaysDateRange = () => {
     const today = new Date();
     const startDate = new Date(today);
     startDate.setDate(today.getDate() - 7);
     startDate.setHours(0, 0, 0, 0);
-    
+
     const endDate = new Date(today);
     endDate.setHours(23, 59, 59, 999);
-    
+
     return {
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0]
+      startDate: startDate.toISOString().split("T")[0],
+      endDate: endDate.toISOString().split("T")[0],
     };
   };
 
   const dateRange = getLast7DaysDateRange();
   const weeklyEntries = useQuery(
     api.healthEntries.getEntriesByDateRange,
-    user?._id ? { 
-      userId: user._id,
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate
-    } : "skip"
+    user?._id
+      ? {
+          userId: user._id,
+          startDate: dateRange.startDate,
+          endDate: dateRange.endDate,
+        }
+      : "skip"
   );
 
   // Calculate weekly health score
   const calculateWeeklyHealthScore = () => {
     if (!weeklyEntries || weeklyEntries.length === 0) return "0.0";
-    
-    const totalScore = weeklyEntries.reduce((sum, entry) => sum + (10 - entry.severity), 0);
+
+    const totalScore = weeklyEntries.reduce(
+      (sum, entry) => sum + (10 - entry.severity),
+      0
+    );
     const averageScore = totalScore / weeklyEntries.length;
     return averageScore.toFixed(1);
   };
@@ -69,6 +74,11 @@ export default function Dashboard() {
 
   // Determine health status based on weekly health score
   useEffect(() => {
+    if (!weeklyEntries || weeklyEntries.length === 0) {
+      setHealthStatus("Unknown");
+      return;
+    }
+
     const score = parseFloat(weeklyHealthScore);
     if (score >= 8.0) {
       setHealthStatus("Excellent");
@@ -79,7 +89,7 @@ export default function Dashboard() {
     } else {
       setHealthStatus("Poor");
     }
-  }, [weeklyHealthScore]);
+  }, [weeklyHealthScore, weeklyEntries]);
 
   if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
@@ -246,53 +256,59 @@ export default function Dashboard() {
                   </Text>
                 </TouchableOpacity>
               </View>
-              
-              <View style={styles.healthScoreContent}>
-                <Text
-                  style={[
-                    styles.healthScoreValue,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {weeklyHealthScore}/10
-                </Text>
-                <Text
-                  style={[
-                    styles.healthScoreSubtitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Based on {weeklyEntries?.length || 0} entries this week
-                </Text>
-                
-                {/* Health Score Progress Bar */}
-                <View style={styles.progressBarContainer}>
-                  <View 
-                    style={[
-                      styles.progressBar, 
-                      { width: `${parseFloat(weeklyHealthScore) * 10}%` }
-                    ]} 
-                  />
-                </View>
-                
-                <View style={styles.scoreInterpretation}>
-                  <Text
-                    style={[
-                      styles.interpretationText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {parseFloat(weeklyHealthScore) >= 8.0 
-                      ? "🎉 Excellent! Keep up the good work!" 
-                      : parseFloat(weeklyHealthScore) >= 6.0 
-                      ? "👍 Good overall health status" 
-                      : parseFloat(weeklyHealthScore) >= 4.0 
-                      ? "⚠️ Fair - monitor your symptoms" 
-                      : "🚨 Poor - consider seeking medical advice"
-                    }
-                  </Text>
-                </View>
-              </View>
+
+              <View style={styles.healthScoreContent}></View>
+              <Text
+                style={[
+                  styles.healthScoreValue,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                {weeklyEntries && weeklyEntries.length > 0
+                  ? `${weeklyHealthScore}/10`
+                  : "N/A"}
+              </Text>
+              <Text
+                style={[
+                  styles.healthScoreSubtitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                {weeklyEntries && weeklyEntries.length > 0
+                  ? `Based on ${weeklyEntries.length} entries this week`
+                  : "No entries this week"}
+              </Text>
+
+              {/* Health Score Progress Bar - only show if there are entries */}
+              {weeklyEntries && weeklyEntries.length > 0 && (
+                <>
+                  <View style={styles.progressBarContainer}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        { width: `${parseFloat(weeklyHealthScore) * 10}%` },
+                      ]}
+                    />
+                  </View>
+
+                  <View style={styles.scoreInterpretation}>
+                    <Text
+                      style={[
+                        styles.interpretationText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {parseFloat(weeklyHealthScore) >= 8.0
+                        ? "🎉 Excellent! Keep up the good work!"
+                        : parseFloat(weeklyHealthScore) >= 6.0
+                          ? "👍 Good overall health status"
+                          : parseFloat(weeklyHealthScore) >= 4.0
+                            ? "⚠️ Fair - monitor your symptoms"
+                            : "🚨 Poor - consider seeking medical advice"}
+                    </Text>
+                  </View>
+                </>
+              )}
             </View>
 
             {/* Quick Actions */}
@@ -305,9 +321,9 @@ export default function Dashboard() {
               >
                 Quick Actions
               </Text>
-              
+
               <View style={styles.quickActionsRow}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.quickActionButton}
                   onPress={handleSymptomAssessment}
                 >
@@ -324,7 +340,7 @@ export default function Dashboard() {
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.quickActionButton}
                   onPress={navigateToDailyLog}
                 >
@@ -342,7 +358,6 @@ export default function Dashboard() {
                 </TouchableOpacity>
               </View>
             </View>
-
 
             {/* Medical Disclaimer */}
             <View style={styles.disclaimerContainer}>
