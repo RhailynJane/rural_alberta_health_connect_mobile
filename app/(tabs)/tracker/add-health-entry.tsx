@@ -1,9 +1,12 @@
+import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "convex/react";
+import * as ImagePicker from 'expo-image-picker';
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +28,8 @@ import { FONTS } from "../../constants/constants";
 export default function AddHealthEntry() {
   const currentUser = useQuery(api.users.getCurrentUser);
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
+  const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+  const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
   
   // State for form fields
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -32,6 +37,8 @@ export default function AddHealthEntry() {
   const [symptoms, setSymptoms] = useState("");
   const [severity, setSeverity] = useState("");
   const [notes, setNotes] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   // State for picker visibility
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -44,13 +51,12 @@ export default function AddHealthEntry() {
   );
 
   // Format date as YYYY-MM-DD in UTC to match the query
-const formatDate = (date: Date) => {
-  // Use UTC to avoid timezone issues
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+  const formatDate = (date: Date) => {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
   // Format time as HH:MM AM/PM in 12-hour format
   const formatTime = (date: Date) => {
@@ -62,6 +68,105 @@ const formatDate = (date: Date) => {
     hours = hours ? hours : 12;
 
     return `${hours}:${minutes} ${ampm}`;
+  };
+
+  // Handle image picker
+  const pickImage = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Sorry, we need camera roll permissions to upload photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0];
+        await uploadImage(selectedImage.uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  // Take photo with camera
+  const takePhoto = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Sorry, we need camera permissions to take photos.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const takenPhoto = result.assets[0];
+        await uploadImage(takenPhoto.uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  // Upload image to Convex storage
+  const uploadImage = async (imageUri: string) => {
+    if (uploading) return;
+    
+    setUploading(true);
+    try {
+      // Generate upload URL
+      const uploadUrl = await generateUploadUrl();
+      
+      // Convert image to blob
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      
+      // Upload to Convex
+      const result = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': blob.type },
+        body: blob,
+      });
+      
+      if (!result.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      const { storageId } = await result.json();
+      
+      // Store the photo reference
+      const photoUrl = await storeUploadedPhoto({ storageId });
+      
+      // Add to local state
+      setPhotos(prev => [...prev, photoUrl]);
+      
+      console.log('✅ Photo uploaded successfully:', photoUrl);
+    } catch (error) {
+      console.error('❌ Error uploading image:', error);
+      Alert.alert('Upload Error', 'Failed to upload photo. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Remove photo from list
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
   // Handle date picker change
@@ -86,21 +191,20 @@ const formatDate = (date: Date) => {
 
   // Create timestamp from date and time
   const createTimestamp = (date: Date, time: Date) => {
-  // Create a date in local time but store it consistently
-  const combinedDate = new Date(date);
-  const [timeStr, modifier] = formatTime(time).split(' ');
-  let [hours, minutes] = timeStr.split(':');
-  
-  if (modifier === 'PM' && hours !== '12') {
-    hours = (parseInt(hours) + 12).toString();
-  }
-  if (modifier === 'AM' && hours === '12') {
-    hours = '00';
-  }
-  
-  combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-  return combinedDate.getTime();
-};
+    const combinedDate = new Date(date);
+    const [timeStr, modifier] = formatTime(time).split(' ');
+    let [hours, minutes] = timeStr.split(':');
+    
+    if (modifier === 'PM' && hours !== '12') {
+      hours = (parseInt(hours) + 12).toString();
+    }
+    if (modifier === 'AM' && hours === '12') {
+      hours = '00';
+    }
+    
+    combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return combinedDate.getTime();
+  };
 
   // Save health entry and navigate back
   const handleSaveEntry = async () => {
@@ -124,6 +228,7 @@ const formatDate = (date: Date) => {
         symptoms,
         severity: parseInt(severity),
         notes,
+        photos: photos.length,
       });
 
       await logManualEntry({
@@ -133,11 +238,11 @@ const formatDate = (date: Date) => {
         symptoms,
         severity: parseInt(severity),
         notes,
+        photos: photos, 
         createdBy: currentUser.firstName || "User",
-        // type: "manual_entry", // Remove this if not in schema
       });
 
-      console.log("✅ Manual entry saved successfully");
+      console.log("✅ Manual entry saved successfully with photos");
       router.back();
     } catch (error) {
       console.error("❌ Failed to save manual entry:", error);
@@ -241,6 +346,68 @@ const formatDate = (date: Date) => {
                     display={Platform.OS === "ios" ? "spinner" : "default"}
                     onChange={handleTimeChange}
                   />
+                )}
+              </View>
+
+              {/* Photo Upload Section */}
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[
+                    styles.label,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Add Photos ({photos.length}/5)
+                </Text>
+                
+                {/* Photo Upload Buttons */}
+                <View style={styles.photoButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.photoButton}
+                    onPress={pickImage}
+                    disabled={uploading || photos.length >= 5}
+                  >
+                    <Ionicons name="image-outline" size={20} color="#2A7DE1" />
+                    <Text style={styles.photoButtonText}>Choose from Library</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity
+                    style={styles.photoButton}
+                    onPress={takePhoto}
+                    disabled={uploading || photos.length >= 5}
+                  >
+                    <Ionicons name="camera-outline" size={20} color="#2A7DE1" />
+                    <Text style={styles.photoButtonText}>Take Photo</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Uploading Indicator */}
+                {uploading && (
+                  <View style={styles.uploadingContainer}>
+                    <Text style={styles.uploadingText}>Uploading photo...</Text>
+                  </View>
+                )}
+
+                {/* Selected Photos Preview */}
+                {photos.length > 0 && (
+                  <View style={styles.photosContainer}>
+                    <Text style={styles.photosLabel}>Selected Photos:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.photosList}>
+                        {photos.map((photo, index) => (
+                          <View key={index} style={styles.photoItem}>
+                            <Image source={{ uri: photo }} style={styles.photoPreview} />
+                            <TouchableOpacity
+                              style={styles.removePhotoButton}
+                              onPress={() => removePhoto(index)}
+                            >
+                              <Ionicons name="close-circle" size={20} color="#DC3545" />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
                 )}
               </View>
 
@@ -380,6 +547,7 @@ const formatDate = (date: Date) => {
                 <TouchableOpacity
                   style={[styles.button, styles.saveButton]}
                   onPress={handleSaveEntry}
+                  disabled={uploading}
                 >
                   <Text
                     style={[
@@ -387,7 +555,7 @@ const formatDate = (date: Date) => {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Save Entry
+                    {uploading ? "Uploading..." : "Save Entry"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -457,6 +625,73 @@ const styles = StyleSheet.create({
   notesInput: {
     minHeight: 100,
     textAlignVertical: "top",
+  },
+  // Photo upload styles
+  photoButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  photoButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0F8FF",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+    borderStyle: "dashed",
+    gap: 8,
+  },
+  photoButtonText: {
+    fontSize: 14,
+    color: "#2A7DE1",
+    fontWeight: "600",
+  },
+  uploadingContainer: {
+    backgroundColor: "#FFF3E0",
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF6B35",
+  },
+  uploadingText: {
+    fontSize: 14,
+    color: "#E65100",
+    textAlign: "center",
+  },
+  photosContainer: {
+    marginTop: 12,
+  },
+  photosLabel: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  photosList: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  photoItem: {
+    position: "relative",
+  },
+  photoPreview: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  removePhotoButton: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: "white",
+    borderRadius: 10,
   },
   modalOverlay: {
     flex: 1,

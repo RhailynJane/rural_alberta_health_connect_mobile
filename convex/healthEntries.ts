@@ -43,6 +43,7 @@ export const logManualEntry = mutation({
     severity: v.number(),
     notes: v.optional(v.string()),
     createdBy: v.string(),
+    photos: v.optional(v.array(v.string())), 
   },
   handler: async (ctx, args) => {
     const entryId = await ctx.db.insert("healthEntries", {
@@ -54,6 +55,7 @@ export const logManualEntry = mutation({
       notes: args.notes || "",
       createdBy: args.createdBy,
       type: "manual_entry",
+      photos: args.photos || [], 
     });
 
     return entryId;
@@ -122,5 +124,20 @@ export const getAllUserEntries = query({
       .collect();
 
     return entries;
+  },
+});
+
+export const generateUploadUrl = mutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const storeUploadedPhoto = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    // Get the image URL from storage
+    const imageUrl = await ctx.storage.getUrl(args.storageId);
+    return imageUrl || "";
   },
 });

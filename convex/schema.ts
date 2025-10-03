@@ -41,10 +41,11 @@ export default defineSchema({
     category: v.optional(v.string()),
     duration: v.optional(v.string()),
     aiContext: v.optional(v.string()),
-    photos: v.optional(v.array(v.string())),
+      photos: v.optional(v.array(v.string())), 
     notes: v.optional(v.string()),
     createdBy: v.string(),
     type: v.optional(v.string()),
+
   })
     .index("byUserId", ["userId"])
     .index("byDate", ["date"])
