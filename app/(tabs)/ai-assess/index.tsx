@@ -162,7 +162,7 @@ export default function SymptomAssessment() {
         params: {
           category: selectedCategory || "Custom",
           description: symptomDescription,
-          photos: JSON.stringify(uploadedPhotos), // Keep URIs for display
+          photos: JSON.stringify(uploadedPhotos), // Keep original URIs for display
           aiContext: JSON.stringify(finalAiContext),
         },
       });

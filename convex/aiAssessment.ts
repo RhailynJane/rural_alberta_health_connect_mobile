@@ -4,30 +4,33 @@ import { action } from "./_generated/server";
 
 function getDurationDescription(duration: string): string {
   const durationMap: Record<string, string> = {
-    "today": "Started today (acute onset)",
-    "yesterday": "Started yesterday (1 day duration)",
+    today: "Started today (acute onset)",
+    yesterday: "Started yesterday (1 day duration)",
     "2-3_days": "Started 2-3 days ago",
     "1_week": "Started approximately 1 week ago",
     "2_weeks_plus": "Started 2+ weeks ago (chronic)",
-    "ongoing": "Ongoing/chronic condition"
+    ongoing: "Ongoing/chronic condition",
   };
   return durationMap[duration] || duration;
 }
 
 function getDetailedFallbackAssessment(
-  category: string, 
-  severity: number, 
-  duration: string, 
+  category: string,
+  severity: number,
+  duration: string,
   symptoms: string[]
 ): { context: string } {
-  const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "the symptoms you described";
-  
+  const mainSymptoms =
+    symptoms.length > 0
+      ? symptoms.slice(0, 3).join(", ")
+      : "the symptoms you described";
+
   return {
     context: `I apologize, but I'm unable to provide a detailed visual analysis at this time. Based on your reported symptoms (${mainSymptoms}) with severity ${severity}/10, I recommend:
 
 ${severity >= 7 ? "⚠️ URGENT: Contact Health Link Alberta at 811 immediately for professional medical guidance, or proceed to the nearest emergency department if symptoms are worsening." : "Please contact Health Link Alberta at 811 for a proper medical assessment, as they can provide personalized guidance based on your specific situation."}
 
-For immediate medical emergencies (difficulty breathing, chest pain, severe bleeding, loss of consciousness), always call 911.`
+For immediate medical emergencies (difficulty breathing, chest pain, severe bleeding, loss of consciousness), always call 911.`,
   };
 }
 
@@ -41,15 +44,23 @@ export const generateContextWithGemini = action({
     symptoms: v.array(v.string()),
     images: v.optional(v.array(v.string())),
   },
-  handler: async(ctx, args) => {
-    const { description, severity, duration, environmentalFactors, category, symptoms, images } = args;
+  handler: async (ctx, args) => {
+    const {
+      description,
+      severity,
+      duration,
+      environmentalFactors,
+      category,
+      symptoms,
+      images,
+    } = args;
 
-    console.log("🔍 Gemini Medical Assessment Request:", { 
-      category, 
-      severity, 
+    console.log("🔍 Gemini Medical Assessment Request:", {
+      category,
+      severity,
       hasImages: images && images.length > 0,
       imageCount: images?.length || 0,
-      descriptionLength: description.length
+      descriptionLength: description.length,
     });
 
     const systemPrompt = `You are an experienced emergency medicine triage nurse with 15+ years of experience in rural healthcare settings. Your role is to analyze patient presentations and provide clinical triage assessments.
@@ -82,7 +93,7 @@ Then provide:
 Communicate like a clinical professional: direct, specific, evidence-based, but compassionate. Avoid medical jargon without explanation. If you see concerning features in photos, clearly state what you observe and why it concerns you.`;
 
     const durationContext = getDurationDescription(duration);
-    
+
     const userPrompt = `
 PATIENT TRIAGE ASSESSMENT
 
@@ -95,7 +106,9 @@ SYMPTOM DURATION: ${durationContext}
 ASSOCIATED SYMPTOMS: ${symptoms.length > 0 ? symptoms.join(", ") : "See description"}
 ENVIRONMENTAL/EXPOSURE FACTORS: ${environmentalFactors.length > 0 ? environmentalFactors.join(", ") : "None reported"}
 
-${images && images.length > 0 ? `
+${
+  images && images.length > 0
+    ? `
 CLINICAL PHOTOS AVAILABLE: ${images.length} image(s) provided
 Please perform a thorough visual examination and describe:
 - Visible appearance (color, texture, size, shape, borders)
@@ -103,9 +116,11 @@ Please perform a thorough visual examination and describe:
 - Signs of infection, inflammation, or tissue damage
 - Comparison to typical presentations
 - Any concerning features requiring immediate attention
-` : `
+`
+    : `
 NO VISUAL DOCUMENTATION PROVIDED
-Assessment based on patient description only. Recommend documentation with photos if condition is visible.`}
+Assessment based on patient description only. Recommend documentation with photos if condition is visible.`
+}
 
 CLINICAL CONTEXT:
 - Setting: Rural Alberta healthcare system
@@ -118,17 +133,26 @@ Provide your clinical triage assessment as an experienced emergency medicine nur
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         console.error("❌ Gemini API key missing");
-        return getDetailedFallbackAssessment(category, severity, duration, symptoms);
+        return getDetailedFallbackAssessment(
+          category,
+          severity,
+          duration,
+          symptoms
+        );
       }
 
-      const modelName = images && images.length > 0 ? "gemini-1.5-pro-latest" : "gemini-pro";
+      const modelName = "gemini-2.5-flash-lite";
       const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
-      
+
       const contentParts: any[] = [
-        { text: `${systemPrompt}\n\n${userPrompt}` }
+        { text: `${systemPrompt}\n\n${userPrompt}` },
       ];
 
-      if (images && images.length > 0 && modelName === "gemini-1.5-pro-latest") {
+      if (
+        images &&
+        images.length > 0 &&
+        modelName === "gemini-2.5-flash-lite"
+      ) {
         console.log(`📸 Adding ${images.length} images for visual analysis...`);
         for (let i = 0; i < images.length; i++) {
           const imageData = images[i];
@@ -136,8 +160,8 @@ Provide your clinical triage assessment as an experienced emergency medicine nur
             contentParts.push({
               inlineData: {
                 mimeType: "image/jpeg",
-                data: imageData
-              }
+                data: imageData,
+              },
             });
             console.log(`✓ Added image ${i + 1}/${images.length}`);
           } catch (imgError) {
@@ -145,11 +169,13 @@ Provide your clinical triage assessment as an experienced emergency medicine nur
           }
         }
       }
-      
+
       const body = {
-        contents: [{
-          parts: contentParts
-        }],
+        contents: [
+          {
+            parts: contentParts,
+          },
+        ],
         generationConfig: {
           temperature: 0.3,
           maxOutputTokens: 1200,
@@ -158,18 +184,18 @@ Provide your clinical triage assessment as an experienced emergency medicine nur
         },
         safetySettings: [
           {
-            category: "HARM_CATEGORY_MEDICAL",
-            threshold: "BLOCK_NONE"
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold: "BLOCK_NONE",
           },
           {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_NONE"
-          }
-        ]
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_NONE",
+          },
+        ],
       };
 
       console.log("📤 Sending clinical assessment request to Gemini...");
-      
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -177,35 +203,54 @@ Provide your clinical triage assessment as an experienced emergency medicine nur
         },
         body: JSON.stringify(body),
       });
-      
+
       const responseText = await response.text();
       console.log("📥 Gemini response status:", response.status);
-      
+
       if (!response.ok) {
         console.error("❌ Gemini API error:", responseText);
-        return getDetailedFallbackAssessment(category, severity, duration, symptoms);
+        return getDetailedFallbackAssessment(
+          category,
+          severity,
+          duration,
+          symptoms
+        );
       }
-      
+
       const data = JSON.parse(responseText);
-      
+
       if (data.promptFeedback?.blockReason) {
         console.warn("⚠️ Content blocked:", data.promptFeedback.blockReason);
-        return getDetailedFallbackAssessment(category, severity, duration, symptoms);
+        return getDetailedFallbackAssessment(
+          category,
+          severity,
+          duration,
+          symptoms
+        );
       }
-      
+
       const context = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      
+
       if (!context) {
         console.warn("❌ No assessment generated");
-        return getDetailedFallbackAssessment(category, severity, duration, symptoms);
+        return getDetailedFallbackAssessment(
+          category,
+          severity,
+          duration,
+          symptoms
+        );
       }
-      
+
       console.log("✅ Clinical assessment completed successfully");
       return { context };
-      
     } catch (error) {
       console.error("❌ Assessment error:", error);
-      return getDetailedFallbackAssessment(category, severity, duration, symptoms);
+      return getDetailedFallbackAssessment(
+        category,
+        severity,
+        duration,
+        symptoms
+      );
     }
-  }
+  },
 });
