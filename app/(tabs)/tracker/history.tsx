@@ -1,29 +1,60 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useQuery } from "convex/react";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function History() {
+  const currentUser = useQuery(api.users.getCurrentUser);
+
+  // Set dates without time components for proper filtering
+  const getDateWithoutTime = (date: Date) => {
+    const newDate = new Date(date);
+    newDate.setHours(0, 0, 0, 0);
+    return newDate;
+  };
+
+  const getEndOfDay = (date: Date) => {
+    const newDate = new Date(date);
+    newDate.setHours(23, 59, 59, 999);
+    return newDate;
+  };
+
   const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  ); // 7 days ago
-  const [endDate, setEndDate] = useState(new Date());
+    getDateWithoutTime(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+  );
+  const [endDate, setEndDate] = useState(getEndOfDay(new Date()));
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [selectedRange, setSelectedRange] = useState("7d"); // Default to 7 days
+  const [selectedRange, setSelectedRange] = useState("7d");
+
+  // Get all user entries
+  const allEntries = useQuery(
+    api.healthEntries.getAllUserEntries,
+    currentUser ? { userId: currentUser._id } : "skip"
+  );
+
+  const handleViewEntryDetails = (entryId: string) => {
+    router.push({
+      pathname: "/tracker/log-details",
+      params: { entryId },
+    });
+  };
 
   const formatDate = (date: Date) => {
     const year = date.getFullYear();
@@ -48,16 +79,24 @@ export default function History() {
 
     switch (range) {
       case "today":
-        setStartDate(today);
-        setEndDate(today);
+        setStartDate(getDateWithoutTime(today));
+        setEndDate(getEndOfDay(today));
         break;
       case "7d":
-        setStartDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
-        setEndDate(today);
+        setStartDate(
+          getDateWithoutTime(
+            new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+          )
+        );
+        setEndDate(getEndOfDay(today));
         break;
       case "30d":
-        setStartDate(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000));
-        setEndDate(today);
+        setStartDate(
+          getDateWithoutTime(
+            new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+          )
+        );
+        setEndDate(getEndOfDay(today));
         break;
       case "custom":
         // Keep current dates for custom selection
@@ -68,12 +107,13 @@ export default function History() {
   const onStartDateChange = (event: any, selectedDate: Date | undefined) => {
     setShowStartDatePicker(false);
     if (selectedDate) {
+      const dateWithoutTime = getDateWithoutTime(selectedDate);
       // Validate that start date is not after end date
-      if (selectedDate > endDate) {
+      if (dateWithoutTime > endDate) {
         Alert.alert("Invalid Date", "Start date must be before end date");
         return;
       }
-      setStartDate(selectedDate);
+      setStartDate(dateWithoutTime);
       setSelectedRange("custom");
     }
   };
@@ -81,50 +121,42 @@ export default function History() {
   const onEndDateChange = (event: any, selectedDate: Date | undefined) => {
     setShowEndDatePicker(false);
     if (selectedDate) {
+      const endOfDay = getEndOfDay(selectedDate);
       // Validate that end date is not before start date
-      if (selectedDate < startDate) {
+      if (endOfDay < startDate) {
         Alert.alert("Invalid Date", "End date must be after start date");
         return;
       }
-      setEndDate(selectedDate);
+      setEndDate(endOfDay);
       setSelectedRange("custom");
     }
   };
 
-  const showMedicalDisclaimer = () => {
-    Alert.alert(
-      "Medical Disclaimer",
-      "This tracker is for personal monitoring only.\nSeek immediate medical attention for severe symptoms or emergencies.",
-      [{ text: "OK", onPress: () => console.log("Disclaimer acknowledged") }]
-    );
-  };
-
-  // Sample data - in a real app this would come from your data source
-  const sampleEntries = [
-    {
-      id: 1,
-      date: new Date(2025, 8, 13, 14, 30), // Month is 0-indexed
-      severity: "Mild",
-      description: "Mild headache after working outside in cold",
-    },
-    {
-      id: 2,
-      date: new Date(2025, 8, 12, 14, 30),
-      severity: "Moderate",
-      description: "Knee pain after shoveling snow",
-    },
-    {
-      id: 3,
-      date: new Date(2025, 8, 10, 9, 15),
-      severity: "Severe",
-      description: "Migraine with sensitivity to light",
-    },
-  ];
-
   // Filter entries based on selected date range
-  const filteredEntries = sampleEntries.filter((entry) => {
-    const entryDate = new Date(entry.date);
-    return entryDate >= startDate && entryDate <= endDate;
+  const filteredEntries =
+    allEntries?.filter((entry) => {
+      const entryDate = new Date(entry.timestamp);
+      return entryDate >= startDate && entryDate <= endDate;
+    }) || [];
+
+  // Calculate health score
+  const healthScore =
+    filteredEntries.length > 0
+      ? (
+          filteredEntries.reduce(
+            (sum, entry) => sum + (10 - entry.severity),
+            0
+          ) / filteredEntries.length
+        ).toFixed(1)
+      : "0.0";
+
+  // Debug logging
+  console.log("Filtering entries:", {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    totalEntries: allEntries?.length,
+    filteredEntries: filteredEntries.length,
+    selectedRange,
   });
 
   return (
@@ -282,7 +314,7 @@ export default function History() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  8.5/10
+                  {filteredEntries.length > 0 ? `${healthScore}/10` : "N/A"}
                 </Text>
                 <Text
                   style={[
@@ -319,42 +351,6 @@ export default function History() {
               </View>
             </View>
 
-            {/* Health Trends */}
-            <View style={styles.trendsContainer}>
-              <Ionicons
-                name="trending-up"
-                size={20}
-                color="#2E7D32"
-                style={styles.icon}
-              />
-              <View style={styles.trendsContent}>
-                <Text
-                  style={[
-                    styles.trendsTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Health Trends
-                </Text>
-                <Text
-                  style={[
-                    styles.trendsSubtitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Symptom Frequency
-                </Text>
-                <Text
-                  style={[
-                    styles.trendsText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Decreased by 30%
-                </Text>
-              </View>
-            </View>
-
             {/* Entries List */}
             <View style={styles.entriesList}>
               <Text style={styles.entriesTitle}>
@@ -363,9 +359,15 @@ export default function History() {
 
               {filteredEntries.length > 0 ? (
                 filteredEntries.map((entry) => (
-                  <View key={entry.id} style={styles.entryItem}>
+                  <TouchableOpacity
+                    key={entry._id}
+                    style={styles.entryItem}
+                    onPress={() => handleViewEntryDetails(entry._id)}
+                  >
                     <Ionicons
-                      name="document"
+                      name={
+                        entry.type === "ai_assessment" ? "robot" : "document"
+                      }
                       size={20}
                       color="#2A7DE1"
                       style={styles.entryIcon}
@@ -378,18 +380,20 @@ export default function History() {
                             { fontFamily: FONTS.BarlowSemiCondensed },
                           ]}
                         >
-                          {formatDate(entry.date)} {formatTime(entry.date)}
+                          {formatDate(new Date(entry.timestamp))}{" "}
+                          {formatTime(new Date(entry.timestamp))}
                         </Text>
                         <View
                           style={[
                             styles.severityBadge,
-                            entry.severity === "Mild" && {
+                            entry.severity <= 3 && {
                               backgroundColor: "#E8F5E8",
                             },
-                            entry.severity === "Moderate" && {
-                              backgroundColor: "#FFF3CD",
-                            },
-                            entry.severity === "Severe" && {
+                            entry.severity > 3 &&
+                              entry.severity <= 7 && {
+                                backgroundColor: "#FFF3CD",
+                              },
+                            entry.severity > 7 && {
                               backgroundColor: "#F8D7DA",
                             },
                           ]}
@@ -398,9 +402,9 @@ export default function History() {
                             name="alert-circle"
                             size={14}
                             color={
-                              entry.severity === "Mild"
+                              entry.severity <= 3
                                 ? "#28A745"
-                                : entry.severity === "Moderate"
+                                : entry.severity <= 7
                                   ? "#FFC107"
                                   : "#DC3545"
                             }
@@ -409,16 +413,21 @@ export default function History() {
                             style={[
                               styles.entrySeverity,
                               { fontFamily: FONTS.BarlowSemiCondensed },
-                              entry.severity === "Mild" && { color: "#28A745" },
-                              entry.severity === "Moderate" && {
-                                color: "#856404",
-                              },
-                              entry.severity === "Severe" && {
+                              entry.severity <= 3 && { color: "#28A745" },
+                              entry.severity > 3 &&
+                                entry.severity <= 7 && {
+                                  color: "#856404",
+                                },
+                              entry.severity > 7 && {
                                 color: "#721C24",
                               },
                             ]}
                           >
-                            {entry.severity}
+                            {entry.severity <= 3
+                              ? "Mild"
+                              : entry.severity <= 7
+                                ? "Moderate"
+                                : "Severe"}
                           </Text>
                         </View>
                       </View>
@@ -428,10 +437,34 @@ export default function History() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        {entry.description}
+                        {entry.symptoms}
                       </Text>
+                      <View style={styles.entryFooter}>
+                        <Text
+                          style={[
+                            styles.entryType,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          {entry.type === "ai_assessment"
+                            ? "AI Assessment"
+                            : "Manual Entry"}{" "}
+                          • {entry.createdBy}
+                        </Text>
+                      </View>
+                      {/* View Details Indicator */}
+                      <View style={styles.viewDetailsIndicator}>
+                        <Text style={styles.viewDetailsText}>
+                          Tap to view details
+                        </Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color="#666"
+                        />
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))
               ) : (
                 <View style={styles.noEntries}>
@@ -486,21 +519,26 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 40,
   },
-  disclaimerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8D7DA",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+  disclaimerContainer: {
+    backgroundColor: "#FFF3CD",
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#F5C6CB",
+    borderColor: "#FFEAA7",
+    marginBottom: 24,
+    marginTop: -30,
   },
-  disclaimerButtonText: {
-    marginLeft: 8,
-    color: "#721C24",
+  disclaimerTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#856404",
+    marginBottom: 8,
+  },
+  disclaimerText: {
     fontSize: 14,
-    fontFamily: FONTS.BarlowSemiCondensed,
+    color: "#856404",
+    marginBottom: 4,
+    lineHeight: 20,
   },
   dateRangeContainer: {
     backgroundColor: "#F8F9FA",
@@ -655,6 +693,28 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     lineHeight: 20,
   },
+  entryFooter: {
+    marginTop: 8,
+  },
+  entryType: {
+    fontSize: 12,
+    color: "#666",
+  },
+  viewDetailsIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  viewDetailsText: {
+    fontSize: 12,
+    color: "#666",
+    marginRight: 4,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
   noEntries: {
     alignItems: "center",
     justifyContent: "center",
@@ -671,55 +731,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
-  disclaimerContainer: {
-    backgroundColor: "#FFF3CD",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#FFEAA7",
-    marginBottom: 24,
-    marginTop: -30,
-  },
-  disclaimerTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#856404",
-    marginBottom: 8,
-  },
-  disclaimerText: {
-    fontSize: 14,
-    color: "#856404",
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  trendsContainer: {
-  flexDirection: 'row',
-  alignItems: 'flex-start',
-  backgroundColor: "#E8F5E8",
-  padding: 16,
-  borderRadius: 12,
-  borderWidth: 1,
-  borderColor: "#C8E6C9",
-  marginBottom: 16,
-},
-trendsContent: {
-  flex: 1,
-  marginLeft: 8,
-},
-trendsTitle: {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#2E7D32",
-  marginBottom: 4,
-},
-trendsSubtitle: {
-  fontSize: 14,
-  fontWeight: "500",
-  color: "#2E7D32",
-  marginBottom: 2,
-},
-trendsText: {
-  fontSize: 14,
-  color: "#2E7D32",
-},
 });

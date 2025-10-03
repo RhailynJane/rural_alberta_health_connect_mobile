@@ -2,12 +2,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -17,19 +17,19 @@ import { FONTS } from "../../constants/constants";
 export default function SymptomSeverity() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const [severityLevel, setSeverityLevel] = useState(5); // Default to middle value
+  const [severityLevel, setSeverityLevel] = useState(5);
 
   const handleContinue = () => {
-    console.log("Severity level:", severityLevel);
-    // Navigate to next screen with all collected data
-    router.push({
-      pathname: "/(tabs)/ai-assess/symptom-duration",
-      params: {
-        ...params,
-        severity: severityLevel.toString(),
-      },
-    });
-  };
+  console.log("Severity level selected:", severityLevel);
+  
+  router.push({
+    pathname: "/(tabs)/ai-assess/symptom-duration",
+    params: {
+      ...params,
+      severity: severityLevel.toString(),
+    },
+  });
+};
 
   const renderSeverityLabels = () => {
     return (
