@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   SafeAreaView,
@@ -45,7 +46,7 @@ export default function AddHealthEntry() {
   // Format date as YYYY-MM-DD in local timezone
   const formatDate = (date: Date) => {
     const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
+    const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
@@ -56,9 +57,8 @@ export default function AddHealthEntry() {
     const minutes = String(date.getMinutes()).padStart(2, "0");
     const ampm = hours >= 12 ? "PM" : "AM";
 
-    // Convert to 12-hour format
     hours = hours % 12;
-    hours = hours ? hours : 12; // 0 should be 12
+    hours = hours ? hours : 12;
 
     return `${hours}:${minutes} ${ampm}`;
   };
@@ -66,7 +66,7 @@ export default function AddHealthEntry() {
   // Handle date picker change
   const handleDateChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") {
-      setShowDatePicker(false); // Auto-close on Android
+      setShowDatePicker(false);
     }
     if (date) {
       setSelectedDate(date);
@@ -76,11 +76,28 @@ export default function AddHealthEntry() {
   // Handle time picker change
   const handleTimeChange = (event: any, date?: Date) => {
     if (Platform.OS === "android") {
-      setShowTimePicker(false); // Auto-close on Android
+      setShowTimePicker(false);
     }
     if (date) {
       setSelectedTime(date);
     }
+  };
+
+  // Create timestamp from date and time
+  const createTimestamp = (date: Date, time: Date) => {
+    const combinedDate = new Date(date);
+    const [timeStr, modifier] = formatTime(time).split(' ');
+    let [hours, minutes] = timeStr.split(':');
+    
+    if (modifier === 'PM' && hours !== '12') {
+      hours = (parseInt(hours) + 12).toString();
+    }
+    if (modifier === 'AM' && hours === '12') {
+      hours = '00';
+    }
+    
+    combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    return combinedDate.getTime();
   };
 
   // Save health entry and navigate back
@@ -95,40 +112,27 @@ export default function AddHealthEntry() {
       return;
     }
 
-    const entryData = {
-      date: formatDate(selectedDate),
-      time: formatTime(selectedTime),
-      symptoms,
-      severity: parseInt(severity),
-      notes,
-    };
-
-    console.log("Saving entry:", entryData);
-
     try {
-      // Combine date and time for timestamp
-      const dateTime = new Date(selectedDate);
-      const [time, modifier] = formatTime(selectedTime).split(' ');
-      let [hours, minutes] = time.split(':');
-      
-      if (modifier === 'PM' && hours !== '12') {
-        hours = (parseInt(hours) + 12).toString();
-      }
-      if (modifier === 'AM' && hours === '12') {
-        hours = '00';
-      }
-      
-      dateTime.setHours(parseInt(hours), parseInt(minutes));
-      const timestamp = dateTime.getTime();
+      const timestamp = createTimestamp(selectedDate, selectedTime);
+      const dateString = formatDate(selectedDate);
+
+      console.log("Saving entry:", {
+        date: dateString,
+        timestamp,
+        symptoms,
+        severity: parseInt(severity),
+        notes,
+      });
 
       await logManualEntry({
         userId: currentUser._id,
-        date: formatDate(selectedDate),
+        date: dateString,
         timestamp,
         symptoms,
         severity: parseInt(severity),
         notes,
         createdBy: currentUser.firstName || "User",
+        // type: "manual_entry", // Remove this if not in schema
       });
 
       console.log("✅ Manual entry saved successfully");
@@ -141,246 +145,253 @@ export default function AddHealthEntry() {
 
   // Cancel and navigate back
   const handleCancel = () => {
-    router.back(); // Return without saving
+    router.back();
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView 
+          style={styles.keyboardAvoidingView}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* Header with title */}
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Header with title */}
+            <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
 
-          <View>
-            <Text
-              style={[
-                styles.headerText,
-                { fontFamily: FONTS.BarlowSemiCondensed },
-              ]}
-            >
-              Add a new health entry
-            </Text>
-          </View>
-
-          <View style={styles.contentSection}>
-            {/* Date selection */}
-            <View style={styles.inputGroup}>
+            <View>
               <Text
                 style={[
-                  styles.label,
+                  styles.headerText,
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Select Date
+                Add a new health entry
               </Text>
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowDatePicker(true)}
-              >
+            </View>
+
+            <View style={styles.contentSection}>
+              {/* Date selection */}
+              <View style={styles.inputGroup}>
                 <Text
                   style={[
-                    styles.pickerText,
+                    styles.label,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  {formatDate(selectedDate)}
+                  Select Date
                 </Text>
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  onChange={handleDateChange}
-                  maximumDate={new Date()} // Can't select future dates
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {formatDate(selectedDate)}
+                  </Text>
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
+              </View>
+
+              {/* Time selection */}
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[
+                    styles.label,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Select Time
+                </Text>
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {formatTime(selectedTime)}
+                  </Text>
+                </TouchableOpacity>
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={selectedTime}
+                    mode="time"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handleTimeChange}
+                  />
+                )}
+              </View>
+
+              {/* Symptoms input */}
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[
+                    styles.label,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Symptoms/Details
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                  placeholder="e.g: Headache, Fatigue"
+                  placeholderTextColor="#999"
+                  value={symptoms}
+                  onChangeText={setSymptoms}
+                  multiline
                 />
-              )}
-            </View>
+              </View>
 
-            {/* Time selection */}
-            <View style={styles.inputGroup}>
-              <Text
-                style={[
-                  styles.label,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Select Time
-              </Text>
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowTimePicker(true)}
-              >
+              {/* Severity dropdown */}
+              <View style={styles.inputGroup}>
                 <Text
                   style={[
-                    styles.pickerText,
+                    styles.label,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  {formatTime(selectedTime)}
+                  Severity (1-10)
                 </Text>
-              </TouchableOpacity>
-              {showTimePicker && (
-                <DateTimePicker
-                  value={selectedTime}
-                  mode="time"
-                  display={Platform.OS === "ios" ? "spinner" : "default"}
-                  onChange={handleTimeChange}
-                />
-              )}
-            </View>
-
-            {/* Symptoms input */}
-            <View style={styles.inputGroup}>
-              <Text
-                style={[
-                  styles.label,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Symptoms/Details
-              </Text>
-              <TextInput
-                style={[
-                  styles.textInput,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-                placeholder="e.g: Headache, Fatigue"
-                placeholderTextColor="#999"
-                value={symptoms}
-                onChangeText={setSymptoms}
-                multiline // Allow multiple lines
-              />
-            </View>
-
-            {/* Severity dropdown */}
-            <View style={styles.inputGroup}>
-              <Text
-                style={[
-                  styles.label,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Severity (1-10)
-              </Text>
-              <TouchableOpacity
-                style={styles.pickerButton}
-                onPress={() => setShowSeverityDropdown(true)}
-              >
-                <Text
-                  style={[
-                    styles.pickerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
+                <TouchableOpacity
+                  style={styles.pickerButton}
+                  onPress={() => setShowSeverityDropdown(true)}
                 >
-                  {severity || "Select severity"}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.pickerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {severity || "Select severity"}
+                  </Text>
+                </TouchableOpacity>
 
-              {/* Dropdown modal */}
-              <Modal
-                visible={showSeverityDropdown}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowSeverityDropdown(false)}
-              >
-                <TouchableWithoutFeedback
-                  onPress={() => setShowSeverityDropdown(false)}
+                {/* Dropdown modal */}
+                <Modal
+                  visible={showSeverityDropdown}
+                  transparent={true}
+                  animationType="fade"
+                  onRequestClose={() => setShowSeverityDropdown(false)}
                 >
-                  <View style={styles.modalOverlay}>
-                    <View style={styles.dropdownContainer}>
-                      <ScrollView
-                        style={styles.dropdownScrollView}
-                        showsVerticalScrollIndicator={true}
-                      >
-                        {severityOptions.map((option) => (
-                          <TouchableOpacity
-                            key={option}
-                            style={[
-                              styles.dropdownItem,
-                              { backgroundColor: "white" },
-                            ]}
-                            onPress={() => {
-                              setSeverity(option);
-                              setShowSeverityDropdown(false);
-                            }}
-                          >
-                            <Text
+                  <TouchableWithoutFeedback
+                    onPress={() => setShowSeverityDropdown(false)}
+                  >
+                    <View style={styles.modalOverlay}>
+                      <View style={styles.dropdownContainer}>
+                        <ScrollView
+                          style={styles.dropdownScrollView}
+                          showsVerticalScrollIndicator={true}
+                        >
+                          {severityOptions.map((option) => (
+                            <TouchableOpacity
+                              key={option}
                               style={[
-                                styles.dropdownText,
-                                { fontFamily: FONTS.BarlowSemiCondensed },
+                                styles.dropdownItem,
+                                { backgroundColor: "white" },
                               ]}
+                              onPress={() => {
+                                setSeverity(option);
+                                setShowSeverityDropdown(false);
+                              }}
                             >
-                              {option}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
+                              <Text
+                                style={[
+                                  styles.dropdownText,
+                                  { fontFamily: FONTS.BarlowSemiCondensed },
+                                ]}
+                              >
+                                {option}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
                     </View>
-                  </View>
-                </TouchableWithoutFeedback>
-              </Modal>
-            </View>
+                  </TouchableWithoutFeedback>
+                </Modal>
+              </View>
 
-            {/* Additional notes */}
-            <View style={styles.inputGroup}>
-              <Text
-                style={[
-                  styles.label,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Notes
-              </Text>
-              <TextInput
-                style={[
-                  styles.textInput,
-                  styles.notesInput,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-                placeholder="Additional Details"
-                placeholderTextColor="#999"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={4} // Set initial height
-              />
-            </View>
-
-            {/* Action buttons */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
-                onPress={handleCancel}
-              >
+              {/* Additional notes */}
+              <View style={styles.inputGroup}>
                 <Text
                   style={[
-                    styles.buttonText,
+                    styles.label,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Cancel
+                  Notes
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.saveButton]}
-                onPress={handleSaveEntry}
-              >
-                <Text
+                <TextInput
                   style={[
-                    styles.buttonText,
+                    styles.textInput,
+                    styles.notesInput,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
+                  placeholder="Additional Details"
+                  placeholderTextColor="#999"
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {/* Action buttons */}
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={[styles.button, styles.cancelButton]}
+                  onPress={handleCancel}
                 >
-                  Save Entry
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, styles.saveButton]}
+                  onPress={handleSaveEntry}
+                >
+                  <Text
+                    style={[
+                      styles.buttonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Save Entry
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
         {/* Bottom navigation */}
         <BottomNavigation />
@@ -394,16 +405,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 80, // Space for bottom nav
+    paddingBottom: 80,
   },
   contentSection: {
     padding: 24,
     paddingTop: 40,
   },
   inputGroup: {
-    marginBottom: 24, // Space between form fields
+    marginBottom: 24,
   },
   headerText: {
     fontSize: 20,
@@ -439,8 +453,8 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
   },
   notesInput: {
-    minHeight: 100, // Minimum height for notes
-    textAlignVertical: "top", // Start text from top
+    minHeight: 100,
+    textAlignVertical: "top",
   },
   modalOverlay: {
     flex: 1,
@@ -453,7 +467,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderRadius: 12,
     width: '80%',
-    maxHeight: '60%', // Limit height and make scrollable
+    maxHeight: '60%',
     overflow: 'hidden',
   },
   dropdownScrollView: {
@@ -475,20 +489,20 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 32, // Space above buttons
+    marginTop: 32,
   },
   button: {
     flex: 1,
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
-    marginHorizontal: 8, // Space between buttons
+    marginHorizontal: 8,
   },
   saveButton: {
-    backgroundColor: "#28A745", // Green for save
+    backgroundColor: "#28A745",
   },
   cancelButton: {
-    backgroundColor: "#6C757D", // Gray for cancel
+    backgroundColor: "#6C757D",
   },
   buttonText: {
     color: "white",

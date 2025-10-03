@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAction, useMutation, useQuery } from "convex/react";

@@ -20,13 +20,27 @@ import { FONTS } from "../../constants/constants";
 
 export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser);
+  
+  // Set dates without time components for proper filtering
+  const getDateWithoutTime = (date: Date) => {
+    const newDate = new Date(date);
+    newDate.setHours(0, 0, 0, 0);
+    return newDate;
+  };
+
+  const getEndOfDay = (date: Date) => {
+    const newDate = new Date(date);
+    newDate.setHours(23, 59, 59, 999);
+    return newDate;
+  };
+
   const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-  ); // 7 days ago
-  const [endDate, setEndDate] = useState(new Date());
+    getDateWithoutTime(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+  );
+  const [endDate, setEndDate] = useState(getEndOfDay(new Date()));
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [selectedRange, setSelectedRange] = useState("7d"); // Default to 7 days
+  const [selectedRange, setSelectedRange] = useState("7d");
 
   // Get all user entries
   const allEntries = useQuery(api.healthEntries.getAllUserEntries, 
@@ -56,16 +70,16 @@ export default function History() {
 
     switch (range) {
       case "today":
-        setStartDate(today);
-        setEndDate(today);
+        setStartDate(getDateWithoutTime(today));
+        setEndDate(getEndOfDay(today));
         break;
       case "7d":
-        setStartDate(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000));
-        setEndDate(today);
+        setStartDate(getDateWithoutTime(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)));
+        setEndDate(getEndOfDay(today));
         break;
       case "30d":
-        setStartDate(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000));
-        setEndDate(today);
+        setStartDate(getDateWithoutTime(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)));
+        setEndDate(getEndOfDay(today));
         break;
       case "custom":
         // Keep current dates for custom selection
@@ -76,12 +90,13 @@ export default function History() {
   const onStartDateChange = (event: any, selectedDate: Date | undefined) => {
     setShowStartDatePicker(false);
     if (selectedDate) {
+      const dateWithoutTime = getDateWithoutTime(selectedDate);
       // Validate that start date is not after end date
-      if (selectedDate > endDate) {
+      if (dateWithoutTime > endDate) {
         Alert.alert("Invalid Date", "Start date must be before end date");
         return;
       }
-      setStartDate(selectedDate);
+      setStartDate(dateWithoutTime);
       setSelectedRange("custom");
     }
   };
@@ -89,12 +104,13 @@ export default function History() {
   const onEndDateChange = (event: any, selectedDate: Date | undefined) => {
     setShowEndDatePicker(false);
     if (selectedDate) {
+      const endOfDay = getEndOfDay(selectedDate);
       // Validate that end date is not before start date
-      if (selectedDate < startDate) {
+      if (endOfDay < startDate) {
         Alert.alert("Invalid Date", "End date must be after start date");
         return;
       }
-      setEndDate(selectedDate);
+      setEndDate(endOfDay);
       setSelectedRange("custom");
     }
   };
@@ -109,6 +125,15 @@ export default function History() {
   const healthScore = filteredEntries.length > 0 
     ? (filteredEntries.reduce((sum, entry) => sum + (10 - entry.severity), 0) / filteredEntries.length).toFixed(1)
     : "0.0";
+
+  // Debug logging
+  console.log("Filtering entries:", {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    totalEntries: allEntries?.length,
+    filteredEntries: filteredEntries.length,
+    selectedRange
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
