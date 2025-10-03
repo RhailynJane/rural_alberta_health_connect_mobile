@@ -43,13 +43,14 @@ export default function AddHealthEntry() {
     (i + 1).toString()
   );
 
-  // Format date as YYYY-MM-DD in local timezone
-  const formatDate = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
+  // Format date as YYYY-MM-DD in UTC to match the query
+const formatDate = (date: Date) => {
+  // Use UTC to avoid timezone issues
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
   // Format time as HH:MM AM/PM in 12-hour format
   const formatTime = (date: Date) => {
@@ -85,20 +86,21 @@ export default function AddHealthEntry() {
 
   // Create timestamp from date and time
   const createTimestamp = (date: Date, time: Date) => {
-    const combinedDate = new Date(date);
-    const [timeStr, modifier] = formatTime(time).split(' ');
-    let [hours, minutes] = timeStr.split(':');
-    
-    if (modifier === 'PM' && hours !== '12') {
-      hours = (parseInt(hours) + 12).toString();
-    }
-    if (modifier === 'AM' && hours === '12') {
-      hours = '00';
-    }
-    
-    combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    return combinedDate.getTime();
-  };
+  // Create a date in local time but store it consistently
+  const combinedDate = new Date(date);
+  const [timeStr, modifier] = formatTime(time).split(' ');
+  let [hours, minutes] = timeStr.split(':');
+  
+  if (modifier === 'PM' && hours !== '12') {
+    hours = (parseInt(hours) + 12).toString();
+  }
+  if (modifier === 'AM' && hours === '12') {
+    hours = '00';
+  }
+  
+  combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  return combinedDate.getTime();
+};
 
   // Save health entry and navigate back
   const handleSaveEntry = async () => {

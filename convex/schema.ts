@@ -33,19 +33,22 @@ export default defineSchema({
   }).index("byUserId", ["userId"]),
 
   healthEntries: defineTable({
-  userId: v.id("users"),
-  date: v.string(), // YYYY-MM-DD format
-  timestamp: v.number(), // Unix timestamp for sorting
-  symptoms: v.string(),
-  severity: v.number(), // 1-10
-  notes: v.optional(v.string()),
-  category: v.optional(v.string()),
-  duration: v.optional(v.string()),
-  createdBy: v.string(), // "System AI" or username
-  type: v.string(), // "ai_assessment" or "manual_entry"
-  aiContext: v.optional(v.string()), // Store the full AI assessment context
-  photos: v.optional(v.array(v.string())), // Store photo URIs if any
-}).index("byUserId", ["userId"])
-  .index("byDate", ["userId", "date"])
-  .index("byTimestamp", ["userId", "timestamp"]),
+    userId: v.id("users"),
+    date: v.string(),
+    timestamp: v.number(),
+    symptoms: v.string(),
+    severity: v.number(),
+    category: v.optional(v.string()),
+    duration: v.optional(v.string()),
+    aiContext: v.optional(v.string()),
+    photos: v.optional(v.array(v.string())),
+    notes: v.optional(v.string()),
+    createdBy: v.string(),
+    type: v.optional(v.string()),
+  })
+    .index("byUserId", ["userId"])
+    .index("byDate", ["date"])
+    .index("byTimestamp", ["timestamp"])
+    .index("by_user_date", ["userId", "date"]),
+
 });

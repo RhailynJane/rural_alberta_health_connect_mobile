@@ -63,17 +63,29 @@ export const logManualEntry = mutation({
 export const getTodaysEntries = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // Get today's date in local timezone (same as frontend)
+    const now = new Date();
+    const today = new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
+      .toISOString()
+      .split('T')[0];
     
-    const entries = await ctx.db
+    console.log("🔍 Querying for today (local):", today, "user:", args.userId);
+    
+    const allUserEntries = await ctx.db
       .query("healthEntries")
-      .withIndex("byDate", (q) => 
-        q.eq("userId", args.userId).eq("date", today)
-      )
-      .order("desc")
+      .withIndex("byUserId", (q) => q.eq("userId", args.userId))
       .collect();
 
-    return entries;
+    const todaysEntries = allUserEntries.filter(entry => entry.date === today);
+    
+    console.log("📊 Found entries:", {
+      totalUserEntries: allUserEntries.length,
+      todaysEntries: todaysEntries.length,
+      todayDate: today,
+      allEntries: allUserEntries.map(e => ({ date: e.date, type: e.type }))
+    });
+    
+    return todaysEntries;
   },
 });
 
