@@ -1,5 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "convex/react";
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -46,6 +47,13 @@ export default function History() {
   const allEntries = useQuery(api.healthEntries.getAllUserEntries, 
     currentUser ? { userId: currentUser._id } : "skip"
   );
+
+  const handleViewEntryDetails = (entryId: string) => {
+    router.push({
+      pathname: "/tracker/log-details",
+      params: { entryId }
+    });
+  };
 
   const formatDate = (date: Date) => {
     const year = date.getFullYear();
@@ -335,7 +343,11 @@ export default function History() {
 
               {filteredEntries.length > 0 ? (
                 filteredEntries.map((entry) => (
-                  <View key={entry._id} style={styles.entryItem}>
+                  <TouchableOpacity
+                    key={entry._id}
+                    style={styles.entryItem}
+                    onPress={() => handleViewEntryDetails(entry._id)}
+                  >
                     <Ionicons
                       name={entry.type === "ai_assessment" ? "robot" : "document"}
                       size={20}
@@ -407,8 +419,13 @@ export default function History() {
                           {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
                         </Text>
                       </View>
+                      {/* View Details Indicator */}
+                      <View style={styles.viewDetailsIndicator}>
+                        <Text style={styles.viewDetailsText}>Tap to view details</Text>
+                        <Ionicons name="chevron-forward" size={16} color="#666" />
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))
               ) : (
                 <View style={styles.noEntries}>
@@ -643,6 +660,21 @@ const styles = StyleSheet.create({
   entryType: {
     fontSize: 12,
     color: "#666",
+  },
+  viewDetailsIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  viewDetailsText: {
+    fontSize: 12,
+    color: "#666",
+    marginRight: 4,
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
   noEntries: {
     alignItems: "center",

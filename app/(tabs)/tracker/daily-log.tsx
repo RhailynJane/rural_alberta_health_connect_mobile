@@ -209,22 +209,6 @@ export default function DailyLog() {
           </View>
         </ScrollView>
 
-        <View style={styles.addButtonContainer}>
-          <TouchableOpacity
-            style={styles.addEntryButton}
-            onPress={handleAddLogEntry}
-          >
-            <Text
-              style={[
-                styles.addEntryButtonText,
-                { fontFamily: FONTS.BarlowSemiCondensed },
-              ]}
-            >
-              Add Log Entry
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <BottomNavigation />
       </CurvedBackground>
     </SafeAreaView>
