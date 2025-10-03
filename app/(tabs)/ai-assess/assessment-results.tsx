@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useAction } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -44,11 +44,24 @@ export default function AssessmentResults() {
   const [isLoading, setIsLoading] = useState(true);
   const [assessmentError, setAssessmentError] = useState(false);
   const [actualSeverity, setActualSeverity] = useState(5);
+  const [isLogged, setIsLogged] = useState(false);
+  const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
+  
+  // Use ref to track if we're currently fetching to prevent multiple calls
+  const isFetchingRef = useRef(false);
+
+  const currentUser = useQuery(api.users.getCurrentUser);
+  const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
+  const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
 
   // Get display photos from params (original URIs for display)
   const displayPhotos = params.photos 
     ? JSON.parse(params.photos as string) 
     : [];
+
+  const aiContext = params.aiContext
+    ? JSON.parse(params.aiContext as string)
+    : null;
 
   useEffect(() => {
     console.log("📋 ALL RECEIVED PARAMS:", {
@@ -70,26 +83,18 @@ export default function AssessmentResults() {
     
     console.log("✅ Parsed severity:", severity);
     setActualSeverity(severity);
-
-    if (params.aiContext) {
-      const parsedContext = JSON.parse(params.aiContext as string);
-      console.log("📦 Parsed AI Context:", {
-        category: parsedContext.category,
-        symptomsCount: parsedContext.symptoms?.length,
-        imageCount: parsedContext.uploadedPhotos?.length
-      });
-    }
-  }, []);
-
-  const aiContext = params.aiContext
-    ? JSON.parse(params.aiContext as string)
-    : null;
-
-  const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
+  }, [displayPhotos.length, params.aiContext, params.category, params.description, params.duration, params.severity]);
 
   useEffect(() => {
     const fetchAIAssessment = async () => {
+      // Prevent multiple simultaneous requests and re-fetches
+      if (isFetchingRef.current || hasAttemptedFetch) {
+        return;
+      }
+
       try {
+        isFetchingRef.current = true;
+        setHasAttemptedFetch(true);
         setIsLoading(true);
         setAssessmentError(false);
         
@@ -131,32 +136,91 @@ export default function AssessmentResults() {
           images: aiContext?.uploadedPhotos || [],
         });
         
-        setSymptomContext(cleanGeminiResponse(res.context));
-      } catch (error) {
+        const cleanedContext = cleanGeminiResponse(res.context);
+        setSymptomContext(cleanedContext);
+
+        // Automatically log the AI assessment
+        if (currentUser?._id && !isLogged) {
+          try {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            const timestamp = today.getTime();
+
+            await logAIAssessment({
+              userId: currentUser._id,
+              date: dateString,
+              timestamp,
+              symptoms: description,
+              severity: severity,
+              category: category,
+              duration: duration,
+              aiContext: cleanedContext,
+              photos: displayPhotos,
+              notes: `AI Assessment - ${category}`
+            });
+
+            console.log("✅ AI assessment automatically logged to health entries");
+            setIsLogged(true);
+          } catch (logError) {
+            console.error("❌ Failed to log AI assessment:", logError);
+          }
+        }
+
+      } catch (error: any) {
         console.error("❌ AI assessment error:", error);
-        setAssessmentError(true);
         
-        // Use the actual severity for fallback
+        // Extract parameters again for error handling (since they're not in scope)
+        const description = Array.isArray(params.description) 
+          ? params.description[0] 
+          : params.description || "";
         const severity = parseInt(
           Array.isArray(params.severity) 
             ? params.severity[0] 
             : params.severity || "5"
         );
-        
-        const category = aiContext?.category || "General Symptoms";
         const duration = Array.isArray(params.duration)
           ? params.duration[0]
           : params.duration || "";
+        const category = aiContext?.category || 
+          (Array.isArray(params.category) ? params.category[0] : params.category) || 
+          "General Symptoms";
         
+        // Check if it's a rate limit error
+        if (error?.code === 429 || error?.status === 'RESOURCE_EXHAUSTED') {
+          console.log("⏳ Rate limit hit, using fallback assessment");
+          setAssessmentError(true);
+          const fallback = getDetailedFallbackAssessment(category, severity, duration, aiContext?.symptoms || []);
+          setSymptomContext(fallback.context);
+          return;
+        }
+        
+        // For other errors, use fallback but don't retry
+        setAssessmentError(true);
         const fallback = getDetailedFallbackAssessment(category, severity, duration, aiContext?.symptoms || []);
         setSymptomContext(fallback.context);
       } finally {
         setIsLoading(false);
+        isFetchingRef.current = false;
       }
     };
 
     fetchAIAssessment();
-  }, []);
+  }, [
+    currentUser?._id,
+    isLogged,
+    aiContext?.category,
+    aiContext?.environmentalFactors,
+    aiContext?.symptoms,
+    aiContext?.uploadedPhotos,
+    displayPhotos,
+    generateContext,
+    logAIAssessment,
+    params.category,
+    params.description,
+    params.duration,
+    params.severity,
+    hasAttemptedFetch, // Add this to dependencies
+  ]);
 
   // Simplified fallback for client-side errors
   const getDetailedFallbackAssessment = (
@@ -326,6 +390,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
               )}
             </ResultCard>
 
+            {/* Rest of your JSX remains the same */}
             {aiContext && (
               <ResultCard title="Symptom Summary" icon="document-text">
                 <View style={styles.summaryGrid}>
@@ -556,6 +621,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
   );
 }
 
+// Your styles remain the same...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

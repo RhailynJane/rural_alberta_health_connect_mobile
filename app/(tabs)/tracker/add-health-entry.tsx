@@ -1,24 +1,30 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useMutation, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Alert,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
+import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function AddHealthEntry() {
+  const currentUser = useQuery(api.users.getCurrentUser);
+  const logManualEntry = useMutation(api.healthEntries.logManualEntry);
+  
   // State for form fields
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(new Date());
@@ -78,15 +84,59 @@ export default function AddHealthEntry() {
   };
 
   // Save health entry and navigate back
-  const handleSaveEntry = () => {
-    console.log("Saving entry:", {
+  const handleSaveEntry = async () => {
+    if (!currentUser?._id) {
+      Alert.alert("Error", "You must be logged in to save entries.");
+      return;
+    }
+
+    if (!symptoms.trim() || !severity) {
+      Alert.alert("Missing Information", "Please fill in symptoms and severity.");
+      return;
+    }
+
+    const entryData = {
       date: formatDate(selectedDate),
       time: formatTime(selectedTime),
       symptoms,
-      severity,
+      severity: parseInt(severity),
       notes,
-    });
-    router.back(); // Return to previous screen
+    };
+
+    console.log("Saving entry:", entryData);
+
+    try {
+      // Combine date and time for timestamp
+      const dateTime = new Date(selectedDate);
+      const [time, modifier] = formatTime(selectedTime).split(' ');
+      let [hours, minutes] = time.split(':');
+      
+      if (modifier === 'PM' && hours !== '12') {
+        hours = (parseInt(hours) + 12).toString();
+      }
+      if (modifier === 'AM' && hours === '12') {
+        hours = '00';
+      }
+      
+      dateTime.setHours(parseInt(hours), parseInt(minutes));
+      const timestamp = dateTime.getTime();
+
+      await logManualEntry({
+        userId: currentUser._id,
+        date: formatDate(selectedDate),
+        timestamp,
+        symptoms,
+        severity: parseInt(severity),
+        notes,
+        createdBy: currentUser.firstName || "User",
+      });
+
+      console.log("✅ Manual entry saved successfully");
+      router.back();
+    } catch (error) {
+      console.error("❌ Failed to save manual entry:", error);
+      Alert.alert("Error", "Failed to save entry. Please try again.");
+    }
   };
 
   // Cancel and navigate back

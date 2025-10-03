@@ -16,3 +16,5 @@ const PasswordProvider = Password<DataModel>({
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [PasswordProvider],
 });
+
+
