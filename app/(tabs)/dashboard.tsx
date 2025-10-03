@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   },
   assessmentButtonText: {
     color: "white",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
   },
   disclaimerContainer: {
