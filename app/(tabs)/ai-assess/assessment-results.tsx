@@ -1,6 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -59,7 +58,8 @@ export default function AssessmentResults() {
     ? JSON.parse(params.aiContext as string)
     : null;
 
-  const generateContext = useMutation(api.aiAssessment.generateContextWithGemini);
+  // Changed from useMutation to useAction
+  const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
 
   useEffect(() => {
     const fetchAIAssessment = async () => {
@@ -131,95 +131,22 @@ export default function AssessmentResults() {
     fetchAIAssessment();
   }, []);
 
-  // Enhanced fallback assessment function
-  const getDetailedFallbackAssessment = (category: string, severity: number, duration: string, symptoms: string[]): { context: string } => {
-    const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "reported symptoms";
-
-    // Category-specific detailed fallback assessments
-    const categoryAssessments = {
-      "Cold Weather Injuries": getColdWeatherAssessment(severity, mainSymptoms, duration),
-      "Burns & Heat Injuries": getBurnAssessment(severity, mainSymptoms, duration),
-      "Trauma & Injuries": getTraumaAssessment(severity, mainSymptoms, duration),
-      "Rash & Skin Conditions": getRashAssessment(severity, mainSymptoms, duration),
-      "Infections": getInfectionAssessment(severity, mainSymptoms, duration),
-      "General Symptoms": getGeneralAssessment(severity, mainSymptoms, duration)
-    };
-
+  // Simplified fallback for client-side errors
+  const getDetailedFallbackAssessment = (
+    category: string, 
+    severity: number, 
+    duration: string, 
+    symptoms: string[]
+  ): { context: string } => {
+    const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "the symptoms you described";
+    
     return {
-      context: categoryAssessments[category as keyof typeof categoryAssessments] || 
-               getGeneralAssessment(severity, mainSymptoms, duration)
+      context: `I apologize, but I'm unable to provide a detailed assessment at this time. Based on your reported symptoms (${mainSymptoms}) with severity ${severity}/10:
+
+${severity >= 7 ? "⚠️ URGENT: Your severity level indicates this requires prompt medical attention. Contact Health Link Alberta at 811 immediately for professional guidance, or proceed to the nearest emergency department if symptoms are worsening." : "Please contact Health Link Alberta at 811 for a proper medical assessment. They can provide personalized guidance based on your specific situation."}
+
+For immediate medical emergencies (difficulty breathing, chest pain, severe bleeding, loss of consciousness), always call 911.`
     };
-  };
-
-  // Specific assessment functions
-  const getColdWeatherAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 9) {
-      return `🚨 CRITICAL: Your cold injury symptoms (${symptoms}) with ${severity}/10 severity indicate potential tissue damage. This requires IMMEDIATE emergency care - call 911. Do not rub affected areas or use direct heat. Begin gentle rewarming while awaiting transport.`;
-    } else if (severity >= 7) {
-      return `⚠️ SEVERE: Your cold exposure symptoms (${symptoms}) at ${severity}/10 severity suggest significant tissue involvement. Seek URGENT care within 2-4 hours. Contact Health Link Alberta (811) for specific rewarming instructions. Monitor for color changes to blue/black.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your cold-related symptoms (${symptoms}) at ${severity}/10 severity require medical evaluation within 24 hours. Gradual rewarming and protection from further cold exposure are essential. Watch for increased pain or skin discoloration.`;
-    } else {
-      return `✅ MILD: Your cold exposure symptoms (${symptoms}) at ${severity}/10 severity can be managed with self-care. Warm the area gradually, avoid further exposure, and monitor for worsening. Seek care if numbness persists beyond 2 hours.`;
-    }
-  };
-
-  const getBurnAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 9) {
-      return `🚨 CRITICAL: Your burn symptoms (${symptoms}) at ${severity}/10 severity indicate deep tissue involvement. This is a medical emergency - call 911 immediately. Do not apply creams or break blisters. Cover with clean, dry cloth.`;
-    } else if (severity >= 7) {
-      return `⚠️ SEVERE: Your burn injury (${symptoms}) at ${severity}/10 severity requires urgent medical care within 4 hours. Contact Health Link Alberta (811) for specific wound care instructions. Monitor for signs of infection like increased redness or pus.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your burn symptoms (${symptoms}) at ${severity}/10 severity need medical evaluation within 24 hours. Keep the area clean and covered. Watch for infection signs and avoid popping any blisters.`;
-    } else {
-      return `✅ MILD: Your minor burn (${symptoms}) at ${severity}/10 severity can be managed with cool compresses and over-the-counter pain relief. Protect from further injury and monitor for healing. Seek care if pain increases or redness spreads.`;
-    }
-  };
-
-  const getTraumaAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 9) {
-      return `🚨 CRITICAL: Your traumatic injury (${symptoms}) at ${severity}/10 severity indicates potential serious damage. This is an emergency - call 911 immediately. Do not move if spinal injury is suspected. Control bleeding with direct pressure.`;
-    } else if (severity >= 7) {
-      return `⚠️ SEVERE: Your injury (${symptoms}) at ${severity}/10 severity requires urgent medical evaluation within 4-6 hours. Immobilize the area and apply ice. Watch for signs of internal bleeding like dizziness or swelling.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your injury (${symptoms}) at ${severity}/10 severity should be assessed within 24 hours. Rest, ice, compression, and elevation are recommended. Monitor for increased swelling or inability to use the affected area.`;
-    } else {
-      return `✅ MILD: Your minor injury (${symptoms}) at ${severity}/10 severity can be managed with self-care. Use RICE protocol (rest, ice, compression, elevation). Seek care if pain worsens or function doesn't improve in 48 hours.`;
-    }
-  };
-
-  const getRashAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 7) {
-      return `⚠️ SEVERE: Your skin condition (${symptoms}) at ${severity}/10 severity with extensive involvement requires medical evaluation within 24 hours. Avoid scratching and keep the area clean and dry. Watch for signs of infection like pus or fever.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your rash/skin symptoms (${symptoms}) at ${severity}/10 severity should be evaluated within 48 hours. Use gentle, fragrance-free products and avoid known irritants. Monitor for spreading or worsening.`;
-    } else {
-      return `✅ MILD: Your skin symptoms (${symptoms}) at ${severity}/10 severity may respond to self-care with gentle cleansing and moisturizing. If condition persists beyond 3 days or worsens, seek medical advice.`;
-    }
-  };
-
-  const getInfectionAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 9) {
-      return `🚨 CRITICAL: Your infection symptoms (${symptoms}) at ${severity}/10 severity with systemic involvement indicate a medical emergency. Call 911 immediately if experiencing fever with confusion, difficulty breathing, or severe pain.`;
-    } else if (severity >= 7) {
-      return `⚠️ SEVERE: Your infection (${symptoms}) at ${severity}/10 severity requires urgent medical care within 4-6 hours. Contact Health Link Alberta (811) for guidance. Watch for red streaks spreading from the area or high fever.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your infection symptoms (${symptoms}) at ${severity}/10 severity need medical evaluation within 24 hours. Keep the area clean and monitor for spreading redness, increased swelling, or fever.`;
-    } else {
-      return `✅ MILD: Your minor infection symptoms (${symptoms}) at ${severity}/10 severity may be managed with careful monitoring. Practice good hygiene and watch for worsening signs. Seek care if symptoms progress.`;
-    }
-  };
-
-  const getGeneralAssessment = (severity: number, symptoms: string, duration: string): string => {
-    if (severity >= 9) {
-      return `🚨 CRITICAL: Your symptoms (${symptoms}) at ${severity}/10 severity indicate a potential medical emergency. Seek immediate care - call 911 or proceed to nearest emergency department. Do not delay due to rural location concerns.`;
-    } else if (severity >= 7) {
-      return `⚠️ SEVERE: Your symptoms (${symptoms}) at ${severity}/10 severity require urgent medical attention within 4-6 hours. Contact Health Link Alberta (811) for specific guidance. Have a travel plan ready considering weather conditions.`;
-    } else if (severity >= 4) {
-      return `🔶 MODERATE: Your symptoms (${symptoms}) at ${severity}/10 severity should be evaluated within 24-48 hours. Schedule a clinic visit and monitor for any worsening. Keep emergency contacts accessible.`;
-    } else {
-      return `✅ MILD: Your symptoms (${symptoms}) at ${severity}/10 severity may be managed with self-care and monitoring. If symptoms persist beyond 3 days or worsen, contact healthcare services. Remember rural access may require advance planning.`;
-    }
   };
 
   const handleCall911 = () => Linking.openURL("tel:911");
@@ -228,10 +155,10 @@ export default function AssessmentResults() {
   const handleReturnHome = () => router.replace("/(tabs)/dashboard");
 
   const getUrgencyColor = (severity: number) => {
-    if (severity >= 9) return "#DC3545"; // Critical - Red
-    if (severity >= 7) return "#FF6B35"; // Severe - Orange
-    if (severity >= 4) return "#FFC107"; // Moderate - Yellow
-    return "#28A745"; // Mild - Green
+    if (severity >= 9) return "#DC3545";
+    if (severity >= 7) return "#FF6B35";
+    if (severity >= 4) return "#FFC107";
+    return "#28A745";
   };
 
   const getUrgencyText = (severity: number) => {
@@ -307,7 +234,6 @@ export default function AssessmentResults() {
               AI Health Assessment
             </Text>
 
-            {/* Urgency Indicator - Using actualSeverity from state */}
             <View style={styles.urgencyContainer}>
               <View
                 style={[
@@ -329,7 +255,6 @@ export default function AssessmentResults() {
               </View>
             </View>
 
-            {/* AI Assessment */}
             <ResultCard title="Medical Triage Assessment" icon="medical">
               {isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -366,7 +291,7 @@ export default function AssessmentResults() {
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        Note: Using enhanced assessment. For precise medical guidance, contact Health Link Alberta at 811.
+                        Note: Unable to complete full AI analysis. For medical guidance, contact Health Link Alberta at 811.
                       </Text>
                     </View>
                   )}
@@ -374,7 +299,6 @@ export default function AssessmentResults() {
               )}
             </ResultCard>
 
-            {/* Symptom Summary */}
             {aiContext && (
               <ResultCard title="Symptom Summary" icon="document-text">
                 <View style={styles.summaryGrid}>
@@ -461,7 +385,6 @@ export default function AssessmentResults() {
               </ResultCard>
             )}
 
-            {/* Uploaded Photos */}
             {aiContext?.uploadedPhotos?.length > 0 && (
               <ResultCard title="Medical Photos" icon="camera">
                 <Text
@@ -495,7 +418,6 @@ export default function AssessmentResults() {
               </ResultCard>
             )}
 
-            {/* Rural Considerations */}
             <ResultCard title="Rural Alberta Considerations" icon="location">
               <View style={styles.recommendationList}>
                 <Text
@@ -539,7 +461,6 @@ export default function AssessmentResults() {
               </View>
             </ResultCard>
 
-            {/* Emergency Section - Show more prominently for high severity */}
             {actualSeverity >= 6 && (
               <ResultCard
                 title="🚨 Immediate Action Recommended"
@@ -570,7 +491,6 @@ export default function AssessmentResults() {
               </ResultCard>
             )}
 
-            {/* Action Buttons */}
             <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={styles.newAssessmentButton}

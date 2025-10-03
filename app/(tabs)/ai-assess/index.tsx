@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -40,12 +41,35 @@ interface AIImageContext {
   };
 }
 
+/**
+ * Converts an image URI to base64 string using Expo SDK 54+ File API
+ */
+async function convertImageToBase64(uri: string): Promise<string> {
+  try {
+    const file = new FileSystem.File(uri);
+    const base64 = await file.base64();
+    return base64;
+  } catch (error) {
+    console.error("Error converting image to base64:", error);
+    throw error;
+  }
+}
+
+/**
+ * Converts multiple image URIs to base64 strings
+ */
+async function convertImagesToBase64(uris: string[]): Promise<string[]> {
+  const conversionPromises = uris.map(uri => convertImageToBase64(uri));
+  return await Promise.all(conversionPromises);
+}
+
 export default function SymptomAssessment() {
   const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState<SymptomCategory | null>(null);
   const [symptomDescription, setSymptomDescription] = useState("");
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [selectedBodyParts] = useState<BodyPart[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // AI context data
   const [aiContext, setAiContext] = useState<Partial<AIImageContext>>({
@@ -57,7 +81,6 @@ export default function SymptomAssessment() {
     setAiContext(prev => ({
       ...prev,
       category,
-      // Pre-populate common symptoms based on category
       symptoms: getDefaultSymptoms(category),
       environmentalFactors: getEnvironmentalFactors(category)
     }));
@@ -97,36 +120,91 @@ export default function SymptomAssessment() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!selectedCategory && !symptomDescription.trim()) {
       Alert.alert("Information Required", "Please select a symptom category or describe your symptoms.");
       return;
     }
 
-    // Prepare comprehensive AI context
-    const finalAiContext: AIImageContext = {
-      category: selectedCategory || 'Custom',
-      description: symptomDescription,
-      severity: 5, // Default, will be updated in next screen
-      duration: '', // Will be updated in duration screen
-      bodyParts: selectedBodyParts,
-      symptoms: extractSymptomsFromDescription(symptomDescription),
-      environmentalFactors: aiContext.environmentalFactors || [],
-      uploadedPhotos,
-      timestamp: new Date().toISOString(),
-    };
+    setIsProcessing(true);
 
-    console.log("Submitting assessment with AI context:", finalAiContext);
-    
-    router.push({
-      pathname: "/(tabs)/ai-assess/symptom-severity",
-      params: {
-        category: selectedCategory || "Custom",
+    try {
+      // Convert images to base64 before navigation
+      let base64Images: string[] = [];
+      if (uploadedPhotos.length > 0) {
+        console.log(`Converting ${uploadedPhotos.length} images to base64...`);
+        base64Images = await convertImagesToBase64(uploadedPhotos);
+        console.log(`Successfully converted ${base64Images.length} images to base64`);
+      }
+
+      // Prepare comprehensive AI context with base64 images
+      const finalAiContext: AIImageContext = {
+        category: selectedCategory || 'Custom',
         description: symptomDescription,
-        photos: JSON.stringify(uploadedPhotos),
-        aiContext: JSON.stringify(finalAiContext),
-      },
-    });
+        severity: 5,
+        duration: '',
+        bodyParts: selectedBodyParts,
+        symptoms: extractSymptomsFromDescription(symptomDescription),
+        environmentalFactors: aiContext.environmentalFactors || [],
+        uploadedPhotos: base64Images, // Base64 strings for API
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log("Submitting assessment:", {
+        category: finalAiContext.category,
+        descriptionLength: symptomDescription.length,
+        imageCount: base64Images.length,
+        symptomsCount: finalAiContext.symptoms.length
+      });
+      
+      router.push({
+        pathname: "/(tabs)/ai-assess/symptom-severity",
+        params: {
+          category: selectedCategory || "Custom",
+          description: symptomDescription,
+          photos: JSON.stringify(uploadedPhotos), // Keep URIs for display
+          aiContext: JSON.stringify(finalAiContext),
+        },
+      });
+    } catch (error) {
+      console.error("Error processing images:", error);
+      Alert.alert(
+        "Image Processing Error",
+        "Failed to process images. Would you like to continue without photos?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Continue Without Photos",
+            onPress: () => {
+              // Continue without images
+              const finalAiContext: AIImageContext = {
+                category: selectedCategory || 'Custom',
+                description: symptomDescription,
+                severity: 5,
+                duration: '',
+                bodyParts: selectedBodyParts,
+                symptoms: extractSymptomsFromDescription(symptomDescription),
+                environmentalFactors: aiContext.environmentalFactors || [],
+                uploadedPhotos: [],
+                timestamp: new Date().toISOString(),
+              };
+              
+              router.push({
+                pathname: "/(tabs)/ai-assess/symptom-severity",
+                params: {
+                  category: selectedCategory || "Custom",
+                  description: symptomDescription,
+                  photos: JSON.stringify([]),
+                  aiContext: JSON.stringify(finalAiContext),
+                },
+              });
+            }
+          }
+        ]
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const extractSymptomsFromDescription = (description: string): string[] => {
@@ -156,7 +234,7 @@ export default function SymptomAssessment() {
   const requestCameraPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need camera permissions to take photos.');
+      Alert.alert('Permission Required', 'Camera permissions are needed to take photos.');
       return false;
     }
     return true;
@@ -165,7 +243,7 @@ export default function SymptomAssessment() {
   const requestGalleryPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Sorry, we need gallery permissions to upload photos.');
+      Alert.alert('Permission Required', 'Gallery permissions are needed to upload photos.');
       return false;
     }
     return true;
@@ -186,7 +264,7 @@ export default function SymptomAssessment() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const newPhoto = result.assets[0].uri;
         setUploadedPhotos(prev => [...prev, newPhoto]);
-        console.log("Photo taken for AI analysis:", newPhoto);
+        console.log("Photo captured:", newPhoto);
       }
     } catch (error) {
       console.error("Error taking photo:", error);
@@ -210,7 +288,7 @@ export default function SymptomAssessment() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const newPhotos = result.assets.map(asset => asset.uri);
         setUploadedPhotos(prev => [...prev, ...newPhotos]);
-        console.log("Photos uploaded for AI analysis:", newPhotos);
+        console.log(`Uploaded ${newPhotos.length} photos`);
       }
     } catch (error) {
       console.error("Error uploading photos:", error);
@@ -224,35 +302,23 @@ export default function SymptomAssessment() {
 
   const getCategoryIcon = (category: SymptomCategory) => {
     switch (category) {
-      case "Cold Weather Injuries":
-        return "snow";
-      case "Burns & Heat Injuries":
-        return "flame";
-      case "Trauma & Injuries":
-        return "bandage";
-      case "Rash & Skin Conditions":
-        return "ellipsis-horizontal";
-      case "Infections":
-        return "bug";
-      default:
-        return "medical";
+      case "Cold Weather Injuries": return "snow";
+      case "Burns & Heat Injuries": return "flame";
+      case "Trauma & Injuries": return "bandage";
+      case "Rash & Skin Conditions": return "ellipsis-horizontal";
+      case "Infections": return "bug";
+      default: return "medical";
     }
   };
 
   const getCategoryColor = (category: SymptomCategory) => {
     switch (category) {
-      case "Cold Weather Injuries":
-        return "#2A7DE1";
-      case "Burns & Heat Injuries":
-        return "#FF6B35";
-      case "Trauma & Injuries":
-        return "#DC3545";
-      case "Rash & Skin Conditions":
-        return "#8A2BE2";
-      case "Infections":
-        return "#28A745";
-      default:
-        return "#6C757D";
+      case "Cold Weather Injuries": return "#2A7DE1";
+      case "Burns & Heat Injuries": return "#FF6B35";
+      case "Trauma & Injuries": return "#DC3545";
+      case "Rash & Skin Conditions": return "#8A2BE2";
+      case "Infections": return "#28A745";
+      default: return "#6C757D";
     }
   };
 
@@ -281,7 +347,6 @@ export default function SymptomAssessment() {
               Select a category or describe what you&apos;re experiencing
             </Text>
 
-            {/* Cold Weather Injuries Card */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -305,7 +370,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* Burns & Heat Injuries Card */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -329,7 +393,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* Trauma & Injuries Card */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -353,7 +416,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* NEW: Rash & Skin Conditions Card */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -377,7 +439,6 @@ export default function SymptomAssessment() {
               </Text>
             </TouchableOpacity>
 
-            {/* NEW: Infections Card */}
             <TouchableOpacity 
               style={[
                 styles.categoryCard,
@@ -472,6 +533,7 @@ export default function SymptomAssessment() {
               <TouchableOpacity 
                 style={styles.backButton} 
                 onPress={() => router.back()}
+                disabled={isProcessing}
               >
                 <Ionicons name="arrow-back" size={20} color="#666" />
                 <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -482,15 +544,15 @@ export default function SymptomAssessment() {
               <TouchableOpacity 
                 style={[
                   styles.continueButton,
-                  (!selectedCategory && !symptomDescription.trim()) && styles.continueButtonDisabled
+                  ((!selectedCategory && !symptomDescription.trim()) || isProcessing) && styles.continueButtonDisabled
                 ]} 
                 onPress={handleContinue}
-                disabled={!selectedCategory && !symptomDescription.trim()}
+                disabled={(!selectedCategory && !symptomDescription.trim()) || isProcessing}
               >
                 <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Continue to Severity
+                  {isProcessing ? "Processing..." : "Continue to Severity"}
                 </Text>
-                <Ionicons name="arrow-forward" size={20} color="white" />
+                {!isProcessing && <Ionicons name="arrow-forward" size={20} color="white" />}
               </TouchableOpacity>
             </View>
           </View>
