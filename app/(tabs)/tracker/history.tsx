@@ -21,7 +21,7 @@ import { FONTS } from "../../constants/constants";
 
 export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser);
-  
+
   // Set dates without time components for proper filtering
   const getDateWithoutTime = (date: Date) => {
     const newDate = new Date(date);
@@ -44,14 +44,15 @@ export default function History() {
   const [selectedRange, setSelectedRange] = useState("7d");
 
   // Get all user entries
-  const allEntries = useQuery(api.healthEntries.getAllUserEntries, 
+  const allEntries = useQuery(
+    api.healthEntries.getAllUserEntries,
     currentUser ? { userId: currentUser._id } : "skip"
   );
 
   const handleViewEntryDetails = (entryId: string) => {
     router.push({
       pathname: "/tracker/log-details",
-      params: { entryId }
+      params: { entryId },
     });
   };
 
@@ -82,11 +83,19 @@ export default function History() {
         setEndDate(getEndOfDay(today));
         break;
       case "7d":
-        setStartDate(getDateWithoutTime(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)));
+        setStartDate(
+          getDateWithoutTime(
+            new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+          )
+        );
         setEndDate(getEndOfDay(today));
         break;
       case "30d":
-        setStartDate(getDateWithoutTime(new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)));
+        setStartDate(
+          getDateWithoutTime(
+            new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+          )
+        );
         setEndDate(getEndOfDay(today));
         break;
       case "custom":
@@ -124,15 +133,22 @@ export default function History() {
   };
 
   // Filter entries based on selected date range
-  const filteredEntries = allEntries?.filter((entry) => {
-    const entryDate = new Date(entry.timestamp);
-    return entryDate >= startDate && entryDate <= endDate;
-  }) || [];
+  const filteredEntries =
+    allEntries?.filter((entry) => {
+      const entryDate = new Date(entry.timestamp);
+      return entryDate >= startDate && entryDate <= endDate;
+    }) || [];
 
   // Calculate health score
-  const healthScore = filteredEntries.length > 0 
-    ? (filteredEntries.reduce((sum, entry) => sum + (10 - entry.severity), 0) / filteredEntries.length).toFixed(1)
-    : "0.0";
+  const healthScore =
+    filteredEntries.length > 0
+      ? (
+          filteredEntries.reduce(
+            (sum, entry) => sum + (10 - entry.severity),
+            0
+          ) / filteredEntries.length
+        ).toFixed(1)
+      : "0.0";
 
   // Debug logging
   console.log("Filtering entries:", {
@@ -140,7 +156,7 @@ export default function History() {
     endDate: endDate.toISOString(),
     totalEntries: allEntries?.length,
     filteredEntries: filteredEntries.length,
-    selectedRange
+    selectedRange,
   });
 
   return (
@@ -298,7 +314,7 @@ export default function History() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  {healthScore}/10
+                  {filteredEntries.length > 0 ? `${healthScore}/10` : "N/A"}
                 </Text>
                 <Text
                   style={[
@@ -349,7 +365,9 @@ export default function History() {
                     onPress={() => handleViewEntryDetails(entry._id)}
                   >
                     <Ionicons
-                      name={entry.type === "ai_assessment" ? "robot" : "document"}
+                      name={
+                        entry.type === "ai_assessment" ? "robot" : "document"
+                      }
                       size={20}
                       color="#2A7DE1"
                       style={styles.entryIcon}
@@ -362,7 +380,8 @@ export default function History() {
                             { fontFamily: FONTS.BarlowSemiCondensed },
                           ]}
                         >
-                          {formatDate(new Date(entry.timestamp))} {formatTime(new Date(entry.timestamp))}
+                          {formatDate(new Date(entry.timestamp))}{" "}
+                          {formatTime(new Date(entry.timestamp))}
                         </Text>
                         <View
                           style={[
@@ -370,9 +389,10 @@ export default function History() {
                             entry.severity <= 3 && {
                               backgroundColor: "#E8F5E8",
                             },
-                            entry.severity > 3 && entry.severity <= 7 && {
-                              backgroundColor: "#FFF3CD",
-                            },
+                            entry.severity > 3 &&
+                              entry.severity <= 7 && {
+                                backgroundColor: "#FFF3CD",
+                              },
                             entry.severity > 7 && {
                               backgroundColor: "#F8D7DA",
                             },
@@ -394,15 +414,20 @@ export default function History() {
                               styles.entrySeverity,
                               { fontFamily: FONTS.BarlowSemiCondensed },
                               entry.severity <= 3 && { color: "#28A745" },
-                              entry.severity > 3 && entry.severity <= 7 && {
-                                color: "#856404",
-                              },
+                              entry.severity > 3 &&
+                                entry.severity <= 7 && {
+                                  color: "#856404",
+                                },
                               entry.severity > 7 && {
                                 color: "#721C24",
                               },
                             ]}
                           >
-                            {entry.severity <= 3 ? "Mild" : entry.severity <= 7 ? "Moderate" : "Severe"}
+                            {entry.severity <= 3
+                              ? "Mild"
+                              : entry.severity <= 7
+                                ? "Moderate"
+                                : "Severe"}
                           </Text>
                         </View>
                       </View>
@@ -415,14 +440,28 @@ export default function History() {
                         {entry.symptoms}
                       </Text>
                       <View style={styles.entryFooter}>
-                        <Text style={[styles.entryType, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
+                        <Text
+                          style={[
+                            styles.entryType,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          {entry.type === "ai_assessment"
+                            ? "AI Assessment"
+                            : "Manual Entry"}{" "}
+                          • {entry.createdBy}
                         </Text>
                       </View>
                       {/* View Details Indicator */}
                       <View style={styles.viewDetailsIndicator}>
-                        <Text style={styles.viewDetailsText}>Tap to view details</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#666" />
+                        <Text style={styles.viewDetailsText}>
+                          Tap to view details
+                        </Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color="#666"
+                        />
                       </View>
                     </View>
                   </TouchableOpacity>
