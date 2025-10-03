@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAction } from "convex/react";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -19,6 +20,23 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
+// Helper functions
+const getDurationDisplay = (duration: string): string => {
+  const durationMap: Record<string, string> = {
+    "today": "Started today",
+    "yesterday": "Started yesterday", 
+    "2-3_days": "2-3 days ago",
+    "1_week": "1 week ago",
+    "2_weeks_plus": "2+ weeks ago",
+    "ongoing": "Ongoing condition"
+  };
+  return durationMap[duration] || duration || "Not specified";
+};
+
+const cleanGeminiResponse = (text: string): string => {
+  return text.replace(/\*\*/g, '');
+};
+
 export default function AssessmentResults() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -27,6 +45,11 @@ export default function AssessmentResults() {
   const [assessmentError, setAssessmentError] = useState(false);
   const [actualSeverity, setActualSeverity] = useState(5);
 
+  // Get display photos from params (original URIs for display)
+  const displayPhotos = params.photos 
+    ? JSON.parse(params.photos as string) 
+    : [];
+
   useEffect(() => {
     console.log("📋 ALL RECEIVED PARAMS:", {
       description: params.description,
@@ -34,22 +57,27 @@ export default function AssessmentResults() {
       duration: params.duration,
       category: params.category,
       hasAiContext: !!params.aiContext,
+      photoCount: displayPhotos.length
     });
-
+    
     // Extract severity with proper debugging
     const rawSeverity = params.severity;
     console.log("🔍 Raw severity value:", rawSeverity);
-
+    
     const severity = parseInt(
-      Array.isArray(rawSeverity) ? rawSeverity[0] : rawSeverity || "5"
+      Array.isArray(rawSeverity) ? rawSeverity[0] : (rawSeverity || "5")
     );
-
+    
     console.log("✅ Parsed severity:", severity);
     setActualSeverity(severity);
 
     if (params.aiContext) {
       const parsedContext = JSON.parse(params.aiContext as string);
-      console.log("📦 Parsed AI Context:", parsedContext);
+      console.log("📦 Parsed AI Context:", {
+        category: parsedContext.category,
+        symptomsCount: parsedContext.symptoms?.length,
+        imageCount: parsedContext.uploadedPhotos?.length
+      });
     }
   }, []);
 
@@ -64,27 +92,24 @@ export default function AssessmentResults() {
       try {
         setIsLoading(true);
         setAssessmentError(false);
-
+        
         // Extract parameters with proper fallbacks
-        const description = Array.isArray(params.description)
-          ? params.description[0]
+        const description = Array.isArray(params.description) 
+          ? params.description[0] 
           : params.description || "";
-
+          
         const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
+          Array.isArray(params.severity) 
+            ? params.severity[0] 
             : params.severity || "5"
         );
-
+        
         const duration = Array.isArray(params.duration)
           ? params.duration[0]
           : params.duration || "";
-
-        const category =
-          aiContext?.category ||
-          (Array.isArray(params.category)
-            ? params.category[0]
-            : params.category) ||
+        
+        const category = aiContext?.category || 
+          (Array.isArray(params.category) ? params.category[0] : params.category) || 
           "General Symptoms";
 
         console.log("🚀 Calling Gemini with:", {
@@ -93,6 +118,7 @@ export default function AssessmentResults() {
           duration,
           category,
           symptomsCount: aiContext?.symptoms?.length || 0,
+          imageCount: aiContext?.uploadedPhotos?.length || 0
         });
 
         const res = await generateContext({
@@ -104,30 +130,25 @@ export default function AssessmentResults() {
           symptoms: aiContext?.symptoms || [],
           images: aiContext?.uploadedPhotos || [],
         });
-
-        setSymptomContext(res.context);
+        
+        setSymptomContext(cleanGeminiResponse(res.context));
       } catch (error) {
         console.error("❌ AI assessment error:", error);
         setAssessmentError(true);
-
+        
         // Use the actual severity for fallback
         const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
+          Array.isArray(params.severity) 
+            ? params.severity[0] 
             : params.severity || "5"
         );
-
+        
         const category = aiContext?.category || "General Symptoms";
         const duration = Array.isArray(params.duration)
           ? params.duration[0]
           : params.duration || "";
-
-        const fallback = getDetailedFallbackAssessment(
-          category,
-          severity,
-          duration,
-          aiContext?.symptoms || []
-        );
+        
+        const fallback = getDetailedFallbackAssessment(category, severity, duration, aiContext?.symptoms || []);
         setSymptomContext(fallback.context);
       } finally {
         setIsLoading(false);
@@ -137,35 +158,21 @@ export default function AssessmentResults() {
     fetchAIAssessment();
   }, []);
 
-  const getDurationDisplay = (duration: string): string => {
-    const durationMap: Record<string, string> = {
-      today: "Started today",
-      yesterday: "Started yesterday",
-      "2-3_days": "2-3 days ago",
-      "1_week": "1 week ago",
-      "2_weeks_plus": "2+ weeks ago",
-      ongoing: "Ongoing condition",
-    };
-    return durationMap[duration] || duration || "Not specified";
-  };
-
+  // Simplified fallback for client-side errors
   const getDetailedFallbackAssessment = (
-    category: string,
-    severity: number,
-    duration: string,
+    category: string, 
+    severity: number, 
+    duration: string, 
     symptoms: string[]
   ): { context: string } => {
-    const mainSymptoms =
-      symptoms.length > 0
-        ? symptoms.slice(0, 3).join(", ")
-        : "the symptoms you described";
-
+    const mainSymptoms = symptoms.length > 0 ? symptoms.slice(0, 3).join(", ") : "the symptoms you described";
+    
     return {
       context: `I apologize, but I'm unable to provide a detailed assessment at this time. Based on your reported symptoms (${mainSymptoms}) with severity ${severity}/10:
 
 ${severity >= 7 ? "⚠️ URGENT: Your severity level indicates this requires prompt medical attention. Contact Health Link Alberta at 811 immediately for professional guidance, or proceed to the nearest emergency department if symptoms are worsening." : "Please contact Health Link Alberta at 811 for a proper medical assessment. They can provide personalized guidance based on your specific situation."}
 
-For immediate medical emergencies (difficulty breathing, chest pain, severe bleeding, loss of consciousness), always call 911.`,
+For immediate medical emergencies (difficulty breathing, chest pain, severe bleeding, loss of consciousness), always call 911.`
     };
   };
 
@@ -311,8 +318,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        Note: Unable to complete full AI analysis. For medical
-                        guidance, contact Health Link Alberta at 811.
+                        Note: Unable to complete full AI analysis. For medical guidance, contact Health Link Alberta at 811.
                       </Text>
                     </View>
                   )}
@@ -371,10 +377,10 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     <Text
                       style={[
                         styles.summaryValue,
-                        {
+                        { 
                           fontFamily: FONTS.BarlowSemiCondensed,
                           color: getUrgencyColor(actualSeverity),
-                          fontWeight: "700",
+                          fontWeight: '700'
                         },
                       ]}
                     >
@@ -406,7 +412,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
               </ResultCard>
             )}
 
-            {aiContext?.uploadedPhotos?.length > 0 && (
+            {displayPhotos.length > 0 && (
               <ResultCard title="Medical Photos" icon="camera">
                 <Text
                   style={[
@@ -414,28 +420,25 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 },
                   ]}
                 >
-                  {aiContext.uploadedPhotos.length} photo(s) included in
-                  assessment
+                  {displayPhotos.length} photo(s) included in assessment
                 </Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {aiContext.uploadedPhotos.map(
-                    (photo: string, index: number) => (
-                      <View key={index} style={styles.photoContainer}>
-                        <Image
-                          source={{ uri: photo }}
-                          style={styles.assessmentPhoto}
-                        />
-                        <Text
-                          style={[
-                            styles.photoLabel,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Photo {index + 1}
-                        </Text>
-                      </View>
-                    )
-                  )}
+                  {displayPhotos.map((photo: string, index: number) => (
+                    <View key={index} style={styles.photoContainer}>
+                      <Image
+                        source={{ uri: photo }}
+                        style={styles.assessmentPhoto}
+                      />
+                      <Text
+                        style={[
+                          styles.photoLabel,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        Photo {index + 1}
+                      </Text>
+                    </View>
+                  ))}
                 </ScrollView>
               </ResultCard>
             )}
@@ -448,8 +451,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Nearest hospital may be 30+ minutes away - plan travel
-                  accordingly
+                  • Nearest hospital may be 30+ minutes away - plan travel accordingly
                 </Text>
                 <Text
                   style={[
@@ -457,8 +459,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Weather conditions may impact road access to medical
-                  facilities
+                  • Weather conditions may impact road access to medical facilities
                 </Text>
                 <Text
                   style={[
@@ -466,8 +467,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  • Keep emergency kit and communication devices charged and
-                  ready
+                  • Keep emergency kit and communication devices charged and ready
                 </Text>
                 <TouchableOpacity
                   style={styles.healthLinkButton}
