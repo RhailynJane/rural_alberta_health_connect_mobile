@@ -27,6 +27,13 @@ export default function DailyLog() {
     router.push("/tracker/add-health-entry");
   };
 
+  const handleViewEntryDetails = (entryId: string) => {
+    router.push({
+      pathname: "/tracker/log-details",
+      params: { entryId }
+    });
+  };
+
   const getSeverityColor = (severity: number) => {
     if (severity >= 9) return "#DC3545";
     if (severity >= 7) return "#FF6B35";
@@ -86,7 +93,11 @@ export default function DailyLog() {
                 ) : todaysEntries && todaysEntries.length > 0 ? (
                   <View style={styles.entriesList}>
                     {todaysEntries.map((entry) => (
-                      <View key={entry._id} style={styles.entryItem}>
+                      <TouchableOpacity
+                        key={entry._id}
+                        style={styles.entryItem}
+                        onPress={() => handleViewEntryDetails(entry._id)}
+                      >
                         <View style={styles.entryHeader}>
                           <View style={styles.entryTime}>
                             <Ionicons
@@ -171,7 +182,16 @@ export default function DailyLog() {
                             {entry.createdBy}
                           </Text>
                         </View>
-                      </View>
+
+                        {/* View Details Button */}
+                        <TouchableOpacity 
+                          style={styles.viewDetailsButton}
+                          onPress={() => handleViewEntryDetails(entry._id)}
+                        >
+                          <Text style={styles.viewDetailsText}>View Details</Text>
+                          <Ionicons name="chevron-forward" size={16} color="#2A7DE1" />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 ) : (
@@ -297,6 +317,22 @@ const styles = StyleSheet.create({
   createdByText: {
     fontSize: 11,
     color: "#666",
+  },
+  viewDetailsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  viewDetailsText: {
+    fontSize: 14,
+    color: "#2A7DE1",
+    fontWeight: "600",
+    marginRight: 4,
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
   addButtonContainer: {
     position: "absolute",
