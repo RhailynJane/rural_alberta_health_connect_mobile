@@ -170,7 +170,6 @@ export default function AssessmentResults() {
       } catch (error: any) {
         console.error("❌ AI assessment error:", error);
         
-        // Extract parameters again for error handling (since they're not in scope)
         const description = Array.isArray(params.description) 
           ? params.description[0] 
           : params.description || "";
