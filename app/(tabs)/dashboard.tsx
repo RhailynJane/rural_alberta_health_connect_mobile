@@ -2,7 +2,7 @@
 // app/dashboard.tsx
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -30,11 +30,56 @@ export default function Dashboard() {
   // Get current user data
   const user = useQuery(api.users.getCurrentUser, queryArgs);
   
-  // Keep userWithProfile query for future use (currently returns undefined)
-  const userWithProfile = useQuery(
-    api.dashboard.user.getUserWithProfile,
-    queryArgs
+  // Get entries for the last 7 days to calculate health score
+  const getLast7DaysDateRange = () => {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - 7);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const endDate = new Date(today);
+    endDate.setHours(23, 59, 59, 999);
+    
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0]
+    };
+  };
+
+  const dateRange = getLast7DaysDateRange();
+  const weeklyEntries = useQuery(
+    api.healthEntries.getEntriesByDateRange,
+    user?._id ? { 
+      userId: user._id,
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate
+    } : "skip"
   );
+
+  // Calculate weekly health score
+  const calculateWeeklyHealthScore = () => {
+    if (!weeklyEntries || weeklyEntries.length === 0) return "0.0";
+    
+    const totalScore = weeklyEntries.reduce((sum, entry) => sum + (10 - entry.severity), 0);
+    const averageScore = totalScore / weeklyEntries.length;
+    return averageScore.toFixed(1);
+  };
+
+  const weeklyHealthScore = calculateWeeklyHealthScore();
+
+  // Determine health status based on weekly health score
+  useEffect(() => {
+    const score = parseFloat(weeklyHealthScore);
+    if (score >= 8.0) {
+      setHealthStatus("Excellent");
+    } else if (score >= 6.0) {
+      setHealthStatus("Good");
+    } else if (score >= 4.0) {
+      setHealthStatus("Fair");
+    } else {
+      setHealthStatus("Poor");
+    }
+  }, [weeklyHealthScore]);
 
   if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
@@ -74,6 +119,7 @@ export default function Dashboard() {
   // Use currentUser data instead of userWithProfile for now
   const userName = user.firstName || "User";
   const userEmail = user.email;
+
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
     router.push("../ai-assess");
@@ -132,6 +178,14 @@ export default function Dashboard() {
     );
   };
 
+  const navigateToHistory = (): void => {
+    router.push("/tracker/history");
+  };
+
+  const navigateToDailyLog = (): void => {
+    router.push("/tracker/daily-log");
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -170,20 +224,125 @@ export default function Dashboard() {
               </View>
             </View>
 
-            {/* Symptom Assessment Button */}
-            <TouchableOpacity
-              style={styles.assessmentButton}
-              onPress={handleSymptomAssessment}
-            >
+            {/* Weekly Health Score Card */}
+            <View style={styles.healthScoreCard}>
+              <View style={styles.healthScoreHeader}>
+                <Text
+                  style={[
+                    styles.healthScoreTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Weekly Health Score
+                </Text>
+                <TouchableOpacity onPress={navigateToHistory}>
+                  <Text
+                    style={[
+                      styles.viewDetailsText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    View Details
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.healthScoreContent}>
+                <Text
+                  style={[
+                    styles.healthScoreValue,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  {weeklyHealthScore}/10
+                </Text>
+                <Text
+                  style={[
+                    styles.healthScoreSubtitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Based on {weeklyEntries?.length || 0} entries this week
+                </Text>
+                
+                {/* Health Score Progress Bar */}
+                <View style={styles.progressBarContainer}>
+                  <View 
+                    style={[
+                      styles.progressBar, 
+                      { width: `${parseFloat(weeklyHealthScore) * 10}%` }
+                    ]} 
+                  />
+                </View>
+                
+                <View style={styles.scoreInterpretation}>
+                  <Text
+                    style={[
+                      styles.interpretationText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {parseFloat(weeklyHealthScore) >= 8.0 
+                      ? "🎉 Excellent! Keep up the good work!" 
+                      : parseFloat(weeklyHealthScore) >= 6.0 
+                      ? "👍 Good overall health status" 
+                      : parseFloat(weeklyHealthScore) >= 4.0 
+                      ? "⚠️ Fair - monitor your symptoms" 
+                      : "🚨 Poor - consider seeking medical advice"
+                    }
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.quickActionsContainer}>
               <Text
                 style={[
-                  styles.assessmentButtonText,
+                  styles.quickActionsTitle,
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Start Symptom Assessment
+                Quick Actions
               </Text>
-            </TouchableOpacity>
+              
+              <View style={styles.quickActionsRow}>
+                <TouchableOpacity 
+                  style={styles.quickActionButton}
+                  onPress={handleSymptomAssessment}
+                >
+                  <View style={styles.quickActionIcon}>
+                    <Text style={styles.quickActionEmoji}>🤖</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.quickActionText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    AI Assessment
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.quickActionButton}
+                  onPress={navigateToDailyLog}
+                >
+                  <View style={styles.quickActionIcon}>
+                    <Text style={styles.quickActionEmoji}>📝</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.quickActionText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Daily Log
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
 
             {/* Medical Disclaimer */}
             <View style={styles.disclaimerContainer}>
@@ -305,7 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: -10,
+    marginBottom: 16,
   },
   healthStatusLabel: {
     fontSize: 16,
@@ -317,12 +476,128 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#28A745",
   },
+  // Health Score Card Styles
+  healthScoreCard: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  healthScoreHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  healthScoreTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  viewDetailsText: {
+    fontSize: 14,
+    color: "#2A7DE1",
+    fontWeight: "600",
+  },
+  healthScoreContent: {
+    alignItems: "center",
+  },
+  healthScoreValue: {
+    fontSize: 36,
+    fontWeight: "700",
+    color: "#2A7DE1",
+    marginBottom: 8,
+  },
+  healthScoreSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  progressBarContainer: {
+    width: "100%",
+    height: 8,
+    backgroundColor: "#E9ECEF",
+    borderRadius: 4,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    backgroundColor: "#28A745",
+    borderRadius: 4,
+  },
+  scoreInterpretation: {
+    backgroundColor: "#F8F9FA",
+    padding: 12,
+    borderRadius: 8,
+    width: "100%",
+  },
+  interpretationText: {
+    fontSize: 14,
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  // Quick Actions Styles
+  quickActionsContainer: {
+    marginBottom: 20,
+  },
+  quickActionsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  quickActionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  quickActionButton: {
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  quickActionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#F0F8FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  quickActionEmoji: {
+    fontSize: 24,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2A7DE1",
+    textAlign: "center",
+  },
   assessmentButton: {
     backgroundColor: "#2A7DE1",
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 24,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
