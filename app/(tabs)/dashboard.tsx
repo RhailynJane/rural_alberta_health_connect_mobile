@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // app/dashboard.tsx
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
@@ -71,7 +72,7 @@ export default function Dashboard() {
   }
 
   // Use currentUser data instead of userWithProfile for now
-  const userName = user.firstName || user.name || "User";
+  const userName = user.firstName || "User";
   const userEmail = user.email;
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router

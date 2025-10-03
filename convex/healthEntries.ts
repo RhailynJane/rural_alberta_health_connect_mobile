@@ -141,3 +141,10 @@ export const storeUploadedPhoto = mutation({
     return imageUrl || "";
   },
 });
+
+export const getEntryById = query({
+  args: { entryId: v.id("healthEntries") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.entryId);
+  },
+});
