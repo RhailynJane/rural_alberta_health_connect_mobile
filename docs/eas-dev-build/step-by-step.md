@@ -23,11 +23,17 @@ https://docs.expo.dev/tutorial/eas/configure-development-build/
 
    ![alt text](./img/config.png)
 
-5. build `eas build --platform android --profile development`
+5. In `package.json`
+
+   include two new entries, so that eas platform don't messup with `ci`
+
+   ```typescript
+   "eas-install": "npm ci",
+   "prebuild": "npm run eas-install"
+   ```
+
+6. build `eas build --platform android --profile development`
 
    https://youtu.be/D612BUtvvl8?t=75
 
-6. Wait 30 min.
-
-
-
+7. Wait 30 min.
