@@ -11,7 +11,7 @@ import {
 import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from "react-native-vision-camera";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
-import { runOnJS, useSharedValue } from "react-native-reanimated";
+import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -61,6 +61,7 @@ const getColorForClass = (className: string): string => {
 };
 
 export default function VisionTest() {
+  const detectionsShared = useSharedValue<Detection[]>([]);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(true);
@@ -93,6 +94,14 @@ export default function VisionTest() {
     }
   }, [model.state, isInitializing]);
 
+  // Sync shared value to React state every 200ms for UI updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDetections(detectionsShared.value);
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
   // Real-time frame processor
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet'
@@ -104,15 +113,21 @@ export default function VisionTest() {
     if (model.state !== 'loaded') return;
 
     try {
+      console.log("🔍 Frame processor: Starting...");
+
       // Step 1: Resize frame to 300x300 RGB (COCO SSD MobileNet V1 requirement)
+      console.log("📐 Resizing frame to 300x300...");
       const resized = resize(frame, {
         scale: { width: 300, height: 300 },
         pixelFormat: 'rgb',
         dataType: 'uint8',
       });
+      console.log("✅ Resize complete. Type:", typeof resized, "Length:", resized?.length);
 
       // Step 2: Run TFLite inference (synchronous for performance)
+      console.log("🤖 Running TFLite inference...");
       const outputs = model.model.runSync([resized]);
+      console.log("✅ Inference complete. Outputs:", outputs?.length);
 
       // Step 3: Parse outputs
       // SSD MobileNet V1 outputs:
@@ -157,10 +172,29 @@ export default function VisionTest() {
       }
 
       // Step 4: Update React state (must use runOnJS)
-      runOnJS(setDetections)(foundDetections);
+      console.log("📊 Found detections:", foundDetections.length);
+
+      // Convert to plain object for serialization across worklet boundary
+      const serializedDetections = foundDetections.map(d => ({
+        label: String(d.label),
+        confidence: Number(d.confidence),
+        box: {
+          x: Number(d.box.x),
+          y: Number(d.box.y),
+          width: Number(d.box.width),
+          height: Number(d.box.height),
+        },
+      }));
+
+      // Update shared value directly (no runOnJS needed)
+      detectionsShared.value = serializedDetections;
 
     } catch (error) {
-      console.error("Frame processing error:", error);
+      // Serialize error to string for better visibility in worklet context
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : '';
+      console.error("❌ Frame processing error:", errorMessage);
+      console.error("Stack:", errorStack);
     }
   }, [model]);
 
