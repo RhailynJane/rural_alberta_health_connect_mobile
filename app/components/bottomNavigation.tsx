@@ -35,6 +35,13 @@ const tabs: Tab[] = [
     iconNameFocused: 'flask'
   },
   {
+    name: 'VisionTest',
+    label: 'Vision Test',
+    route: '/vision-test',
+    iconName: 'eye-outline',
+    iconNameFocused: 'eye'
+  },
+  {
     name: 'Tracker',
     label: 'Tracker',
     route: '/tracker',
