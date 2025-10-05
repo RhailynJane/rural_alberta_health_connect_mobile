@@ -13,40 +13,47 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { 
-    name: 'Home', 
-    label: 'Home', 
-    route: '/dashboard', 
-    iconName: 'home-outline', 
-    iconNameFocused: 'home' 
+  {
+    name: 'Home',
+    label: 'Home',
+    route: '/dashboard',
+    iconName: 'home-outline',
+    iconNameFocused: 'home'
   },
-  { 
-    name: 'AIAssess', 
-    label: 'AI Assess', 
-    route: '/ai-assess', 
-    iconName: 'medical-outline', 
-    iconNameFocused: 'medical' 
+  {
+    name: 'AIAssess',
+    label: 'AI Assess',
+    route: '/ai-assess',
+    iconName: 'medical-outline',
+    iconNameFocused: 'medical'
   },
-  { 
-    name: 'Tracker', 
-    label: 'Tracker', 
-    route: '/tracker', 
-    iconName: 'stats-chart-outline', 
-    iconNameFocused: 'stats-chart' 
+  {
+    name: 'AITest',
+    label: 'AI Test',
+    route: '/ai-test',
+    iconName: 'flask-outline',
+    iconNameFocused: 'flask'
   },
-  { 
-    name: 'Emergency', 
-    label: 'Emergency', 
-    route: '/emergency', 
-    iconName: 'alert-circle-outline', 
-    iconNameFocused: 'alert-circle' 
+  {
+    name: 'Tracker',
+    label: 'Tracker',
+    route: '/tracker',
+    iconName: 'stats-chart-outline',
+    iconNameFocused: 'stats-chart'
   },
-  { 
-    name: 'Profile', 
-    label: 'Profile', 
-    route: '/profile', 
-    iconName: 'person-outline', 
-    iconNameFocused: 'person' 
+  {
+    name: 'Emergency',
+    label: 'Emergency',
+    route: '/emergency',
+    iconName: 'alert-circle-outline',
+    iconNameFocused: 'alert-circle'
+  },
+  {
+    name: 'Profile',
+    label: 'Profile',
+    route: '/profile',
+    iconName: 'person-outline',
+    iconNameFocused: 'person'
   },
 ];
 
