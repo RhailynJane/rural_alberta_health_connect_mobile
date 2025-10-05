@@ -1,10 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as FileSystem from "expo-file-system";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   ScrollView,
   StyleSheet,
   Text,
@@ -80,6 +81,7 @@ export default function VisionTest() {
 
   // Initialize TFLite model
   const model = useTensorflowModel(
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     require("../../../assets/models/coco_ssd_mobilenet_v1.tflite")
   );
 
@@ -173,43 +175,98 @@ export default function VisionTest() {
       console.log("Model inputs:", model.model.inputs);
       console.log("Model outputs:", model.model.outputs);
 
-      // SSD MobileNet V1 expects:
-      // Input: [1, 300, 300, 3] - normalized RGB image (0-255 uint8)
-      // Outputs:
-      //   [0]: [1, 10, 4] - bounding boxes (ymin, xmin, ymax, xmax) normalized 0-1
-      //   [1]: [1, 10] - class indices
-      //   [2]: [1, 10] - confidence scores
-      //   [3]: [1] - number of detections
-
-      // Note: We need to preprocess the image to 300x300
-      // This is a limitation - we'll need expo-image-manipulator or similar
-      // For now, let's show a message that preprocessing is needed
-
-      console.log(
-        "⚠️ Image preprocessing not yet implemented"
+      // Step 1: Resize image to 300x300 (COCO SSD MobileNet V1 requirement)
+      console.log("📐 Resizing image to 300x300...");
+      const resizedImage = await ImageManipulator.manipulateAsync(
+        selectedImage,
+        [{ resize: { width: 300, height: 300 } }]
       );
-      console.log(
-        "📝 Next step: Use expo-image-manipulator to resize image to 300x300"
-      );
+      console.log("✅ Image resized:", resizedImage.uri);
 
-      alert(
-        "Image preprocessing needed!\n\n" +
-          "The model requires a 300x300 RGB image, but we need to:\n" +
-          "1. Install expo-image-manipulator\n" +
-          "2. Resize your image to 300x300\n" +
-          "3. Convert to Uint8Array pixel data\n" +
-          "4. Run model.model.run([pixelData])\n" +
-          "5. Parse the output tensors\n\n" +
-          `Your image is ${originalImageSize.width}×${originalImageSize.height}\n` +
-          "Model expects: 300×300"
-      );
+      // Step 2: Attempt inference - try different input formats
+      console.log("🤖 Attempting TFLite inference...");
 
-      // Show what the model expects for implementation
-      console.log("Implementation needed:");
-      console.log("1. Resize image to 300x300");
-      console.log("2. Extract RGB pixel data as Uint8Array");
-      console.log("3. Call: const outputs = await model.model.run([pixels])");
-      console.log("4. Parse outputs[0] = boxes, outputs[1] = classes, outputs[2] = scores");
+      let outputs: any;
+      let inferenceSucceeded = false;
+
+      // Attempt 1: Try URI string directly (some implementations support this)
+      try {
+        console.log("  Attempt 1: Trying URI string...");
+        outputs = model.model.runSync([resizedImage.uri] as any);
+        inferenceSucceeded = true;
+        console.log("✅ URI-based inference succeeded!");
+      } catch (uriError) {
+        console.log("  ❌ URI failed:", uriError);
+
+        // Attempt 2: Try file:// protocol
+        try {
+          console.log("  Attempt 2: Trying file:// URI...");
+          const fileUri = resizedImage.uri.startsWith('file://')
+            ? resizedImage.uri
+            : `file://${resizedImage.uri}`;
+          outputs = model.model.runSync([fileUri] as any);
+          inferenceSucceeded = true;
+          console.log("✅ file:// URI inference succeeded!");
+        } catch (fileError) {
+          console.log("  ❌ file:// failed:", fileError);
+          throw new Error("Image input format not supported. react-native-fast-tflite requires VisionCamera integration or raw RGB pixel data.");
+        }
+      }
+
+      if (inferenceSucceeded) {
+        console.log("✅ Inference complete, outputs:", outputs.length);
+
+        // Step 4: Parse outputs
+        // SSD MobileNet V1 outputs:
+        //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
+        //   [1]: class indices [1, num_detections]
+        //   [2]: confidence scores [1, num_detections]
+        //   [3]: number of valid detections [1]
+
+        const boxes = outputs[0]; // Float32Array or similar
+        const classes = outputs[1];
+        const scores = outputs[2];
+        const numDetections = Math.min(Number(outputs[3][0]) || 10, 10); // Max 10 detections
+
+        console.log(`📊 Found ${numDetections} detections`);
+
+        const foundDetections: Detection[] = [];
+
+        for (let i = 0; i < numDetections; i++) {
+          const confidence = Number(scores[i]);
+
+          // Only show detections above 50% confidence
+          if (confidence > 0.5) {
+            const classIndex = Math.round(Number(classes[i]));
+            const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
+
+            // Boxes are normalized [ymin, xmin, ymax, xmax]
+            const ymin = Number(boxes[i * 4 + 0]);
+            const xmin = Number(boxes[i * 4 + 1]);
+            const ymax = Number(boxes[i * 4 + 2]);
+            const xmax = Number(boxes[i * 4 + 3]);
+
+            // Convert normalized coordinates to pixel coordinates (original image size)
+            const box: BoundingBox = {
+              x: xmin * originalImageSize.width,
+              y: ymin * originalImageSize.height,
+              width: (xmax - xmin) * originalImageSize.width,
+              height: (ymax - ymin) * originalImageSize.height,
+            };
+
+            foundDetections.push({
+              label,
+              confidence,
+              box,
+            });
+
+            console.log(`  ${i + 1}. ${label} (${(confidence * 100).toFixed(1)}%) at [${Math.round(box.x)}, ${Math.round(box.y)}, ${Math.round(box.width)}×${Math.round(box.height)}]`);
+          }
+        }
+
+        setDetections(foundDetections);
+        console.log(`✅ Showing ${foundDetections.length} detections above 50% confidence`);
+      }
 
     } catch (error) {
       console.error("❌ Detection failed:", error);
@@ -515,7 +572,7 @@ export default function VisionTest() {
               <View style={styles.imageSection}>
                 <View style={styles.imageContainer}>
                   {/* Base Image */}
-                  <Image
+                  <RNImage
                     source={{ uri: selectedImage }}
                     style={styles.detectionImage}
                     onLayout={(event) => {
