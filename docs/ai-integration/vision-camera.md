@@ -1,10 +1,11 @@
 https://react-native-vision-camera.com/docs/guides
 
-## Install package. 
+## Install package.
+
 `npx expo install react-native-vision-camera`
 
+## Set up permission implementing the plugin.
 
-## Set up permission implementing the plugin. 
 ```typescript
 
 {
@@ -24,3 +25,15 @@ https://react-native-vision-camera.com/docs/guides
 }
 
 ```
+
+## Criticl Ref - the plugin
+
+https://github.com/mrousavy/vision-camera-resize-plugin
+![alt text](./img/plugin-usage.png)
+
+It's dependency:
+
+> 🧵 A library to run JS functions ("Worklets") on separate
+
+https://github.com/margelo/react-native-worklets-core
+![alt text](./img/react-native-worklets-core.png)
