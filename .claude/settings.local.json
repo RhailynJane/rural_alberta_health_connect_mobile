@@ -9,7 +9,8 @@
     "deny": [],
     "ask": [],
     "additionalDirectories": [
-      "/Users/yuezhou/projs/react-native-executorch"
+      "/Users/yuezhou/projs/react-native-executorch",
+      "/Users/yuezhou/projs/opencvjs-document-scanner/"
     ]
   }
 }

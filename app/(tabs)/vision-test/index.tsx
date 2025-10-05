@@ -8,10 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor } from "react-native-vision-camera";
+import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor, runAtTargetFps } from "react-native-vision-camera";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
-import { useSharedValue } from "react-native-reanimated";
+import { useSharedValue, useAnimatedReaction, runOnJS } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -61,18 +61,17 @@ const getColorForClass = (className: string): string => {
 };
 
 export default function VisionTest() {
-  const detectionsShared = useSharedValue<Detection[]>([]);
-  const [detections, setDetections] = useState<Detection[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(true);
+  const [detections, setDetections] = useState<Detection[]>([]);
+
+  // Shared value for detections (VisionCamera official pattern)
+  const detectionsShared = useSharedValue<Detection[]>([]);
 
   // Camera setup
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
   const { resize } = useResizePlugin();
-
-  // Frame counter for performance optimization
-  const frameCounter = useSharedValue(0);
 
   // Initialize TFLite model
   // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
@@ -94,109 +93,97 @@ export default function VisionTest() {
     }
   }, [model.state, isInitializing]);
 
-  // Sync shared value to React state every 200ms for UI updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDetections(detectionsShared.value);
-    }, 200);
-    return () => clearInterval(interval);
-  }, []);
+  // Watch shared value and update React state (official Reanimated pattern)
+  useAnimatedReaction(
+    () => detectionsShared.value,
+    (currentDetections) => {
+      runOnJS(setDetections)(currentDetections);
+    }
+  );
 
-  // Real-time frame processor
+  // Real-time frame processor (VisionCamera official pattern)
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet'
 
-    // Process every 3rd frame for performance (30fps → ~10fps detection)
-    frameCounter.value++;
-    if (frameCounter.value % 3 !== 0) return;
-
     if (model.state !== 'loaded') return;
 
-    try {
-      console.log("🔍 Frame processor: Starting...");
+    // Run at 10 FPS (official VisionCamera throttling pattern)
+    runAtTargetFps(10, () => {
+      'worklet'
 
-      // Step 1: Resize frame to 300x300 RGB (COCO SSD MobileNet V1 requirement)
-      console.log("📐 Resizing frame to 300x300...");
-      const resized = resize(frame, {
-        scale: { width: 300, height: 300 },
-        pixelFormat: 'rgb',
-        dataType: 'uint8',
-      });
-      console.log("✅ Resize complete. Type:", typeof resized, "Length:", resized?.length);
+      try {
+        console.log("🔍 Frame processor: Starting...");
 
-      // Step 2: Run TFLite inference (synchronous for performance)
-      console.log("🤖 Running TFLite inference...");
-      const outputs = model.model.runSync([resized]);
-      console.log("✅ Inference complete. Outputs:", outputs?.length);
+        // Step 1: Resize frame to 300x300 RGB (COCO SSD MobileNet V1 requirement)
+        console.log("📐 Resizing frame to 300x300...");
+        const resized = resize(frame, {
+          scale: { width: 300, height: 300 },
+          pixelFormat: 'rgb',
+          dataType: 'uint8',
+        });
+        console.log("✅ Resize complete. Type:", typeof resized, "Length:", resized?.length);
 
-      // Step 3: Parse outputs
-      // SSD MobileNet V1 outputs:
-      //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
-      //   [1]: class indices [1, num_detections]
-      //   [2]: confidence scores [1, num_detections]
-      //   [3]: number of valid detections [1]
+        // Step 2: Run TFLite inference (synchronous for performance)
+        console.log("🤖 Running TFLite inference...");
+        const outputs = model.model.runSync([resized]);
+        console.log("✅ Inference complete. Outputs:", outputs?.length);
 
-      const boxes = outputs[0];
-      const classes = outputs[1];
-      const scores = outputs[2];
-      const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
+        // Step 3: Parse outputs
+        // SSD MobileNet V1 outputs:
+        //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
+        //   [1]: class indices [1, num_detections]
+        //   [2]: confidence scores [1, num_detections]
+        //   [3]: number of valid detections [1]
 
-      const foundDetections: Detection[] = [];
+        const boxes = outputs[0];
+        const classes = outputs[1];
+        const scores = outputs[2];
+        const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
 
-      for (let i = 0; i < numDetections; i++) {
-        const confidence = Number(scores[i]);
+        const foundDetections: Detection[] = [];
 
-        // Only show detections above 50% confidence
-        if (confidence > 0.5) {
-          const classIndex = Math.round(Number(classes[i]));
-          const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
+        for (let i = 0; i < numDetections; i++) {
+          const confidence = Number(scores[i]);
 
-          // Boxes are normalized [ymin, xmin, ymax, xmax]
-          const ymin = Number(boxes[i * 4 + 0]);
-          const xmin = Number(boxes[i * 4 + 1]);
-          const ymax = Number(boxes[i * 4 + 2]);
-          const xmax = Number(boxes[i * 4 + 3]);
+          // Only show detections above 50% confidence
+          if (confidence > 0.5) {
+            const classIndex = Math.round(Number(classes[i]));
+            const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
 
-          // Convert normalized coordinates to pixel coordinates (frame size)
-          foundDetections.push({
-            label,
-            confidence,
-            box: {
-              x: xmin * frame.width,
-              y: ymin * frame.height,
-              width: (xmax - xmin) * frame.width,
-              height: (ymax - ymin) * frame.height,
-            },
-          });
+            // Boxes are normalized [ymin, xmin, ymax, xmax]
+            const ymin = Number(boxes[i * 4 + 0]);
+            const xmin = Number(boxes[i * 4 + 1]);
+            const ymax = Number(boxes[i * 4 + 2]);
+            const xmax = Number(boxes[i * 4 + 3]);
+
+            // Convert normalized coordinates to pixel coordinates (frame size)
+            foundDetections.push({
+              label,
+              confidence,
+              box: {
+                x: xmin * frame.width,
+                y: ymin * frame.height,
+                width: (xmax - xmin) * frame.width,
+                height: (ymax - ymin) * frame.height,
+              },
+            });
+          }
         }
+
+        // Step 4: Update shared value (VisionCamera official pattern)
+        console.log("📊 Found detections:", foundDetections.length);
+        detectionsShared.value = foundDetections;
+        console.log("✅ Updated shared value. Count:", foundDetections.length);
+
+      } catch (error) {
+        // Serialize error to string for better visibility in worklet context
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : '';
+        console.error("❌ Frame processing error:", errorMessage);
+        console.error("Stack:", errorStack);
       }
-
-      // Step 4: Update React state (must use runOnJS)
-      console.log("📊 Found detections:", foundDetections.length);
-
-      // Convert to plain object for serialization across worklet boundary
-      const serializedDetections = foundDetections.map(d => ({
-        label: String(d.label),
-        confidence: Number(d.confidence),
-        box: {
-          x: Number(d.box.x),
-          y: Number(d.box.y),
-          width: Number(d.box.width),
-          height: Number(d.box.height),
-        },
-      }));
-
-      // Update shared value directly (no runOnJS needed)
-      detectionsShared.value = serializedDetections;
-
-    } catch (error) {
-      // Serialize error to string for better visibility in worklet context
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorStack = error instanceof Error ? error.stack : '';
-      console.error("❌ Frame processing error:", errorMessage);
-      console.error("Stack:", errorStack);
-    }
-  }, [model]);
+    });
+  }, [model, detectionsShared]);
 
   const handleFreeze = () => {
     console.log("🔄 Freezing camera view");
@@ -211,6 +198,7 @@ export default function VisionTest() {
   const handleClear = () => {
     console.log("🔄 Clearing detections and resuming");
     setDetections([]);
+    detectionsShared.value = [];
     setIsCameraActive(true);
   };
 
@@ -390,6 +378,15 @@ export default function VisionTest() {
       </SafeAreaView>
     );
   }
+
+  // Debug logging for detections
+  console.log("🎨 Rendering boxes:", detections.length, "detections:", detections.map(d => ({
+    label: d.label,
+    x: d.box.x,
+    y: d.box.y,
+    width: d.box.width,
+    height: d.box.height
+  })));
 
   // Main camera interface with real-time detection
   return (

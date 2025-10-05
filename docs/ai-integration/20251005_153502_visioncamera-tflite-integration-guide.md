@@ -231,7 +231,7 @@ TFLite models expect **raw pixel data**, not image URIs or file paths.
 const { resize } = useResizePlugin();
 
 const resized = resize(frame, {
-  scale: { width: 300, height: 300 },
+  scale: { width: 300, height: 300 }, // this should be updated to 640 x 640 if use real model
   pixelFormat: 'rgb',      // RGB format (not RGBA)
   dataType: 'uint8',       // 0-255 values (not normalized)
 });
@@ -247,7 +247,7 @@ const outputs = model.model.runSync([resized]); // ✅ Works
 
 ---
 
-### Model Output Format (COCO SSD)
+### Model Output Format (COCO SSD). 
 
 ```typescript
 const outputs = model.model.runSync([pixels]);
@@ -402,7 +402,7 @@ const frameProcessor = useFrameProcessor((frame) => {
 
 ### Build Requirements
 
-**Important:** After adding VisionCamera, you MUST rebuild the native app:
+**Important:** After adding VisionCamera, you MUST rebuild the native app (or eas build a dev client):
 
 ```bash
 npx expo prebuild --clean
