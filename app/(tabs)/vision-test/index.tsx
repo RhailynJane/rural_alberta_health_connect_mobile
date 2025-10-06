@@ -88,6 +88,7 @@ const getColorForClass = (className: string): string => {
 export default function VisionTest() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(true);
+  const [hasUserStarted, setHasUserStarted] = useState(false);
 
   // Latest detections in JS thread (for capture)
   const [latestDetections, setLatestDetections] = useState<{
@@ -110,8 +111,7 @@ export default function VisionTest() {
     height: number;
   }[] | null>(null);
 
-  // Confirmation state (for testing flow)
-  const [isConfirmed, setIsConfirmed] = useState(false);
+  // User input state
   const [userDescription, setUserDescription] = useState("");
   const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
   const [frameDimensions, setFrameDimensions] = useState({ width: 0, height: 0 });
@@ -327,25 +327,13 @@ export default function VisionTest() {
     }
   };
 
-  const handleContinue = () => {
-    console.log("▶️ Resuming camera view");
-    setCapturedImage(null);
-    setCapturedDetections(null);
-    setIsCameraActive(true);
-  };
-
-  const handleUsePhoto = () => {
-    console.log("✅ User confirmed photo");
-    setIsConfirmed(true);
-  };
-
   const handleReset = () => {
-    console.log("🔄 Resetting capture");
+    console.log("🔄 Resetting to landing page");
     setCapturedImage(null);
     setCapturedDetections(null);
-    setIsConfirmed(false);
     setUserDescription("");
     setIsCameraActive(true);
+    setHasUserStarted(false);
   };
 
   const handleAnalyzeWithAI = async () => {
@@ -480,6 +468,87 @@ Focus on immediate steps and when to seek professional help.
     );
   }
 
+  // Landing screen (shown before camera activation)
+  if (!hasUserStarted) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <CurvedHeader title="Vision Detection Test" height={120} showLogo={true} />
+
+            <View style={styles.contentSection}>
+              <Text style={[styles.landingTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Test Local AI Detection
+              </Text>
+              <Text style={[styles.landingSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Test wound and medical condition detection with your device camera
+              </Text>
+
+              <View style={styles.featuresList}>
+                <View style={styles.featureItem}>
+                  <Ionicons name="eye" size={24} color="#2A7DE1" />
+                  <View style={styles.featureTextContainer}>
+                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Real-time Object Detection
+                    </Text>
+                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Uses TensorFlow Lite COCO-SSD model for instant object recognition
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <Ionicons name="flash" size={24} color="#2A7DE1" />
+                  <View style={styles.featureTextContainer}>
+                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Local AI Medical Assessment
+                    </Text>
+                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Powered by Llama 3.2 1B running entirely on your device
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <Ionicons name="lock-closed" size={24} color="#2A7DE1" />
+                  <View style={styles.featureTextContainer}>
+                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Privacy First
+                    </Text>
+                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      All processing happens on your device - no data sent to cloud
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.disclaimerBox}>
+                <Ionicons name="information-circle" size={20} color="#FF6B35" />
+                <Text style={[styles.disclaimerBoxText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Testing Only - This feature is for workflow demonstration and not intended for actual medical diagnosis
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={() => setHasUserStarted(true)}
+              >
+                <Ionicons name="camera" size={24} color="white" />
+                <Text style={[styles.startButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Start Detection
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+          <BottomNavigation />
+        </CurvedBackground>
+      </SafeAreaView>
+    );
+  }
+
   // Camera permissions screen
   if (!hasPermission) {
     return (
@@ -571,71 +640,51 @@ Focus on immediate steps and when to seek professional help.
     );
   }
 
-  // Main camera interface with Skia drawing
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.fullScreen}>
-        {/* Camera View with Skia Frame Processor */}
-        <Camera
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          isActive={isCameraActive}
-          frameProcessor={frameProcessor}
-          photo={true}
-        />
+  // Show camera view (active detection)
+  if (!capturedImage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.fullScreen}>
+          {/* Camera View with Skia Frame Processor */}
+          <Camera
+            ref={cameraRef}
+            style={StyleSheet.absoluteFill}
+            device={device}
+            isActive={isCameraActive}
+            frameProcessor={frameProcessor}
+            photo={true}
+          />
 
-        {/* Curved Header Overlay */}
-        <View style={styles.headerOverlay}>
-          <CurvedHeader title="Real-Time Detection" height={100} showLogo={false} />
-        </View>
+          {/* Curved Header Overlay */}
+          <View style={styles.headerOverlay}>
+            <CurvedHeader title="Real-Time Detection" height={100} showLogo={false} />
+          </View>
 
-        {/* Status Overlay */}
-        <View style={styles.statusOverlay}>
-          <View style={styles.statusBadge}>
-            <View style={styles.statusDot} />
+          {/* Status Overlay */}
+          <View style={styles.statusOverlay}>
+            <View style={styles.statusBadge}>
+              <View style={styles.statusDot} />
+              <Text
+                style={[
+                  styles.statusText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                COCO Model Ready ✅
+              </Text>
+            </View>
             <Text
               style={[
-                styles.statusText,
+                styles.statusSubtext,
                 { fontFamily: FONTS.BarlowSemiCondensed },
               ]}
             >
-              COCO Model Ready ✅
+              Point camera at objects to detect
             </Text>
           </View>
-          <Text
-            style={[
-              styles.statusSubtext,
-              { fontFamily: FONTS.BarlowSemiCondensed },
-            ]}
-          >
-            Point camera at objects to detect
-          </Text>
-        </View>
 
-        {/* Captured Results Overlay */}
-        {capturedImage && capturedDetections && (
-          <View style={styles.resultsOverlay}>
-            <Text style={[styles.resultsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Captured Detections:
-            </Text>
-            {capturedDetections.length > 0 ? (
-              capturedDetections.map((det, idx) => (
-                <Text key={idx} style={[styles.detectionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {det.label}
-                </Text>
-              ))
-            ) : (
-              <Text style={[styles.detectionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                No objects detected
-              </Text>
-            )}
-          </View>
-        )}
-
-        {/* Control Buttons */}
-        <View style={styles.controlsContainer}>
-          {isCameraActive ? (
+          {/* Control Buttons */}
+          <View style={styles.controlsContainer}>
             <TouchableOpacity
               style={styles.captureButton}
               onPress={handleCapture}
@@ -650,43 +699,25 @@ Focus on immediate steps and when to seek professional help.
                 Capture
               </Text>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleContinue}
-              >
-                <Ionicons name="refresh" size={40} color="white" />
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Retake
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleUsePhoto}
-              >
-                <Ionicons name="checkmark-circle" size={40} color="white" />
-                <Text
-                  style={[
-                    styles.buttonText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Use This Photo
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+          </View>
 
-        {/* Confirmation Section - Shows when user clicks "Use This Photo" */}
-        {isConfirmed && capturedImage && capturedDetections && (
-          <ScrollView style={styles.confirmationSection} contentContainerStyle={styles.confirmationContent}>
+          <BottomNavigation />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show captured image review page (replaces camera completely)
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <ScrollView
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <CurvedHeader title="Vision Detection Test" height={120} showLogo={true} />
+
+          <View style={styles.contentSection}>
             <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               Captured Image
             </Text>
@@ -703,7 +734,7 @@ Focus on immediate steps and when to seek professional help.
                 }}
               />
               {/* Overlay bounding boxes - only show when image layout and frame dimensions are known */}
-              {imageLayout.width > 0 && frameDimensions.width > 0 && capturedDetections.map((det, idx) => {
+              {imageLayout.width > 0 && frameDimensions.width > 0 && capturedDetections && capturedDetections.map((det, idx) => {
                 // Calculate scaling factors based on actual frame dimensions
                 const scaleX = imageLayout.width / frameDimensions.width;
                 const scaleY = imageLayout.height / frameDimensions.height;
@@ -725,6 +756,24 @@ Focus on immediate steps and when to seek professional help.
                   </View>
                 );
               })}
+            </View>
+
+            {/* Detection Results Summary */}
+            <View style={styles.detectionsSummary}>
+              <Text style={[styles.detectionsSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Detected Objects:
+              </Text>
+              {capturedDetections && capturedDetections.length > 0 ? (
+                capturedDetections.map((det, idx) => (
+                  <Text key={idx} style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    • {det.label} ({Math.round(det.confidence * 100)}%)
+                  </Text>
+                ))
+              ) : (
+                <Text style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  No objects detected
+                </Text>
+              )}
             </View>
 
             {/* User Description Input */}
@@ -806,11 +855,10 @@ Focus on immediate steps and when to seek professional help.
                 </TouchableOpacity>
               </View>
             )}
-          </ScrollView>
-        )}
-
+          </View>
+        </ScrollView>
         <BottomNavigation />
-      </View>
+      </CurvedBackground>
     </SafeAreaView>
   );
 }
@@ -875,29 +923,6 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 
-  // Results Overlay
-  resultsOverlay: {
-    position: "absolute",
-    top: 180,
-    left: 16,
-    right: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    padding: 16,
-    borderRadius: 12,
-    maxHeight: 200,
-  },
-  resultsTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  detectionText: {
-    color: "white",
-    fontSize: 16,
-    marginBottom: 6,
-    paddingLeft: 8,
-  },
 
   // Control Buttons
   controlsContainer: {
@@ -908,10 +933,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   captureButton: {
-    alignItems: "center",
-    padding: 16,
-  },
-  continueButton: {
     alignItems: "center",
     padding: 16,
   },
@@ -1008,41 +1029,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // Button Row (for Retake + Use This Photo)
-  buttonRow: {
-    flexDirection: "row",
-    gap: 16,
-    alignItems: "center",
-  },
-  primaryButton: {
-    alignItems: "center",
-    padding: 12,
-    backgroundColor: "rgba(42, 125, 225, 0.9)",
-    borderRadius: 12,
-    flex: 1,
-  },
-  secondaryButton: {
-    alignItems: "center",
-    padding: 12,
-    backgroundColor: "rgba(128, 128, 128, 0.7)",
-    borderRadius: 12,
-    flex: 1,
-  },
-
-  // Confirmation Section
-  confirmationSection: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 80,
-    backgroundColor: "white",
-    zIndex: 100,
-  },
-  confirmationContent: {
-    padding: 20,
-    paddingBottom: 100,
-  },
+  // Section Title
   sectionTitle: {
     fontSize: 24,
     fontWeight: "700",
@@ -1053,7 +1040,7 @@ const styles = StyleSheet.create({
   // Image Preview
   imagePreviewContainer: {
     width: "100%",
-    height: 250,
+    height: 300,
     backgroundColor: "#F5F5F5",
     borderRadius: 12,
     overflow: "hidden",
@@ -1081,6 +1068,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+
+  // Detection Summary
+  detectionsSummary: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  detectionsSummaryTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 12,
+  },
+  detectionItem: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 6,
+    lineHeight: 20,
   },
 
   // Input Section
@@ -1211,6 +1220,87 @@ const styles = StyleSheet.create({
   newAssessmentButtonText: {
     color: "#2A7DE1",
     fontSize: 16,
+    fontWeight: "600",
+  },
+
+  // Landing Screen Styles
+  landingTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 8,
+  },
+  landingSubtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 32,
+    lineHeight: 24,
+  },
+  featuresList: {
+    gap: 20,
+    marginBottom: 24,
+  },
+  featureItem: {
+    flexDirection: "row",
+    gap: 16,
+    padding: 16,
+    backgroundColor: "white",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  featureTextContainer: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
+  },
+  disclaimerBox: {
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#FFF3E0",
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF6B35",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
+  },
+  disclaimerBoxText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#8B4513",
+    lineHeight: 20,
+  },
+  startButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 18,
+    borderRadius: 12,
+    shadowColor: "#2A7DE1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startButtonText: {
+    color: "white",
+    fontSize: 18,
     fontWeight: "600",
   },
 });
