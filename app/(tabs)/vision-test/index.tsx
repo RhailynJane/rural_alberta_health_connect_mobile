@@ -1,5 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -13,6 +13,7 @@ import { Skia, PaintStyle } from "@shopify/react-native-skia";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
+import { Worklets } from "react-native-worklets-core";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -53,6 +54,27 @@ export default function VisionTest() {
   const [isCameraActive, setIsCameraActive] = useState(true);
   const [detectionCount, setDetectionCount] = useState(0);
 
+  // Latest detections in JS thread (for capture)
+  const [latestDetections, setLatestDetections] = useState<{
+    label: string;
+    confidence: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[]>([]);
+
+  // Capture state
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedDetections, setCapturedDetections] = useState<{
+    label: string;
+    confidence: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[] | null>(null);
+
   // Shared value for caching detections (updated at 10 FPS, drawn at 30-60 FPS)
   const cachedDetections = useSharedValue<Array<{
     label: string;
@@ -64,9 +86,22 @@ export default function VisionTest() {
   }>>([]);
 
   // Camera setup
+  const cameraRef = useRef<Camera>(null);
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
   const { resize } = useResizePlugin();
+
+  // Create callback to update JS detections from worklet
+  const updateLatestDetections = Worklets.createRunOnJS((detections: {
+    label: string;
+    confidence: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[]) => {
+    setLatestDetections(detections);
+  });
 
   // Initialize TFLite model
   // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
@@ -157,8 +192,19 @@ export default function VisionTest() {
             }
           }
 
-          // Update cache (this happens at 10 FPS)
+          // Update cache for rendering (this happens at 10 FPS)
           cachedDetections.value = newDetections;
+
+          // Also update JS state for capture (map to simpler format with confidence)
+          const detectionsForJS = newDetections.map(det => ({
+            label: det.label,
+            confidence: 0.85, // Placeholder - we can get actual confidence from scores array
+            x: det.x,
+            y: det.y,
+            width: det.width,
+            height: det.height,
+          }));
+          updateLatestDetections(detectionsForJS);
 
           if (newDetections.length > 0) {
             console.log(`Detected ${newDetections.length} objects`);
@@ -193,15 +239,41 @@ export default function VisionTest() {
       frame.drawRect(labelBgRect, labelBgPaint);
     }
 
-  }, [model, resize, cachedDetections]);
+  }, [model, resize, cachedDetections, updateLatestDetections]);
 
-  const handleFreeze = () => {
-    console.log("🔄 Freezing camera view");
-    setIsCameraActive(false);
+  const handleCapture = async () => {
+    if (!cameraRef.current) return;
+
+    try {
+      // STEP 1: Get current detections from JS state (updated by worklet via callback)
+      console.log('🎯 Detections at capture time:', latestDetections);
+
+      // STEP 2: Take photo
+      const photo = await cameraRef.current.takePhoto();
+      console.log('📸 Photo captured:', photo.path);
+
+      // STEP 3: Save both to state
+      setCapturedImage(photo.path);
+      setCapturedDetections([...latestDetections]); // Copy array
+
+      // STEP 4: Freeze camera
+      setIsCameraActive(false);
+
+      console.log('✅ Capture complete with', latestDetections.length, 'detections');
+
+    } catch (error) {
+      console.error('❌ Capture failed:', error);
+      // Show the actual error message
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+      }
+    }
   };
 
   const handleContinue = () => {
     console.log("▶️ Resuming camera view");
+    setCapturedImage(null);
+    setCapturedDetections(null);
     setIsCameraActive(true);
   };
 
@@ -388,6 +460,7 @@ export default function VisionTest() {
       <View style={styles.fullScreen}>
         {/* Camera View with Skia Frame Processor */}
         <Camera
+          ref={cameraRef}
           style={StyleSheet.absoluteFill}
           device={device}
           isActive={isCameraActive}
@@ -423,21 +496,41 @@ export default function VisionTest() {
           </Text>
         </View>
 
+        {/* Captured Results Overlay */}
+        {capturedImage && capturedDetections && (
+          <View style={styles.resultsOverlay}>
+            <Text style={[styles.resultsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Captured Detections:
+            </Text>
+            {capturedDetections.length > 0 ? (
+              capturedDetections.map((det, idx) => (
+                <Text key={idx} style={[styles.detectionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {det.label}
+                </Text>
+              ))
+            ) : (
+              <Text style={[styles.detectionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                No objects detected
+              </Text>
+            )}
+          </View>
+        )}
+
         {/* Control Buttons */}
         <View style={styles.controlsContainer}>
           {isCameraActive ? (
             <TouchableOpacity
-              style={styles.freezeButton}
-              onPress={handleFreeze}
+              style={styles.captureButton}
+              onPress={handleCapture}
             >
-              <Ionicons name="pause-circle" size={70} color="white" />
+              <Ionicons name="camera" size={70} color="white" />
               <Text
                 style={[
                   styles.buttonText,
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Freeze
+                Capture
               </Text>
             </TouchableOpacity>
           ) : (
@@ -524,6 +617,30 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
 
+  // Results Overlay
+  resultsOverlay: {
+    position: "absolute",
+    top: 180,
+    left: 16,
+    right: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    padding: 16,
+    borderRadius: 12,
+    maxHeight: 200,
+  },
+  resultsTitle: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  detectionText: {
+    color: "white",
+    fontSize: 16,
+    marginBottom: 6,
+    paddingLeft: 8,
+  },
+
   // Control Buttons
   controlsContainer: {
     position: "absolute",
@@ -532,7 +649,7 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: "center",
   },
-  freezeButton: {
+  captureButton: {
     alignItems: "center",
     padding: 16,
   },
