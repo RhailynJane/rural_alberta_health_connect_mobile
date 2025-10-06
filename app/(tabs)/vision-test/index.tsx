@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { PaintStyle, Skia } from "@shopify/react-native-skia";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -10,13 +11,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Camera, useCameraDevice, useCameraPermission, useSkiaFrameProcessor, runAtTargetFps } from "react-native-vision-camera";
-import { Skia, PaintStyle } from "@shopify/react-native-skia";
-import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
-import { Worklets } from "react-native-worklets-core";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Camera, runAtTargetFps, useCameraDevice, useCameraPermission, useSkiaFrameProcessor } from "react-native-vision-camera";
+import { Worklets } from "react-native-worklets-core";
+import { useResizePlugin } from "vision-camera-resize-plugin";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -54,7 +54,6 @@ const getColorForClass = (className: string): string => {
 export default function VisionTest() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isCameraActive, setIsCameraActive] = useState(true);
-  const [detectionCount, setDetectionCount] = useState(0);
 
   // Latest detections in JS thread (for capture)
   const [latestDetections, setLatestDetections] = useState<{
@@ -84,14 +83,14 @@ export default function VisionTest() {
   const [frameDimensions, setFrameDimensions] = useState({ width: 0, height: 0 });
 
   // Shared value for caching detections (updated at 10 FPS, drawn at 30-60 FPS)
-  const cachedDetections = useSharedValue<Array<{
+  const cachedDetections = useSharedValue<{
     label: string;
     color: string;
     x: number;
     y: number;
     width: number;
     height: number;
-  }>>([]);
+  }[]>([]);
 
   // Camera setup
   const cameraRef = useRef<Camera>(null);
@@ -117,8 +116,9 @@ export default function VisionTest() {
   });
 
   // Initialize TFLite model
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+
   const model = useTensorflowModel(
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("../../../assets/models/coco_ssd_mobilenet_v1.tflite")
   );
 
