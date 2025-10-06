@@ -2,9 +2,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -75,6 +77,12 @@ export default function VisionTest() {
     height: number;
   }[] | null>(null);
 
+  // Confirmation state (for testing flow)
+  const [isConfirmed, setIsConfirmed] = useState(false);
+  const [userDescription, setUserDescription] = useState("");
+  const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
+  const [frameDimensions, setFrameDimensions] = useState({ width: 0, height: 0 });
+
   // Shared value for caching detections (updated at 10 FPS, drawn at 30-60 FPS)
   const cachedDetections = useSharedValue<Array<{
     label: string;
@@ -103,6 +111,11 @@ export default function VisionTest() {
     setLatestDetections(detections);
   });
 
+  // Create callback to save frame dimensions (called once)
+  const saveFrameDimensions = Worklets.createRunOnJS((width: number, height: number) => {
+    setFrameDimensions({ width, height });
+  });
+
   // Initialize TFLite model
   // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   const model = useTensorflowModel(
@@ -129,6 +142,11 @@ export default function VisionTest() {
 
     // STEP 1: Render the camera frame (REQUIRED)
     frame.render();
+
+    // Save frame dimensions once (for bounding box scaling)
+    if (frameDimensions.width === 0) {
+      saveFrameDimensions(frame.width, frame.height);
+    }
 
     // STEP 2: Run detection at 10 FPS (update cache)
     if (model.state === 'loaded') {
@@ -239,27 +257,28 @@ export default function VisionTest() {
       frame.drawRect(labelBgRect, labelBgPaint);
     }
 
-  }, [model, resize, cachedDetections, updateLatestDetections]);
+  }, [model, resize, cachedDetections, updateLatestDetections, frameDimensions, saveFrameDimensions]);
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
 
     try {
-      // STEP 1: Get current detections from JS state (updated by worklet via callback)
-      console.log('🎯 Detections at capture time:', latestDetections);
+      // STEP 1: Get current detections immediately (from last frame)
+      const currentDetections = [...latestDetections]; // Copy immediately
+      console.log('🎯 Detections at capture time:', currentDetections);
 
-      // STEP 2: Take photo
+      // STEP 2: Take photo FIRST (while camera is still active)
       const photo = await cameraRef.current.takePhoto();
       console.log('📸 Photo captured:', photo.path);
 
-      // STEP 3: Save both to state
-      setCapturedImage(photo.path);
-      setCapturedDetections([...latestDetections]); // Copy array
-
-      // STEP 4: Freeze camera
+      // STEP 3: Freeze camera AFTER photo is taken
       setIsCameraActive(false);
 
-      console.log('✅ Capture complete with', latestDetections.length, 'detections');
+      // STEP 4: Save both to state
+      setCapturedImage(photo.path);
+      setCapturedDetections(currentDetections);
+
+      console.log('✅ Capture complete with', currentDetections.length, 'detections');
 
     } catch (error) {
       console.error('❌ Capture failed:', error);
@@ -267,6 +286,8 @@ export default function VisionTest() {
       if (error instanceof Error) {
         console.error('Error details:', error.message);
       }
+      // Re-enable camera on error
+      setIsCameraActive(true);
     }
   };
 
@@ -275,6 +296,28 @@ export default function VisionTest() {
     setCapturedImage(null);
     setCapturedDetections(null);
     setIsCameraActive(true);
+  };
+
+  const handleUsePhoto = () => {
+    console.log("✅ User confirmed photo");
+    setIsConfirmed(true);
+  };
+
+  const handleReset = () => {
+    console.log("🔄 Resetting capture");
+    setCapturedImage(null);
+    setCapturedDetections(null);
+    setIsConfirmed(false);
+    setUserDescription("");
+    setIsCameraActive(true);
+  };
+
+  const handleAnalyzeWithAI = () => {
+    console.log("🤖 Analyzing with AI:");
+    console.log("  Image:", capturedImage);
+    console.log("  Detections:", capturedDetections);
+    console.log("  User Description:", userDescription);
+    // TODO: Call LLM API here
   };
 
   // Show model loading error
@@ -534,22 +577,121 @@ export default function VisionTest() {
               </Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              style={styles.continueButton}
-              onPress={handleContinue}
-            >
-              <Ionicons name="play-circle" size={70} color="white" />
-              <Text
-                style={[
-                  styles.buttonText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleContinue}
               >
-                Continue
-            </Text>
-            </TouchableOpacity>
+                <Ionicons name="refresh" size={40} color="white" />
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Retake
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.primaryButton}
+                onPress={handleUsePhoto}
+              >
+                <Ionicons name="checkmark-circle" size={40} color="white" />
+                <Text
+                  style={[
+                    styles.buttonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Use This Photo
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
+
+        {/* Confirmation Section - Shows when user clicks "Use This Photo" */}
+        {isConfirmed && capturedImage && capturedDetections && (
+          <ScrollView style={styles.confirmationSection} contentContainerStyle={styles.confirmationContent}>
+            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Captured Image
+            </Text>
+
+            {/* Image Preview with Bounding Boxes */}
+            <View style={styles.imagePreviewContainer}>
+              <Image
+                source={{ uri: `file://${capturedImage}` }}
+                style={styles.previewImage}
+                resizeMode="contain"
+                onLayout={(event) => {
+                  const { width, height } = event.nativeEvent.layout;
+                  setImageLayout({ width, height });
+                }}
+              />
+              {/* Overlay bounding boxes - only show when image layout and frame dimensions are known */}
+              {imageLayout.width > 0 && frameDimensions.width > 0 && capturedDetections.map((det, idx) => {
+                // Calculate scaling factors based on actual frame dimensions
+                const scaleX = imageLayout.width / frameDimensions.width;
+                const scaleY = imageLayout.height / frameDimensions.height;
+
+                return (
+                  <View
+                    key={idx}
+                    style={[
+                      styles.boundingBox,
+                      {
+                        left: det.x * scaleX,
+                        top: det.y * scaleY,
+                        width: det.width * scaleX,
+                        height: det.height * scaleY,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.boundingBoxLabel}>{det.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {/* User Description Input */}
+            <Text style={[styles.inputLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Describe what you&apos;re experiencing:
+            </Text>
+            <TextInput
+              style={[styles.descriptionInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+              placeholder="Enter your description here..."
+              value={userDescription}
+              onChangeText={setUserDescription}
+              multiline
+              numberOfLines={4}
+              placeholderTextColor="#999"
+            />
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={handleReset}
+              >
+                <Ionicons name="trash-outline" size={20} color="#DC3545" />
+                <Text style={[styles.resetButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Start Over
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.analyzeButton}
+                onPress={handleAnalyzeWithAI}
+                disabled={!userDescription.trim()}
+              >
+                <Ionicons name="flash" size={20} color="white" />
+                <Text style={[styles.analyzeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Analyze with AI
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        )}
 
         <BottomNavigation />
       </View>
@@ -745,6 +887,139 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   permissionsButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  // Button Row (for Retake + Use This Photo)
+  buttonRow: {
+    flexDirection: "row",
+    gap: 16,
+    alignItems: "center",
+  },
+  primaryButton: {
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "rgba(42, 125, 225, 0.9)",
+    borderRadius: 12,
+    flex: 1,
+  },
+  secondaryButton: {
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "rgba(128, 128, 128, 0.7)",
+    borderRadius: 12,
+    flex: 1,
+  },
+
+  // Confirmation Section
+  confirmationSection: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 80,
+    backgroundColor: "white",
+    zIndex: 100,
+  },
+  confirmationContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 16,
+  },
+
+  // Image Preview
+  imagePreviewContainer: {
+    width: "100%",
+    height: 250,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 20,
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  boundingBox: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "#FF6B6B",
+    backgroundColor: "rgba(255, 107, 107, 0.1)",
+  },
+  boundingBoxLabel: {
+    position: "absolute",
+    top: -20,
+    left: 0,
+    backgroundColor: "#FF6B6B",
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+
+  // Input Section
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginBottom: 8,
+  },
+  descriptionInput: {
+    backgroundColor: "#F9F9F9",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: "#1A1A1A",
+    minHeight: 100,
+    textAlignVertical: "top",
+    marginBottom: 20,
+  },
+
+  // Action Buttons
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  resetButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "white",
+    borderWidth: 2,
+    borderColor: "#DC3545",
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  resetButtonText: {
+    color: "#DC3545",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  analyzeButton: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  analyzeButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
