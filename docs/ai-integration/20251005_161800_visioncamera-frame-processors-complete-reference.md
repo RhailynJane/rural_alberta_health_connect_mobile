@@ -1,6 +1,7 @@
 # VisionCamera Frame Processors - Complete Reference Guide
 
 **Created:** 2025-10-05 16:18:00
+
 **Purpose:** Comprehensive guide to VisionCamera Frame Processors, Worklets, and Skia integration based on official documentation
 
 ---
@@ -68,10 +69,8 @@ Add to `babel.config.js`:
 
 ```javascript
 module.exports = {
-  plugins: [
-    ['react-native-worklets-core/plugin'],
-  ],
-}
+  plugins: [["react-native-worklets-core/plugin"]],
+};
 ```
 
 ### Using Community Plugins
@@ -86,13 +85,16 @@ cd ios && pod install
 Usage:
 
 ```typescript
-const { labelImage } = useImageLabeler()
+const { labelImage } = useImageLabeler();
 
-const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  const labels = labelImage(frame)
-  console.log(`You're looking at a ${labels[0].name}.`)
-}, [labelImage])
+const frameProcessor = useFrameProcessor(
+  (frame) => {
+    "worklet";
+    const labels = labelImage(frame);
+    console.log(`You're looking at a ${labels[0].name}.`);
+  },
+  [labelImage]
+);
 ```
 
 ---
@@ -105,22 +107,22 @@ A Frame is a **GPU-based pixel buffer** exposed to JavaScript via JSI.
 
 ```typescript
 const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  console.log(`Frame: ${frame.width}x${frame.height} (${frame.pixelFormat})`)
-}, [])
+  "worklet";
+  console.log(`Frame: ${frame.width}x${frame.height} (${frame.pixelFormat})`);
+}, []);
 ```
 
 ### Accessing Pixel Data
 
 ```typescript
 const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  if (frame.pixelFormat === 'rgb') {
-    const buffer = frame.toArrayBuffer()
-    const data = new Uint8Array(buffer)
-    console.log(`Pixel at 0,0: RGB(${data[0]}, ${data[1]}, ${data[2]})`)
+  "worklet";
+  if (frame.pixelFormat === "rgb") {
+    const buffer = frame.toArrayBuffer();
+    const data = new Uint8Array(buffer);
+    console.log(`Pixel at 0,0: RGB(${data[0]}, ${data[1]}, ${data[2]})`);
   }
-}, [])
+}, []);
 ```
 
 ### Performance Considerations
@@ -143,15 +145,15 @@ Simply add the `'worklet'` directive:
 
 ```typescript
 const sayHello = () => {
-  'worklet'
-  console.log("Hello from the Worklet Thread!")
-}
+  "worklet";
+  console.log("Hello from the Worklet Thread!");
+};
 ```
 
 ### Running on Background Thread
 
 ```typescript
-await Worklets.defaultContext.runAsync(sayHello)
+await Worklets.defaultContext.runAsync(sayHello);
 ```
 
 ### JavaScript Contexts
@@ -168,23 +170,24 @@ Worklets can take parameters and return results as promises:
 
 ```typescript
 const fibonacci = (num: number): number => {
-  'worklet'
+  "worklet";
   if (num <= 1) return num;
-  let prev = 0, curr = 1;
+  let prev = 0,
+    curr = 1;
   for (let i = 2; i <= num; i++) {
     let next = prev + curr;
     prev = curr;
     curr = next;
   }
   return curr;
-}
+};
 
-const context = Worklets.defaultContext
+const context = Worklets.defaultContext;
 const result = await context.runAsync(() => {
-  'worklet'
-  return fibonacci(50)
-})
-console.log(`Fibonacci of 50 is ${result}`)
+  "worklet";
+  return fibonacci(50);
+});
+console.log(`Fibonacci of 50 is ${result}`);
 ```
 
 ### Shared Values
@@ -192,15 +195,15 @@ console.log(`Fibonacci of 50 is ${result}`)
 **Shared Values** are values accessible from any Context:
 
 ```typescript
-const progress = useSharedValue(0)
+const progress = useSharedValue(0);
 
 const someHeavyFunction = () => {
-  'worklet'
+  "worklet";
   for (let i = 0; i < lotsOfItems.length; i++) {
     // do heavy processing
-    progress.value = i / lotsOfItems.length
+    progress.value = i / lotsOfItems.length;
   }
-}
+};
 
 // progress.value can be accessed here to check Worklet's progress
 ```
@@ -214,14 +217,17 @@ const someHeavyFunction = () => {
 Frame Processors can **readonly-copy** React state:
 
 ```typescript
-const targetObject = 'banana' // React state
+const targetObject = "banana"; // React state
 
-const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  const objects = detectObjects(frame)
-  const bananas = objects.filter((o) => o.type === targetObject)
-  console.log(`Detected ${bananas.length} bananas!`)
-}, [targetObject])
+const frameProcessor = useFrameProcessor(
+  (frame) => {
+    "worklet";
+    const objects = detectObjects(frame);
+    const bananas = objects.filter((o) => o.type === targetObject);
+    console.log(`Detected ${bananas.length} bananas!`);
+  },
+  [targetObject]
+);
 ```
 
 ### 2. Shared Values (Read/Write)
@@ -229,24 +235,27 @@ const frameProcessor = useFrameProcessor((frame) => {
 **Best practice:** Use Shared Values for communication between contexts.
 
 ```typescript
-const bananas = useSharedValue([])
+const bananas = useSharedValue([]);
 
 // Detect Bananas in Frame Processor
-const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  const objects = detectObjects(frame)
-  bananas.value = objects.filter((o) => o.type === 'banana')
-}, [bananas])
+const frameProcessor = useFrameProcessor(
+  (frame) => {
+    "worklet";
+    const objects = detectObjects(frame);
+    bananas.value = objects.filter((o) => o.type === "banana");
+  },
+  [bananas]
+);
 
 // Draw bananas in a Skia Canvas
 const onDraw = useDrawCallback((canvas) => {
   for (const banana of bananas.value) {
-    const rect = Skia.XYWHRect(banana.x, banana.y, banana.width, banana.height)
-    const paint = Skia.Paint()
-    paint.setColor(Skia.Color('red'))
-    frame.drawRect(rect, paint)
+    const rect = Skia.XYWHRect(banana.x, banana.y, banana.width, banana.height);
+    const paint = Skia.Paint();
+    paint.setColor(Skia.Color("red"));
+    frame.drawRect(rect, paint);
   }
-})
+});
 ```
 
 ### 3. Call Functions (Worklets.createRunOnJS)
@@ -254,19 +263,22 @@ const onDraw = useDrawCallback((canvas) => {
 **CRITICAL:** Use `Worklets.createRunOnJS` (from `react-native-worklets-core`), **NOT** `runOnJS` from Reanimated.
 
 ```typescript
-import { Worklets } from 'react-native-worklets-core'
+import { Worklets } from "react-native-worklets-core";
 
 const onFaceDetected = Worklets.createRunOnJS((face: Face) => {
-  navigation.push("FiltersPage", { face: face })
-})
+  navigation.push("FiltersPage", { face: face });
+});
 
-const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  const faces = scanFaces(frame)
-  if (faces.length > 0) {
-    onFaceDetected(faces[0])
-  }
-}, [onFaceDetected])
+const frameProcessor = useFrameProcessor(
+  (frame) => {
+    "worklet";
+    const faces = scanFaces(frame);
+    if (faces.length > 0) {
+      onFaceDetected(faces[0]);
+    }
+  },
+  [onFaceDetected]
+);
 ```
 
 ---
@@ -276,7 +288,7 @@ const frameProcessor = useFrameProcessor((frame) => {
 ### Frame Processing Timing
 
 | FPS | Time per Frame |
-|-----|----------------|
+| --- | -------------- |
 | 30  | 33ms           |
 | 60  | 16ms           |
 
@@ -288,18 +300,19 @@ For longer processing, use `runAsync()`:
 
 ```typescript
 const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  console.log("I'm running synchronously at 60 FPS!")
+  "worklet";
+  console.log("I'm running synchronously at 60 FPS!");
 
   runAsync(frame, () => {
-    'worklet'
-    console.log("I'm running asynchronously, possibly at lower FPS!")
-    const faces = detectFaces(frame) // Takes 500ms
-  })
-}, [])
+    "worklet";
+    console.log("I'm running asynchronously, possibly at lower FPS!");
+    const faces = detectFaces(frame); // Takes 500ms
+  });
+}, []);
 ```
 
 **Behavior:**
+
 - Only one `runAsync()` executes at a time (not parallel, but asynchronous)
 - Example: Camera at 60 FPS, heavy ML takes 500ms
   - Camera stays at 60 FPS
@@ -310,17 +323,17 @@ const frameProcessor = useFrameProcessor((frame) => {
 For operations that don't need every frame:
 
 ```typescript
-const TARGET_FPS = 2
+const TARGET_FPS = 2;
 const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  console.log("I'm running synchronously at 60 FPS!")
+  "worklet";
+  console.log("I'm running synchronously at 60 FPS!");
 
   runAtTargetFps(TARGET_FPS, () => {
-    'worklet'
-    console.log("I'm running synchronously at 2 FPS!")
-    const brightness = detectBrightness(frame)
-  })
-}, [])
+    "worklet";
+    console.log("I'm running synchronously at 2 FPS!");
+    const brightness = detectBrightness(frame);
+  });
+}, []);
 ```
 
 ---
@@ -330,6 +343,7 @@ const frameProcessor = useFrameProcessor((frame) => {
 ### What is Skia?
 
 Skia is a **2D graphics library** for drawing shapes, images, text, shaders, etc. GPU-accelerated by:
+
 - **iOS:** Metal
 - **Android:** OpenGL
 
@@ -343,12 +357,12 @@ npm i react-native-reanimated
 ### Basic Usage
 
 ```typescript
-import { useSkiaFrameProcessor } from 'react-native-vision-camera'
+import { useSkiaFrameProcessor } from "react-native-vision-camera";
 
 const frameProcessor = useSkiaFrameProcessor((frame) => {
-  'worklet'
-  frame.render() // MUST call render()
-}, [])
+  "worklet";
+  frame.render(); // MUST call render()
+}, []);
 ```
 
 ### Drawing to Frame
@@ -357,16 +371,16 @@ const frameProcessor = useSkiaFrameProcessor((frame) => {
 
 ```typescript
 const frameProcessor = useSkiaFrameProcessor((frame) => {
-  'worklet'
-  frame.render()
+  "worklet";
+  frame.render();
 
-  const centerX = frame.width / 2
-  const centerY = frame.height / 2
-  const rect = Skia.XYWHRect(centerX, centerY, 150, 150)
-  const paint = Skia.Paint()
-  paint.setColor(Skia.Color('red'))
-  frame.drawRect(rect, paint)
-}, [])
+  const centerX = frame.width / 2;
+  const centerY = frame.height / 2;
+  const rect = Skia.XYWHRect(centerX, centerY, 150, 150);
+  const paint = Skia.Paint();
+  paint.setColor(Skia.Color("red"));
+  frame.drawRect(rect, paint);
+}, []);
 ```
 
 #### Apply Shader (Invert Colors)
@@ -378,16 +392,23 @@ const invertColorsFilter = Skia.RuntimeEffect.Make(`
     vec4 color = image.eval(pos);
     return vec4((1.0 - color).rgb, 1.0);
   }
-`)
-const shaderBuilder = Skia.RuntimeShaderBuilder(invertColorsFilter)
-const imageFilter = Skia.ImageFilter.MakeRuntimeShader(shaderBuilder, null, null)
-const paint = Skia.Paint()
-paint.setImageFilter(imageFilter)
+`);
+const shaderBuilder = Skia.RuntimeShaderBuilder(invertColorsFilter);
+const imageFilter = Skia.ImageFilter.MakeRuntimeShader(
+  shaderBuilder,
+  null,
+  null
+);
+const paint = Skia.Paint();
+paint.setImageFilter(imageFilter);
 
-const frameProcessor = useSkiaFrameProcessor((frame) => {
-  'worklet'
-  frame.render(paint)
-}, [paint])
+const frameProcessor = useSkiaFrameProcessor(
+  (frame) => {
+    "worklet";
+    frame.render(paint);
+  },
+  [paint]
+);
 ```
 
 ### Coordinate System
@@ -404,6 +425,7 @@ const frameProcessor = useSkiaFrameProcessor((frame) => {
 ### CRITICAL LIMITATION
 
 > **⚠️ PREVIEW-ONLY:** Skia Frame Processors are currently **preview-only**. Content drawn to the Frame **will NOT be visible** in:
+>
 > - Captured photos
 > - Snapshots
 > - Videos
@@ -488,6 +510,7 @@ useAnimatedReaction(
 ```
 
 **Problem:**
+
 - `runOnJS` is from `react-native-reanimated`
 - VisionCamera worklets use `react-native-worklets-core`
 - **These are incompatible contexts**
@@ -517,123 +540,149 @@ npx expo prebuild --clean
 #### Step 2: Replace with `useSkiaFrameProcessor`
 
 **Current imports (Line 11-14):**
+
 ```typescript
-import { Camera, useCameraDevice, useCameraPermission, useFrameProcessor, runAtTargetFps } from "react-native-vision-camera";
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+  useFrameProcessor,
+  runAtTargetFps,
+} from "react-native-vision-camera";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
-import { useSharedValue, useAnimatedReaction, runOnJS } from "react-native-reanimated";
+import {
+  useSharedValue,
+  useAnimatedReaction,
+  runOnJS,
+} from "react-native-reanimated";
 ```
 
 **Replace with:**
+
 ```typescript
-import { Camera, useCameraDevice, useCameraPermission, useSkiaFrameProcessor, runAtTargetFps } from "react-native-vision-camera";
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+  useSkiaFrameProcessor,
+  runAtTargetFps,
+} from "react-native-vision-camera";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
-import { Skia } from '@shopify/react-native-skia';
+import { Skia } from "@shopify/react-native-skia";
 ```
 
 #### Step 3: Rewrite Frame Processor (Lines 105-186)
 
 **Replace:**
+
 ```typescript
-const frameProcessor = useFrameProcessor((frame) => {
-  'worklet'
-  // ... detection logic ...
-  detectionsShared.value = foundDetections;
-}, [model, detectionsShared]);
+const frameProcessor = useFrameProcessor(
+  (frame) => {
+    "worklet";
+    // ... detection logic ...
+    detectionsShared.value = foundDetections;
+  },
+  [model, detectionsShared]
+);
 ```
 
 **With:**
+
 ```typescript
-const frameProcessor = useSkiaFrameProcessor((frame) => {
-  'worklet'
+const frameProcessor = useSkiaFrameProcessor(
+  (frame) => {
+    "worklet";
 
-  // CRITICAL: Render the camera frame first
-  frame.render();
+    // CRITICAL: Render the camera frame first
+    frame.render();
 
-  if (model.state !== 'loaded') return;
+    if (model.state !== "loaded") return;
 
-  runAtTargetFps(10, () => {
-    'worklet'
+    runAtTargetFps(10, () => {
+      "worklet";
 
-    try {
-      // Step 1: Resize frame to 300x300 RGB
-      const resized = resize(frame, {
-        scale: { width: 300, height: 300 },
-        pixelFormat: 'rgb',
-        dataType: 'uint8',
-      });
+      try {
+        // Step 1: Resize frame to 300x300 RGB
+        const resized = resize(frame, {
+          scale: { width: 300, height: 300 },
+          pixelFormat: "rgb",
+          dataType: "uint8",
+        });
 
-      // Step 2: Run TFLite inference
-      const outputs = model.model.runSync([resized]);
+        // Step 2: Run TFLite inference
+        const outputs = model.model.runSync([resized]);
 
-      // Step 3: Parse outputs
-      const boxes = outputs[0];
-      const classes = outputs[1];
-      const scores = outputs[2];
-      const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
+        // Step 3: Parse outputs
+        const boxes = outputs[0];
+        const classes = outputs[1];
+        const scores = outputs[2];
+        const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
 
-      // Step 4: Draw bounding boxes directly on frame
-      for (let i = 0; i < numDetections; i++) {
-        const confidence = Number(scores[i]);
+        // Step 4: Draw bounding boxes directly on frame
+        for (let i = 0; i < numDetections; i++) {
+          const confidence = Number(scores[i]);
 
-        if (confidence > 0.5) {
-          const classIndex = Math.round(Number(classes[i]));
-          const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
+          if (confidence > 0.5) {
+            const classIndex = Math.round(Number(classes[i]));
+            const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
 
-          // Boxes are normalized [ymin, xmin, ymax, xmax]
-          const ymin = Number(boxes[i * 4 + 0]);
-          const xmin = Number(boxes[i * 4 + 1]);
-          const ymax = Number(boxes[i * 4 + 2]);
-          const xmax = Number(boxes[i * 4 + 3]);
+            // Boxes are normalized [ymin, xmin, ymax, xmax]
+            const ymin = Number(boxes[i * 4 + 0]);
+            const xmin = Number(boxes[i * 4 + 1]);
+            const ymax = Number(boxes[i * 4 + 2]);
+            const xmax = Number(boxes[i * 4 + 3]);
 
-          // Convert to pixel coordinates
-          const x = xmin * frame.width;
-          const y = ymin * frame.height;
-          const width = (xmax - xmin) * frame.width;
-          const height = (ymax - ymin) * frame.height;
+            // Convert to pixel coordinates
+            const x = xmin * frame.width;
+            const y = ymin * frame.height;
+            const width = (xmax - xmin) * frame.width;
+            const height = (ymax - ymin) * frame.height;
 
-          // Draw rectangle
-          const rect = Skia.XYWHRect(x, y, width, height);
-          const paint = Skia.Paint();
-          paint.setColor(Skia.Color(getColorForClass(label)));
-          paint.setStyle(PaintStyle.Stroke);
-          paint.setStrokeWidth(3);
-          frame.drawRect(rect, paint);
+            // Draw rectangle
+            const rect = Skia.XYWHRect(x, y, width, height);
+            const paint = Skia.Paint();
+            paint.setColor(Skia.Color(getColorForClass(label)));
+            paint.setStyle(PaintStyle.Stroke);
+            paint.setStrokeWidth(3);
+            frame.drawRect(rect, paint);
 
-          // Draw label background
-          const labelBgRect = Skia.XYWHRect(x, y - 25, 150, 25);
-          const labelBgPaint = Skia.Paint();
-          labelBgPaint.setColor(Skia.Color(getColorForClass(label)));
-          frame.drawRect(labelBgRect, labelBgPaint);
+            // Draw label background
+            const labelBgRect = Skia.XYWHRect(x, y - 25, 150, 25);
+            const labelBgPaint = Skia.Paint();
+            labelBgPaint.setColor(Skia.Color(getColorForClass(label)));
+            frame.drawRect(labelBgRect, labelBgPaint);
 
-          // Draw label text
-          const font = Skia.Font(null, 16);
-          const textPaint = Skia.Paint();
-          textPaint.setColor(Skia.Color('white'));
-          frame.drawText(
-            `${label} ${Math.round(confidence * 100)}%`,
-            x + 5,
-            y - 5,
-            textPaint,
-            font
-          );
+            // Draw label text
+            const font = Skia.Font(null, 16);
+            const textPaint = Skia.Paint();
+            textPaint.setColor(Skia.Color("white"));
+            frame.drawText(
+              `${label} ${Math.round(confidence * 100)}%`,
+              x + 5,
+              y - 5,
+              textPaint,
+              font
+            );
 
-          // Update shared value for detection count display
-          detectionsShared.value = [
-            ...detectionsShared.value.slice(0, i),
-            { label, confidence, box: { x, y, width, height } }
-          ];
+            // Update shared value for detection count display
+            detectionsShared.value = [
+              ...detectionsShared.value.slice(0, i),
+              { label, confidence, box: { x, y, width, height } },
+            ];
+          }
         }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.error("❌ Frame processing error:", errorMessage);
       }
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Frame processing error:", errorMessage);
-    }
-  });
-}, [model, detectionsShared, resize]);
+    });
+  },
+  [model, detectionsShared, resize]
+);
 ```
 
 #### Step 4: Remove Bounding Box Overlays (Lines 412-445)
@@ -641,6 +690,7 @@ const frameProcessor = useSkiaFrameProcessor((frame) => {
 Since bounding boxes are now drawn directly on the frame by Skia, **remove the React View overlays**.
 
 **Remove this code:**
+
 ```typescript
 {detections.map((detection, index) => (
   <View
@@ -673,26 +723,30 @@ If you **don't want to use Skia**, you can use `Worklets.createRunOnJS`:
 #### Step 1: Add Import
 
 ```typescript
-import { Worklets } from 'react-native-worklets-core';
+import { Worklets } from "react-native-worklets-core";
 ```
 
 #### Step 2: Create Worklet Callback (Before `frameProcessor`)
 
 ```typescript
-const updateDetections = Worklets.createRunOnJS((newDetections: Detection[]) => {
-  setDetections(newDetections);
-});
+const updateDetections = Worklets.createRunOnJS(
+  (newDetections: Detection[]) => {
+    setDetections(newDetections);
+  }
+);
 ```
 
 #### Step 3: Replace Shared Value Update (Line 175)
 
 **Replace:**
+
 ```typescript
 detectionsShared.value = foundDetections;
 console.log("✅ Updated shared value. Count:", foundDetections.length);
 ```
 
 **With:**
+
 ```typescript
 updateDetections(foundDetections);
 console.log("✅ Updated React state. Count:", foundDetections.length);
@@ -714,6 +768,7 @@ Delete the broken hook entirely.
 4. ✅ **Better UX** (bounding boxes drawn directly on camera feed)
 
 **Trade-off:**
+
 - ❌ Bounding boxes **won't appear in captured photos/videos** (preview-only)
 
 For your use case (real-time detection demo), this is acceptable since the goal is to **prove on-device detection works**, not to capture annotated media.
@@ -737,17 +792,20 @@ For your use case (real-time detection demo), this is acceptable since the goal 
 ### For Friday's Demo
 
 **What to show:**
+
 1. Open vision-test tab → Live camera with real-time bounding boxes
 2. Point at person → Red box appears with "person 87%"
 3. Point at objects → Multiple detections with color-coded boxes
 4. Emphasize: "Zero cloud costs, all on-device, GPU-accelerated"
 
 **What to say:**
+
 - "Real-time object detection using TFLite and Skia"
 - "Next: Replace with custom wound detection model from Roboflow"
 - "This proves on-device AI is feasible for medical triage"
 
 **What NOT to claim:**
+
 - ❌ "Wound detection" (still using COCO)
 - ❌ "Fully offline" (still needs Convex)
 - ❌ "Production-ready" (test tab only)
