@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useLLM, LLAMA3_2_1B_SPINQUANT, Message } from "react-native-executorch";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,6 +26,39 @@ import { FONTS } from "../../constants/constants";
 // COCO labels - imported statically
 import cocoLabelsData from "../../../assets/models/coco_labels.json";
 const COCO_LABELS = cocoLabelsData.labels;
+
+// Medical AI System Prompt (simplified from Gemini for local LLM)
+const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare.
+
+ROLE: Provide brief, compassionate first-aid guidance based on patient descriptions and visual detection results.
+
+FOCUS ON:
+1. Immediate first-aid steps
+2. When to seek professional help
+3. Emergency red flags
+4. Rural healthcare context (limited access, 30+ min to hospital)
+
+COMMUNICATION: Direct, clear medical language. Keep responses under 150 words.
+
+IMPORTANT: This is for testing workflow only. Always recommend professional medical evaluation for actual medical decisions.`;
+
+// Format detection results for LLM prompt
+const formatDetectionsForLLM = (detections: {
+  label: string;
+  confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}[] | null): string => {
+  if (!detections || detections.length === 0) {
+    return "No objects detected in the captured image";
+  }
+
+  return detections
+    .map(d => `${d.label} (${Math.round(d.confidence * 100)}% confidence)`)
+    .join(", ");
+};
 
 // Color coding for different object categories
 const getColorForClass = (className: string): string => {
@@ -116,11 +150,13 @@ export default function VisionTest() {
   });
 
   // Initialize TFLite model
-
   const model = useTensorflowModel(
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("../../../assets/models/coco_ssd_mobilenet_v1.tflite")
   );
+
+  // Initialize LLM for local AI assessment
+  const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
 
   useEffect(() => {
     console.log("👁️ Vision Test Screen Mounted");
@@ -312,12 +348,50 @@ export default function VisionTest() {
     setIsCameraActive(true);
   };
 
-  const handleAnalyzeWithAI = () => {
-    console.log("🤖 Analyzing with AI:");
-    console.log("  Image:", capturedImage);
-    console.log("  Detections:", capturedDetections);
-    console.log("  User Description:", userDescription);
-    // TODO: Call LLM API here
+  const handleAnalyzeWithAI = async () => {
+    console.log("🤖 Starting local AI analysis...");
+
+    // Check if LLM is ready
+    if (!llm.isReady) {
+      console.log("⚠️ LLM not ready yet");
+      return;
+    }
+
+    if (llm.isGenerating) {
+      console.log("⚠️ LLM already generating");
+      return;
+    }
+
+    try {
+      // Format detection results
+      const detectionSummary = formatDetectionsForLLM(capturedDetections);
+      console.log("📊 Detection summary:", detectionSummary);
+
+      // Build user prompt (matching ai-assess structure but simplified)
+      const userPrompt = `
+PATIENT MEDICAL PRESENTATION:
+Visual Detection Results: ${detectionSummary}
+Patient Description: ${userDescription || "No additional description provided"}
+Location: Rural Alberta (limited emergency access, 30+ min to nearest hospital)
+
+ASSESSMENT REQUEST:
+Provide brief first-aid guidance based on the detected objects and patient description.
+Focus on immediate steps and when to seek professional help.
+      `.trim();
+
+      console.log("📝 Sending to local LLM...");
+
+      // Call local LLM (matches ai-test pattern)
+      const messages: Message[] = [
+        { role: 'system', content: MEDICAL_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ];
+
+      await llm.generate(messages);
+      console.log("✅ Local AI assessment complete");
+    } catch (error) {
+      console.error("❌ Local AI assessment error:", error);
+    }
   };
 
   // Show model loading error
@@ -680,16 +754,58 @@ export default function VisionTest() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.analyzeButton}
+                style={[
+                  styles.analyzeButton,
+                  (!userDescription.trim() || !llm.isReady || llm.isGenerating) && styles.analyzeButtonDisabled
+                ]}
                 onPress={handleAnalyzeWithAI}
-                disabled={!userDescription.trim()}
+                disabled={!userDescription.trim() || !llm.isReady || llm.isGenerating}
               >
-                <Ionicons name="flash" size={20} color="white" />
+                {llm.isGenerating ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Ionicons name="flash" size={20} color="white" />
+                )}
                 <Text style={[styles.analyzeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Analyze with AI
+                  {llm.isGenerating ? "Analyzing..." : !llm.isReady ? "Loading AI..." : "Analyze with AI"}
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* AI Assessment Results Section */}
+            {llm.response && (
+              <View style={styles.assessmentSection}>
+                <View style={styles.assessmentHeader}>
+                  <Ionicons name="medical" size={24} color="#2A7DE1" />
+                  <Text style={[styles.assessmentTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Local AI Assessment
+                  </Text>
+                </View>
+
+                <View style={styles.disclaimerBanner}>
+                  <Ionicons name="information-circle" size={18} color="#FF6B35" />
+                  <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Testing Only - Not for Actual Medical Use
+                  </Text>
+                </View>
+
+                <View style={styles.assessmentCard}>
+                  <Text style={[styles.assessmentText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {llm.response}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.newAssessmentButton}
+                  onPress={handleReset}
+                >
+                  <Ionicons name="refresh" size={20} color="#2A7DE1" />
+                  <Text style={[styles.newAssessmentButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    New Assessment
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </ScrollView>
         )}
 
@@ -1019,8 +1135,81 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
   },
+  analyzeButtonDisabled: {
+    backgroundColor: "#A0A0A0",
+  },
   analyzeButtonText: {
     color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  // AI Assessment Results Section
+  assessmentSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 2,
+    borderTopColor: "#E0E0E0",
+  },
+  assessmentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  assessmentTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  disclaimerBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFF3E0",
+    borderLeftWidth: 4,
+    borderLeftColor: "#FF6B35",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  disclaimerText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#8B4513",
+    fontWeight: "600",
+  },
+  assessmentCard: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  assessmentText: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    lineHeight: 24,
+  },
+  newAssessmentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "white",
+    borderWidth: 2,
+    borderColor: "#2A7DE1",
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  newAssessmentButtonText: {
+    color: "#2A7DE1",
     fontSize: 16,
     fontWeight: "600",
   },

@@ -5,13 +5,15 @@
       "Bash(git commit:*)",
       "Bash(git log:*)",
       "Bash(mkdir:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(tail:*)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
       "/Users/yuezhou/projs/react-native-executorch",
-      "/Users/yuezhou/projs/opencvjs-document-scanner/"
+      "/Users/yuezhou/projs/opencvjs-document-scanner/",
+      "/Users/yuezhou/projs/burn-3degress"
     ]
   }
 }
