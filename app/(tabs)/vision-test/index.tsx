@@ -50,18 +50,6 @@ export default function VisionTest() {
 
     // Draw the rectangle
     frame.drawRect(rect, paint);
-
-    // Draw text label
-    const textPaint = Skia.Paint();
-    textPaint.setColor(Skia.Color('red'));
-    const font = Skia.Font(null, 24);
-    frame.drawText(
-      'Skia Test Box',
-      centerX - 70,
-      centerY - boxSize / 2 - 10,
-      textPaint,
-      font
-    );
   }, []);
 
   const handleFreeze = () => {
