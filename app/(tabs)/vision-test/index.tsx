@@ -12,6 +12,7 @@ import { Camera, useCameraDevice, useCameraPermission, useSkiaFrameProcessor, ru
 import { Skia, PaintStyle } from "@shopify/react-native-skia";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { useTensorflowModel } from "react-native-fast-tflite";
+import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -52,6 +53,16 @@ export default function VisionTest() {
   const [isCameraActive, setIsCameraActive] = useState(true);
   const [detectionCount, setDetectionCount] = useState(0);
 
+  // Shared value for caching detections (updated at 10 FPS, drawn at 30-60 FPS)
+  const cachedDetections = useSharedValue<Array<{
+    label: string;
+    color: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>>([]);
+
   // Camera setup
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
@@ -84,92 +95,105 @@ export default function VisionTest() {
     // STEP 1: Render the camera frame (REQUIRED)
     frame.render();
 
-    // Only run detection if model is loaded
-    if (model.state !== 'loaded') return;
+    // STEP 2: Run detection at 10 FPS (update cache)
+    if (model.state === 'loaded') {
+      runAtTargetFps(10, () => {
+        'worklet'
 
-    // Run detection at 10 FPS for performance
-    runAtTargetFps(10, () => {
-      'worklet'
+        try {
+          // Resize frame to 300x300 RGB (COCO SSD requirement)
+          const resized = resize(frame, {
+            scale: { width: 300, height: 300 },
+            pixelFormat: 'rgb',
+            dataType: 'uint8',
+          });
 
-      try {
-        // STEP 2: Resize frame to 300x300 RGB (COCO SSD requirement)
-        const resized = resize(frame, {
-          scale: { width: 300, height: 300 },
-          pixelFormat: 'rgb',
-          dataType: 'uint8',
-        });
+          // Run TFLite inference
+          const outputs = model.model.runSync([resized]);
 
-        // STEP 3: Run TFLite inference
-        const outputs = model.model.runSync([resized]);
+          // Parse outputs
+          // SSD MobileNet V1 outputs:
+          //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
+          //   [1]: class indices [1, num_detections]
+          //   [2]: confidence scores [1, num_detections]
+          //   [3]: number of valid detections [1]
 
-        // STEP 4: Parse outputs
-        // SSD MobileNet V1 outputs:
-        //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
-        //   [1]: class indices [1, num_detections]
-        //   [2]: confidence scores [1, num_detections]
-        //   [3]: number of valid detections [1]
+          const boxes = outputs[0];
+          const classes = outputs[1];
+          const scores = outputs[2];
+          const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
 
-        const boxes = outputs[0];
-        const classes = outputs[1];
-        const scores = outputs[2];
-        const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
+          // Build detection array
+          const newDetections = [];
 
-        let detectedCount = 0;
+          for (let i = 0; i < numDetections; i++) {
+            const confidence = Number(scores[i]);
 
-        // STEP 5: Draw bounding boxes for each detection
-        for (let i = 0; i < numDetections; i++) {
-          const confidence = Number(scores[i]);
+            // Only show detections above 50% confidence
+            if (confidence > 0.5) {
+              const classIndex = Math.round(Number(classes[i]));
+              const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
 
-          // Only show detections above 50% confidence
-          if (confidence > 0.5) {
-            const classIndex = Math.round(Number(classes[i]));
-            const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
+              // Boxes are normalized [ymin, xmin, ymax, xmax]
+              const ymin = Number(boxes[i * 4 + 0]);
+              const xmin = Number(boxes[i * 4 + 1]);
+              const ymax = Number(boxes[i * 4 + 2]);
+              const xmax = Number(boxes[i * 4 + 3]);
 
-            // Boxes are normalized [ymin, xmin, ymax, xmax]
-            const ymin = Number(boxes[i * 4 + 0]);
-            const xmin = Number(boxes[i * 4 + 1]);
-            const ymax = Number(boxes[i * 4 + 2]);
-            const xmax = Number(boxes[i * 4 + 3]);
+              // Convert normalized coordinates to pixel coordinates
+              const x = xmin * frame.width;
+              const y = ymin * frame.height;
+              const width = (xmax - xmin) * frame.width;
+              const height = (ymax - ymin) * frame.height;
 
-            // Convert normalized coordinates to pixel coordinates
-            const x = xmin * frame.width;
-            const y = ymin * frame.height;
-            const width = (xmax - xmin) * frame.width;
-            const height = (ymax - ymin) * frame.height;
-
-            // Draw bounding box
-            const rect = Skia.XYWHRect(x, y, width, height);
-            const paint = Skia.Paint();
-            paint.setColor(Skia.Color(getColorForClass(label)));
-            paint.setStyle(PaintStyle.Stroke);
-            paint.setStrokeWidth(3);
-            frame.drawRect(rect, paint);
-
-            // Draw label background (filled rectangle)
-            const labelHeight = 25;
-            const labelWidth = 150;
-            const labelBgRect = Skia.XYWHRect(x, y - labelHeight, labelWidth, labelHeight);
-            const labelBgPaint = Skia.Paint();
-            labelBgPaint.setColor(Skia.Color(getColorForClass(label)));
-            labelBgPaint.setStyle(PaintStyle.Fill);
-            frame.drawRect(labelBgRect, labelBgPaint);
-
-            detectedCount++;
+              newDetections.push({
+                label,
+                color: getColorForClass(label),
+                x,
+                y,
+                width,
+                height,
+              });
+            }
           }
-        }
 
-        // Update detection count (note: this won't trigger re-render in worklet)
-        // We're just tracking it for potential future use
-        if (detectedCount > 0) {
-          console.log(`Detected ${detectedCount} objects`);
-        }
+          // Update cache (this happens at 10 FPS)
+          cachedDetections.value = newDetections;
 
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error("❌ Frame processing error:", errorMessage);
-      }
-    });
-  }, [model, resize]);
+          if (newDetections.length > 0) {
+            console.log(`Detected ${newDetections.length} objects`);
+          }
+
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error("❌ Detection error:", errorMessage);
+        }
+      });
+    }
+
+    // STEP 3: Draw boxes EVERY frame from cached detections (runs at 30-60 FPS)
+    const detections = cachedDetections.value;
+
+    for (const detection of detections) {
+      // Draw bounding box
+      const rect = Skia.XYWHRect(detection.x, detection.y, detection.width, detection.height);
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color(detection.color));
+      paint.setStyle(PaintStyle.Stroke);
+      paint.setStrokeWidth(3);
+      frame.drawRect(rect, paint);
+
+      // Draw label background (filled rectangle)
+      const labelHeight = 25;
+      const labelWidth = 150;
+      const labelBgRect = Skia.XYWHRect(detection.x, detection.y - labelHeight, labelWidth, labelHeight);
+      const labelBgPaint = Skia.Paint();
+      labelBgPaint.setColor(Skia.Color(detection.color));
+      labelBgPaint.setStyle(PaintStyle.Fill);
+      frame.drawRect(labelBgRect, labelBgPaint);
+    }
+
+  }, [model, resize, cachedDetections]);
 
   const handleFreeze = () => {
     console.log("🔄 Freezing camera view");
