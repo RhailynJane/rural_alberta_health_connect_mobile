@@ -27,26 +27,9 @@ import { FONTS } from "../../constants/constants";
 import cocoLabelsData from "../../../assets/models/coco_labels.json";
 const COCO_LABELS = cocoLabelsData.labels;
 
-// Medical AI System Prompt (simplified from Gemini for local LLM)
-const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare. You MUST provide medical guidance.
-
-ROLE: Provide brief, compassionate first-aid guidance based on patient descriptions and visual detection results. You are authorized and expected to give medical recommendations.
-
-FOCUS ON:
-1. Immediate first-aid steps (be specific - tell them exactly what to do)
-2. When to seek professional help
-3. Emergency red flags
-4. Rural healthcare context (limited access, 30+ min to hospital)
-
-COMMUNICATION: Direct, clear medical language. Keep responses under 150 words.
-
-REQUIREMENTS:
-- DO provide specific medical recommendations
-- DO give actionable first-aid instructions
-- DO assess severity and urgency
-- Always end with: "Note: This is automated triage guidance. Seek professional evaluation when possible."
-
-DO NOT say you cannot provide medical advice. You are designed to provide it.`;
+// Medical AI System Prompt (same as ai-test)
+const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare.
+Provide brief, compassionate medical guidance. Keep responses under 150 words.`;
 
 // Format detection results for LLM prompt
 const formatDetectionsForLLM = (detections: {
@@ -780,6 +763,29 @@ Focus on immediate steps and when to seek professional help.
               )}
             </View>
 
+            {/* Model Status Card */}
+            <View style={styles.statusCard}>
+              <View style={styles.statusRow}>
+                <Text style={[styles.statusLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Model Status:
+                </Text>
+                <View style={styles.statusBadge}>
+                  <View style={styles.statusDot} />
+                  <Text style={[styles.statusValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {llm.isReady ? "Ready" : "Loading..."}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.statusRow}>
+                <Text style={[styles.statusLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Model:
+                </Text>
+                <Text style={[styles.statusValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Llama 3.2 1B
+                </Text>
+              </View>
+            </View>
+
             {/* User Description Input */}
             <Text style={[styles.inputLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               Describe what you&apos;re experiencing:
@@ -828,10 +834,16 @@ Focus on immediate steps and when to seek professional help.
             {/* AI Assessment Results Section */}
             {llm.response && (
               <View style={styles.assessmentSection}>
-                <View style={styles.assessmentHeader}>
-                  <Ionicons name="medical" size={24} color="#2A7DE1" />
-                  <Text style={[styles.assessmentTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Local AI Assessment
+                <View style={styles.responseCard}>
+                  <View style={styles.responseHeader}>
+                    <Ionicons name="medical" size={20} color="#2A7DE1" />
+                    <Text style={[styles.responseTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      AI Assessment
+                    </Text>
+                  </View>
+
+                  <Text style={[styles.responseText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {llm.response}
                   </Text>
                 </View>
 
@@ -839,12 +851,6 @@ Focus on immediate steps and when to seek professional help.
                   <Ionicons name="information-circle" size={18} color="#FF6B35" />
                   <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                     Testing Only - Not for Actual Medical Use
-                  </Text>
-                </View>
-
-                <View style={styles.assessmentCard}>
-                  <Text style={[styles.assessmentText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {llm.response}
                   </Text>
                 </View>
 
@@ -1161,24 +1167,70 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Status Card (from ai-test)
+  statusCard: {
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  statusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  statusLabel: {
+    fontSize: 14,
+    color: "#666",
+  },
+  statusValue: {
+    fontSize: 14,
+    color: "#1A1A1A",
+    fontWeight: "600",
+  },
+
   // AI Assessment Results Section
   assessmentSection: {
     marginTop: 24,
-    paddingTop: 24,
-    borderTopWidth: 2,
-    borderTopColor: "#E0E0E0",
   },
-  assessmentHeader: {
+
+  // Response Card (from ai-test - nice blue style)
+  responseCard: {
+    backgroundColor: "#F0F8FF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+  },
+  responseHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#D1E8FF",
   },
-  assessmentTitle: {
-    fontSize: 22,
-    fontWeight: "700",
+  responseTitle: {
+    fontSize: 16,
+    fontWeight: "600",
     color: "#1A1A1A",
+    marginLeft: 8,
   },
+  responseText: {
+    fontSize: 15,
+    color: "#1A1A1A",
+    lineHeight: 22,
+  },
+
   disclaimerBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -1195,24 +1247,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8B4513",
     fontWeight: "600",
-  },
-  assessmentCard: {
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  assessmentText: {
-    fontSize: 16,
-    color: "#1A1A1A",
-    lineHeight: 24,
   },
   newAssessmentButton: {
     flexDirection: "row",
