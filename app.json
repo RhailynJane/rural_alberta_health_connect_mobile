@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.amirzhou.rahcapp"
+      "bundleIdentifier": "com.amirzhou.rahcapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
+        "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +25,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.amirzhou.rahcapp"
+      "package": "com.amirzhou.rahcapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -67,9 +75,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "d37c258e-54b3-4dc4-83d2-1422379e9f4a"
+        "projectId": "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6"
       }
     },
-    "owner": "amirzhou"
+    "owner": "rahcapp"
   }
 }
