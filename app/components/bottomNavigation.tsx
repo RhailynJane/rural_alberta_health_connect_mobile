@@ -21,25 +21,18 @@ const tabs: Tab[] = [
     iconNameFocused: 'home'
   },
   {
-    name: 'AIAssess',
-    label: 'AI Assess',
-    route: '/ai-assess',
-    iconName: 'medical-outline',
-    iconNameFocused: 'medical'
-  },
-  {
-    name: 'AITest',
-    label: 'AI Test',
-    route: '/ai-test',
-    iconName: 'flask-outline',
-    iconNameFocused: 'flask'
-  },
-  {
     name: 'VisionTest',
     label: 'Vision Test',
     route: '/vision-test',
     iconName: 'eye-outline',
     iconNameFocused: 'eye'
+  },
+  {
+    name: 'AIAssess',
+    label: 'AI Assess',
+    route: '/ai-assess',
+    iconName: 'medical-outline',
+    iconNameFocused: 'medical'
   },
   {
     name: 'Tracker',
