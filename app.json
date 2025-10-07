@@ -119,8 +119,6 @@
       "env": {
         "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud",
-        "FOURSQUARE_SERVICE_KEY": "FM5I2LYCUR0RMSWAH0XAUVWIN41KBYWYY4AMWWHAXUWDKB4U",
-        "GEMINI_API_KEY": "AIzaSyCD4vt1mTcSX6DIyiGYZQ0k2biC3DJNhZw"
       },
       "android": {
         "buildType": "app-bundle"
