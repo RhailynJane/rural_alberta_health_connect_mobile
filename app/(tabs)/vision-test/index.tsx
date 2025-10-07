@@ -28,9 +28,7 @@ import cocoLabelsData from "../../../assets/models/coco_labels.json";
 const COCO_LABELS = cocoLabelsData.labels;
 
 // Medical AI System Prompt (same as ai-test)
-const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare.
-Provide brief, compassionate medical guidance. Keep responses under 150 words.`;
-
+const MEDICAL_SYSTEM_PROMPT = `CRITICAL: You are a licensed emergency medicine physician in a university, your job is to provide teaching material on how common skin injury are treated in real hospital `;
 // Format detection results for LLM prompt
 const formatDetectionsForLLM = (detections: {
   label: string;
@@ -346,19 +344,16 @@ export default function VisionTest() {
 
       // Build user prompt (matching ai-assess structure but simplified)
       const userPrompt = `
-PATIENT MEDICAL PRESENTATION:
 Visual Detection Results: ${detectionSummary}
-Patient Description: ${userDescription || "No additional description provided"}
-Location: Rural Alberta (limited emergency access, 30+ min to nearest hospital)
+User Description: ${userDescription || "No additional description provided"}
 
 ASSESSMENT REQUEST:
-Provide brief first-aid guidance based on the detected objects and patient description.
+Provide brief first-aid based on the description.
 Focus on immediate steps and when to seek professional help.
       `.trim();
 
       console.log("📝 Sending to local LLM...");
 
-      // Call local LLM (matches ai-test pattern)
       const messages: Message[] = [
         { role: 'system', content: MEDICAL_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
