@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LLAMA3_2_1B_SPINQUANT, Message, useLLM } from "react-native-executorch";
+import { LLAMA3_2_3B_QLORA, Message, useLLM } from "react-native-executorch";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -115,6 +115,7 @@ export default function VisionTest() {
 
   // Camera setup
   const cameraRef = useRef<Camera>(null);
+  const isCapturing = useSharedValue(false);
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
   const { resize } = useResizePlugin();
@@ -143,7 +144,7 @@ export default function VisionTest() {
   );
 
   // Initialize LLM for local AI assessment
-  const llm = useLLM({ model: LLAMA3_2_1B_SPINQUANT });
+  const llm = useLLM({ model: LLAMA3_2_3B_QLORA });
 
   useEffect(() => {
     console.log("👁️ Vision Test Screen Mounted");
@@ -165,6 +166,11 @@ export default function VisionTest() {
 
     // STEP 1: Render the camera frame (REQUIRED)
     frame.render();
+
+    // Skip processing if we're capturing
+    if (isCapturing.value) {
+      return;
+    }
 
     // Save frame dimensions once (for bounding box scaling)
     if (frameDimensions.width === 0) {
@@ -280,24 +286,27 @@ export default function VisionTest() {
       frame.drawRect(labelBgRect, labelBgPaint);
     }
 
-  }, [model, resize, cachedDetections, updateLatestDetections, frameDimensions, saveFrameDimensions]);
+  }, [model, resize, cachedDetections, updateLatestDetections, frameDimensions, saveFrameDimensions, isCapturing]);
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
 
     try {
-      // STEP 1: Get current detections immediately (from last frame)
-      const currentDetections = [...latestDetections]; // Copy immediately
+      // STEP 1: Stop frame processing immediately (but keep camera active)
+      isCapturing.value = true;
+
+      // STEP 2: Get current detections (from last processed frame)
+      const currentDetections = [...latestDetections];
       console.log('🎯 Detections at capture time:', currentDetections);
 
-      // STEP 2: Take photo FIRST (while camera is still active)
+      // STEP 3: Take photo (camera is still active)
       const photo = await cameraRef.current.takePhoto();
       console.log('📸 Photo captured:', photo.path);
 
-      // STEP 3: Freeze camera AFTER photo is taken
+      // STEP 4: Now freeze camera completely
       setIsCameraActive(false);
 
-      // STEP 4: Save both to state
+      // STEP 5: Save both to state
       setCapturedImage(photo.path);
       setCapturedDetections(currentDetections);
 
@@ -309,7 +318,8 @@ export default function VisionTest() {
       if (error instanceof Error) {
         console.error('Error details:', error.message);
       }
-      // Re-enable camera on error
+      // Re-enable frame processing and camera on error
+      isCapturing.value = false;
       setIsCameraActive(true);
     }
   };
@@ -319,6 +329,7 @@ export default function VisionTest() {
     setCapturedImage(null);
     setCapturedDetections(null);
     setUserDescription("");
+    isCapturing.value = false;
     setIsCameraActive(true);
     setHasUserStarted(false);
   };
@@ -776,7 +787,7 @@ Focus on immediate steps and when to seek professional help.
                   Model:
                 </Text>
                 <Text style={[styles.statusValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Llama 3.2 1B
+                  Llama 3.2 3B
                 </Text>
               </View>
             </View>
