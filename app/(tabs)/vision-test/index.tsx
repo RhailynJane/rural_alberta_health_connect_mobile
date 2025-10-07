@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLLM, LLAMA3_2_1B_SPINQUANT, Message } from "react-native-executorch";
+import { LLAMA3_2_1B_SPINQUANT, Message, useLLM } from "react-native-executorch";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -28,19 +28,25 @@ import cocoLabelsData from "../../../assets/models/coco_labels.json";
 const COCO_LABELS = cocoLabelsData.labels;
 
 // Medical AI System Prompt (simplified from Gemini for local LLM)
-const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare.
+const MEDICAL_SYSTEM_PROMPT = `You are a medical triage assistant for rural Alberta healthcare. You MUST provide medical guidance.
 
-ROLE: Provide brief, compassionate first-aid guidance based on patient descriptions and visual detection results.
+ROLE: Provide brief, compassionate first-aid guidance based on patient descriptions and visual detection results. You are authorized and expected to give medical recommendations.
 
 FOCUS ON:
-1. Immediate first-aid steps
+1. Immediate first-aid steps (be specific - tell them exactly what to do)
 2. When to seek professional help
 3. Emergency red flags
 4. Rural healthcare context (limited access, 30+ min to hospital)
 
 COMMUNICATION: Direct, clear medical language. Keep responses under 150 words.
 
-IMPORTANT: This is for testing workflow only. Always recommend professional medical evaluation for actual medical decisions.`;
+REQUIREMENTS:
+- DO provide specific medical recommendations
+- DO give actionable first-aid instructions
+- DO assess severity and urgency
+- Always end with: "Note: This is automated triage guidance. Seek professional evaluation when possible."
+
+DO NOT say you cannot provide medical advice. You are designed to provide it.`;
 
 // Format detection results for LLM prompt
 const formatDetectionsForLLM = (detections: {
@@ -385,7 +391,7 @@ Focus on immediate steps and when to seek professional help.
   // Show model loading error
   if (model.state === "error") {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         <CurvedBackground>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -432,7 +438,7 @@ Focus on immediate steps and when to seek professional help.
   // Show initializing screen
   if (isInitializing || model.state !== "loaded") {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         <CurvedBackground>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -471,7 +477,7 @@ Focus on immediate steps and when to seek professional help.
   // Landing screen (shown before camera activation)
   if (!hasUserStarted) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         <CurvedBackground>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -552,7 +558,7 @@ Focus on immediate steps and when to seek professional help.
   // Camera permissions screen
   if (!hasPermission) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         <CurvedBackground>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -604,7 +610,7 @@ Focus on immediate steps and when to seek professional help.
   // No camera device found
   if (device == null) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={[]}>
         <CurvedBackground>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -643,73 +649,71 @@ Focus on immediate steps and when to seek professional help.
   // Show camera view (active detection)
   if (!capturedImage) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.fullScreen}>
-          {/* Camera View with Skia Frame Processor */}
-          <Camera
-            ref={cameraRef}
-            style={StyleSheet.absoluteFill}
-            device={device}
-            isActive={isCameraActive}
-            frameProcessor={frameProcessor}
-            photo={true}
-          />
+      <View style={styles.fullScreen}>
+        {/* Camera View with Skia Frame Processor */}
+        <Camera
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          device={device}
+          isActive={isCameraActive}
+          frameProcessor={frameProcessor}
+          photo={true}
+        />
 
-          {/* Curved Header Overlay */}
-          <View style={styles.headerOverlay}>
-            <CurvedHeader title="Real-Time Detection" height={100} showLogo={false} />
-          </View>
+        {/* Curved Header Overlay */}
+        <View style={styles.headerOverlay}>
+          <CurvedHeader title="Real-Time Detection" height={100} showLogo={false} />
+        </View>
 
-          {/* Status Overlay */}
-          <View style={styles.statusOverlay}>
-            <View style={styles.statusBadge}>
-              <View style={styles.statusDot} />
-              <Text
-                style={[
-                  styles.statusText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                COCO Model Ready ✅
-              </Text>
-            </View>
+        {/* Status Overlay */}
+        <View style={styles.statusOverlay}>
+          <View style={styles.statusBadge}>
+            <View style={styles.statusDot} />
             <Text
               style={[
-                styles.statusSubtext,
+                styles.statusText,
                 { fontFamily: FONTS.BarlowSemiCondensed },
               ]}
             >
-              Point camera at objects to detect
+              COCO Model Ready ✅
             </Text>
           </View>
-
-          {/* Control Buttons */}
-          <View style={styles.controlsContainer}>
-            <TouchableOpacity
-              style={styles.captureButton}
-              onPress={handleCapture}
-            >
-              <Ionicons name="camera" size={70} color="white" />
-              <Text
-                style={[
-                  styles.buttonText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Capture
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <BottomNavigation />
+          <Text
+            style={[
+              styles.statusSubtext,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+            ]}
+          >
+            Point camera at objects to detect
+          </Text>
         </View>
-      </SafeAreaView>
+
+        {/* Control Buttons */}
+        <View style={styles.controlsContainer}>
+          <TouchableOpacity
+            style={styles.captureButton}
+            onPress={handleCapture}
+          >
+            <Ionicons name="camera" size={70} color="white" />
+            <Text
+              style={[
+                styles.buttonText,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+              ]}
+            >
+              Capture
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <BottomNavigation />
+      </View>
     );
   }
 
   // Show captured image review page (replaces camera completely)
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={[]}>
       <CurvedBackground>
         <ScrollView
           contentContainerStyle={styles.contentContainer}
@@ -869,7 +873,11 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   fullScreen: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   contentContainer: {
     flexGrow: 1,
