@@ -68,6 +68,8 @@
     "yup": "^1.7.0"
   },
   "devDependencies": {
+    "@types/estree": "^1.0.8",
+    "@types/json-schema": "^7.0.15",
     "@types/node-fetch": "^2.6.13",
     "@types/react": "~19.1.0",
     "@types/react-native-vector-icons": "^6.4.18",
