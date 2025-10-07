@@ -13,9 +13,11 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as aiAssessment from "../aiAssessment.js";
 import type * as auth from "../auth.js";
 import type * as dashboard_user from "../dashboard/user.js";
 import type * as emergencyContactOnboarding_update from "../emergencyContactOnboarding/update.js";
+import type * as healthEntries from "../healthEntries.js";
 import type * as http from "../http.js";
 import type * as locationServices from "../locationServices.js";
 import type * as medicalHistoryOnboarding_update from "../medicalHistoryOnboarding/update.js";
@@ -35,9 +37,11 @@ import type * as utils_sanitize from "../utils/sanitize.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aiAssessment: typeof aiAssessment;
   auth: typeof auth;
   "dashboard/user": typeof dashboard_user;
   "emergencyContactOnboarding/update": typeof emergencyContactOnboarding_update;
+  healthEntries: typeof healthEntries;
   http: typeof http;
   locationServices: typeof locationServices;
   "medicalHistoryOnboarding/update": typeof medicalHistoryOnboarding_update;

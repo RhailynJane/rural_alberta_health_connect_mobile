@@ -29,21 +29,18 @@ export default function SymptomDuration() {
   ];
 
   const handleContinue = () => {
-    if (!selectedDuration) {
-      // You could add an alert here if selection is required
-      return;
-    }
+  if (!selectedDuration) return;
 
-    console.log("Selected duration:", selectedDuration);
-    // Navigate to next screen with all collected data
-    router.push({
-      pathname: "/(tabs)/ai-assess/assessment-results",
-      params: {
-        ...params,
-        duration: selectedDuration,
-      },
-    });
-  };
+  console.log("Selected duration:", selectedDuration);
+  
+  router.push({
+    pathname: "/(tabs)/ai-assess/assessment-results",
+    params: {
+      ...params,
+      duration: selectedDuration,
+    },
+  });
+};
 
   const DurationOption = ({ label, value }: { label: string; value: string }) => (
     <TouchableOpacity

@@ -46,14 +46,14 @@ export default function MedicalHistory() {
       await updateCompleteUserOnboarding();
       console.log("✅ Onboarding marked as completed");
 
-      // Use custom session refresh instead of Convex refresh
+      // Refresh session to update auth state with new onboarding status
       console.log("🔄 Refreshing session via custom method...");
       refreshSession();
 
-      // Wait a moment for the session to refresh
+      // Wait for session to refresh before navigating
       await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Navigate to dashboard
+      // Navigate to dashboard with fresh session data
       console.log("🚀 Navigating to dashboard");
       router.replace("/(tabs)/dashboard");
 
