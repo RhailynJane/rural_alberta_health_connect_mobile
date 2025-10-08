@@ -1,13 +1,13 @@
 {
   "expo": {
     "name": "Rural Alberta Health Connect Dev",
-    "slug": "rahc-dev",
+    "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rahcapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.paraflux.rahc",
@@ -76,10 +76,10 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6"
+        "projectId": "d37c258e-54b3-4dc4-83d2-1422379e9f4a"
       }
     },
-    "owner": "rahcapp"
+    "owner": "amirzhou"
   },
   "cli": {
     "version": ">= 16.17.4",
