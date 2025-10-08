@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "rahc-app",
+    "name": "",
     "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -104,7 +104,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_ENV": "preview",
-        "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud"
+        "EXPO_PUBLIC_CONVEX_URL": "https://rightful-narwhal-594.convex.cloud"
       },
       "android": {
         "buildType": "apk"
@@ -118,7 +118,7 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud",
+        "EXPO_PUBLIC_CONVEX_URL": "https://rightful-narwhal-594.convex.cloud"
       },
       "android": {
         "buildType": "app-bundle"
