@@ -6,7 +6,10 @@
       "Bash(git log:*)",
       "Bash(mkdir:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(tail:*)"
+      "Bash(tail:*)",
+      "Read(//private/tmp/**)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": [],
