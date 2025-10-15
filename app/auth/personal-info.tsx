@@ -21,12 +21,16 @@ import { FONTS } from "../constants/constants";
 
 
 export default function PersonalInfo() {
+  console.log("🟢 PersonalInfo component mounted");
+
   const router = useRouter();
   const [ageRange, setAgeRange] = useState("");
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
+
+  console.log("🟢 PersonalInfo rendered - ageRange:", ageRange, "location:", location);
 
 
   const handleContinue = async () => {
@@ -119,7 +123,10 @@ export default function PersonalInfo() {
                     style={styles.picker}
                     dropdownIconColor="#2A7DE1"
                     selectedValue={ageRange}
-                    onValueChange={setAgeRange}
+                    onValueChange={(value) => {
+                      console.log("🟢 Age range changed to:", value);
+                      setAgeRange(value);
+                    }}
                   >
                     <Picker.Item label="Select your age range" value="" />
                     <Picker.Item label="Under 18" value="under18" />
@@ -145,7 +152,10 @@ export default function PersonalInfo() {
                     style={styles.picker}
                     dropdownIconColor="#2A7DE1"
                     selectedValue={location}
-                    onValueChange={setLocation}
+                    onValueChange={(value) => {
+                      console.log("🟢 Location changed to:", value);
+                      setLocation(value);
+                    }}
                   >
                     <Picker.Item label="Select your location" value="" />
                     <Picker.Item label="Northern Alberta" value="northern" />
@@ -171,7 +181,10 @@ export default function PersonalInfo() {
                   styles.continueButton,
                   (isSubmitting || !ageRange || !location) && styles.continueButtonDisabled
                 ]}
-                onPress={handleContinue}
+                onPress={() => {
+                  console.log("🟢 Continue button pressed");
+                  handleContinue();
+                }}
                 disabled={isSubmitting || !ageRange || !location}
               >
                 {isSubmitting ? (

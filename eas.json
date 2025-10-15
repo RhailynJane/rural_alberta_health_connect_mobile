@@ -23,6 +23,12 @@
         "simulator": true
       }
     },
+    "iosdev": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "autoIncrement": true,
       "distribution": "store",
