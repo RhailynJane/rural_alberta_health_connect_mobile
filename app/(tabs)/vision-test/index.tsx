@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LLAMA3_2_1B_QLORA, Message, useLLM } from "react-native-executorch";
+import { LLAMA3_2_1B_QLORA, Message, LLMModule } from "react-native-executorch";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -27,15 +27,87 @@ export default function VisionTest() {
   const [userDescription, setUserDescription] = useState("");
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
 
-  // Initialize LLM for local AI assessment (1B model - faster)
-  const llm = useLLM({ model: LLAMA3_2_1B_QLORA });
+  // Manual LLM state management (replacing useLLM hook)
+  const [llm, setLlm] = useState<LLMModule | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [response, setResponse] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  // Initialize LLM with proper cleanup
+  useEffect(() => {
+    let instance: LLMModule | null = null;
+    let isCancelled = false;
+
+    const initModel = async () => {
+      try {
+        console.log('🚀 Initializing LLM...');
+
+        instance = new LLMModule({
+          tokenCallback: (token) => {
+            if (!mountedRef.current || isCancelled) return;
+            setResponse(prev => prev + token);
+          },
+          messageHistoryCallback: (messages) => {
+            console.log('📝 Message history updated:', messages.length, 'messages');
+          }
+        });
+
+        console.log('📥 Loading model...');
+        await instance.load(
+          LLAMA3_2_1B_QLORA,
+          (progress) => {
+            if (isCancelled) return;
+            setDownloadProgress(progress);
+            console.log(`📊 Download progress: ${Math.round(progress * 100)}%`);
+          }
+        );
+
+        if (isCancelled) {
+          console.log('⚠️ Component unmounted during load, cleaning up...');
+          instance.delete();
+          return;
+        }
+
+        console.log('✅ LLM loaded successfully');
+        setIsReady(true);
+        setLlm(instance);
+      } catch (err) {
+        console.error('❌ Failed to load LLM:', err);
+        if (!isCancelled) {
+          setError(String(err));
+        }
+      }
+    };
+
+    initModel();
+
+    // 🔥 CRITICAL: Cleanup on unmount
+    return () => {
+      console.log('🧹 Cleaning up LLM instance...');
+      mountedRef.current = false;
+      isCancelled = true;
+
+      if (instance) {
+        try {
+          instance.interrupt(); // Stop any ongoing generation
+          instance.delete();    // Free memory
+          console.log('✅ LLM deleted successfully');
+        } catch (err) {
+          console.error('⚠️ Error deleting LLM:', err);
+        }
+      }
+    };
+  }, []);
 
   // Debug: Log LLM state changes
   console.log("📊 LLM State:", {
-    isReady: llm.isReady,
-    isGenerating: llm.isGenerating,
-    downloadProgress: llm.downloadProgress,
-    hasError: !!llm.error,
+    isReady,
+    isGenerating,
+    downloadProgress,
+    hasError: !!error,
   });
 
   const requestCameraPermission = async (): Promise<boolean> => {
@@ -115,17 +187,21 @@ export default function VisionTest() {
     console.log("🤖 Starting local AI analysis...");
 
     // Check if LLM is ready
-    if (!llm.isReady) {
+    if (!llm || !isReady) {
       console.log("⚠️ LLM not ready yet");
+      Alert.alert("Model Not Ready", "Please wait for the AI model to finish loading.");
       return;
     }
 
-    if (llm.isGenerating) {
+    if (isGenerating) {
       console.log("⚠️ LLM already generating");
       return;
     }
 
     try {
+      setIsGenerating(true);
+      setResponse(''); // Clear previous response
+
       // Build user prompt
       const userPrompt = `
 User Description: ${userDescription || "No description provided"}
@@ -147,6 +223,10 @@ Focus on immediate steps and when to seek professional help.
       console.log("✅ Local AI assessment complete");
     } catch (error) {
       console.error("❌ Local AI assessment error:", error);
+      setError(String(error));
+      Alert.alert("AI Error", "Failed to generate assessment. Please try again.");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -247,33 +327,36 @@ Focus on immediate steps and when to seek professional help.
                   Model Status:
                 </Text>
                 <View style={styles.statusBadge}>
-                  <View style={[styles.statusDot, { backgroundColor: llm.isReady ? "#28A745" : "#FFC107" }]} />
+                  <View style={[styles.statusDot, { backgroundColor: isReady ? "#28A745" : "#FFC107" }]} />
                   <Text style={[styles.statusValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {llm.isReady ? "Ready" : "Loading..."}
+                    {isReady ? "Ready" : "Loading..."}
                   </Text>
                 </View>
               </View>
 
               {/* Progress Bar - shown when loading */}
-              {!llm.isReady && (
+              {!isReady && (
                 <View style={styles.progressContainer}>
                   <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${llm.downloadProgress * 100}%` }]} />
+                    <View style={[styles.progressFill, { width: `${downloadProgress * 100}%` }]} />
                   </View>
                   <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {llm.downloadProgress > 0
-                      ? `${Math.round(llm.downloadProgress * 100)}%`
+                    {downloadProgress > 0
+                      ? `${Math.round(downloadProgress * 100)}%`
                       : "Initializing..."}
+                  </Text>
+                  <Text style={[styles.progressSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    This may take 20-30 seconds
                   </Text>
                 </View>
               )}
 
               {/* Error Display */}
-              {llm.error && (
+              {error && (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={20} color="#DC3545" />
                   <Text style={[styles.errorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Error: {String(llm.error)}
+                    Error: {String(error)}
                   </Text>
                 </View>
               )}
@@ -371,24 +454,24 @@ Focus on immediate steps and when to seek professional help.
               <TouchableOpacity
                 style={[
                   styles.analyzeButton,
-                  (!userDescription.trim() || !llm.isReady || llm.isGenerating) && styles.analyzeButtonDisabled
+                  (!userDescription.trim() || !isReady || isGenerating) && styles.analyzeButtonDisabled
                 ]}
                 onPress={handleAnalyzeWithAI}
-                disabled={!userDescription.trim() || !llm.isReady || llm.isGenerating}
+                disabled={!userDescription.trim() || !isReady || isGenerating}
               >
-                {llm.isGenerating ? (
+                {isGenerating ? (
                   <ActivityIndicator size="small" color="white" />
                 ) : (
                   <Ionicons name="flash" size={20} color="white" />
                 )}
                 <Text style={[styles.analyzeButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {llm.isGenerating ? "Analyzing..." : !llm.isReady ? "Loading AI..." : "Analyze with AI"}
+                  {isGenerating ? "Analyzing..." : !isReady ? "Loading AI..." : "Analyze with AI"}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* AI Assessment Results Section */}
-            {llm.response && (
+            {response && (
               <View style={styles.assessmentSection}>
                 <View style={styles.responseCard}>
                   <View style={styles.responseHeader}>
@@ -399,7 +482,7 @@ Focus on immediate steps and when to seek professional help.
                   </View>
 
                   <Text style={[styles.responseText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {llm.response}
+                    {response}
                   </Text>
                 </View>
 
@@ -415,6 +498,7 @@ Focus on immediate steps and when to seek professional help.
                   onPress={() => {
                     setUserDescription("");
                     setUploadedPhotos([]);
+                    setResponse('');
                     setHasUserStarted(false);
                   }}
                 >
@@ -665,6 +749,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     textAlign: "center",
+  },
+  progressSubtext: {
+    fontSize: 11,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 4,
+    fontStyle: "italic",
   },
 
   // Error Display

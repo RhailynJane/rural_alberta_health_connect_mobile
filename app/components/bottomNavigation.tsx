@@ -42,6 +42,13 @@ const tabs: Tab[] = [
     iconNameFocused: 'stats-chart'
   },
   {
+    name: 'PerformanceTest',
+    label: 'Perf Test',
+    route: '/performance-test',
+    iconName: 'speedometer-outline',
+    iconNameFocused: 'speedometer'
+  },
+  {
     name: 'Emergency',
     label: 'Emergency',
     route: '/emergency',
