@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // app/dashboard.tsx
+import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,6 +26,7 @@ import { FONTS } from "../constants/constants";
 export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { signOut } = useAuthActions();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const queryArgs = isAuthenticated ? {} : "skip";
 
@@ -194,6 +197,33 @@ export default function Dashboard() {
 
   const navigateToDailyLog = (): void => {
     router.push("/tracker/daily-log");
+  };
+
+  const handleClearSession = async (): Promise<void> => {
+    Alert.alert(
+      "Clear Session & Reset",
+      "This will sign you out and clear all stored session data. You'll need to sign in again and complete onboarding.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Clear & Reset",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+              await SecureStore.deleteItemAsync("convex-auth-token");
+              router.replace("/");
+            } catch (error) {
+              console.error("Error clearing session:", error);
+              Alert.alert("Error", "Failed to clear session. Please try again.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -438,6 +468,34 @@ export default function Dashboard() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Dev: Clear Session Button */}
+            <TouchableOpacity
+              style={styles.clearSessionButton}
+              onPress={handleClearSession}
+            >
+              <View style={styles.clearSessionIconContainer}>
+                <Text style={styles.clearSessionIcon}>🔄</Text>
+              </View>
+              <View style={styles.clearSessionTextContainer}>
+                <Text
+                  style={[
+                    styles.clearSessionTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Reset Session
+                </Text>
+                <Text
+                  style={[
+                    styles.clearSessionSubtitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Clear stored data & restart onboarding
+                </Text>
+              </View>
+            </TouchableOpacity>
           </View>
         </ScrollView>
 
@@ -767,5 +825,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#856404",
     textAlign: "center",
+  },
+  // Clear Session Button Styles
+  clearSessionButton: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#E9ECEF",
+    marginTop: 20,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  clearSessionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#F0F8FF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: "#2A7DE1",
+  },
+  clearSessionIcon: {
+    fontSize: 28,
+  },
+  clearSessionTextContainer: {
+    flex: 1,
+  },
+  clearSessionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2A7DE1",
+    marginBottom: 4,
+  },
+  clearSessionSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 18,
   },
 });

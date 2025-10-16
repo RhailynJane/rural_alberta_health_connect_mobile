@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
@@ -32,6 +33,71 @@ export default function PersonalInfo() {
 
   console.log("🟢 PersonalInfo rendered - ageRange:", ageRange, "location:", location);
 
+  // Age range options
+  const ageRangeOptions = [
+    { label: "Under 18", value: "under18" },
+    { label: "18-24", value: "18-24" },
+    { label: "25-34", value: "25-34" },
+    { label: "35-44", value: "35-44" },
+    { label: "45-54", value: "45-54" },
+    { label: "55-64", value: "55-64" },
+    { label: "65+", value: "65plus" },
+  ];
+
+  // Location options
+  const locationOptions = [
+    { label: "Northern Alberta", value: "northern" },
+    { label: "Central Alberta", value: "central" },
+    { label: "Edmonton Area", value: "edmonton" },
+    { label: "Calgary Area", value: "calgary" },
+    { label: "Southern Alberta", value: "southern" },
+  ];
+
+  const showAgeRangePicker = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", ...ageRangeOptions.map((o) => o.label)],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) {
+            const selectedOption = ageRangeOptions[buttonIndex - 1];
+            console.log("🟢 Age range changed to:", selectedOption.value);
+            setAgeRange(selectedOption.value);
+          }
+        }
+      );
+    }
+  };
+
+  const showLocationPicker = () => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", ...locationOptions.map((o) => o.label)],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex > 0) {
+            const selectedOption = locationOptions[buttonIndex - 1];
+            console.log("🟢 Location changed to:", selectedOption.value);
+            setLocation(selectedOption.value);
+          }
+        }
+      );
+    }
+  };
+
+  const getAgeRangeLabel = () => {
+    const option = ageRangeOptions.find((o) => o.value === ageRange);
+    return option ? option.label : "Select your age range";
+  };
+
+  const getLocationLabel = () => {
+    const option = locationOptions.find((o) => o.value === location);
+    return option ? option.label : "Select your location";
+  };
 
   const handleContinue = async () => {
     if (!ageRange || !location) {
@@ -118,26 +184,46 @@ export default function PersonalInfo() {
                 >
                   Age Range
                 </Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={ageRange}
-                    onValueChange={(value) => {
-                      console.log("🟢 Age range changed to:", value);
-                      setAgeRange(value);
-                    }}
+                {Platform.OS === "ios" ? (
+                  <TouchableOpacity
+                    style={styles.pickerContainer}
+                    onPress={showAgeRangePicker}
                   >
-                    <Picker.Item label="Select your age range" value="" />
-                    <Picker.Item label="Under 18" value="under18" />
-                    <Picker.Item label="18-24" value="18-24" />
-                    <Picker.Item label="25-34" value="25-34" />
-                    <Picker.Item label="35-44" value="35-44" />
-                    <Picker.Item label="45-54" value="45-54" />
-                    <Picker.Item label="55-64" value="55-64" />
-                    <Picker.Item label="65+" value="65plus" />
-                  </Picker>
-                </View>
+                    <View style={styles.iosPickerButton}>
+                      <Text
+                        style={[
+                          styles.iosPickerText,
+                          !ageRange && styles.iosPickerPlaceholder,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {getAgeRangeLabel()}
+                      </Text>
+                      <Text style={styles.iosPickerArrow}>▼</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      style={styles.picker}
+                      dropdownIconColor="#2A7DE1"
+                      selectedValue={ageRange}
+                      onValueChange={(value) => {
+                        console.log("🟢 Age range changed to:", value);
+                        setAgeRange(value);
+                      }}
+                    >
+                      <Picker.Item label="Select your age range" value="" />
+                      <Picker.Item label="Under 18" value="under18" />
+                      <Picker.Item label="18-24" value="18-24" />
+                      <Picker.Item label="25-34" value="25-34" />
+                      <Picker.Item label="35-44" value="35-44" />
+                      <Picker.Item label="45-54" value="45-54" />
+                      <Picker.Item label="55-64" value="55-64" />
+                      <Picker.Item label="65+" value="65plus" />
+                    </Picker>
+                  </View>
+                )}
 
                 <Text
                   style={[
@@ -147,24 +233,44 @@ export default function PersonalInfo() {
                 >
                   Location
                 </Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={location}
-                    onValueChange={(value) => {
-                      console.log("🟢 Location changed to:", value);
-                      setLocation(value);
-                    }}
+                {Platform.OS === "ios" ? (
+                  <TouchableOpacity
+                    style={styles.pickerContainer}
+                    onPress={showLocationPicker}
                   >
-                    <Picker.Item label="Select your location" value="" />
-                    <Picker.Item label="Northern Alberta" value="northern" />
-                    <Picker.Item label="Central Alberta" value="central" />
-                    <Picker.Item label="Edmonton Area" value="edmonton" />
-                    <Picker.Item label="Calgary Area" value="calgary" />
-                    <Picker.Item label="Southern Alberta" value="southern" />
-                  </Picker>
-                </View>
+                    <View style={styles.iosPickerButton}>
+                      <Text
+                        style={[
+                          styles.iosPickerText,
+                          !location && styles.iosPickerPlaceholder,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {getLocationLabel()}
+                      </Text>
+                      <Text style={styles.iosPickerArrow}>▼</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      style={styles.picker}
+                      dropdownIconColor="#2A7DE1"
+                      selectedValue={location}
+                      onValueChange={(value) => {
+                        console.log("🟢 Location changed to:", value);
+                        setLocation(value);
+                      }}
+                    >
+                      <Picker.Item label="Select your location" value="" />
+                      <Picker.Item label="Northern Alberta" value="northern" />
+                      <Picker.Item label="Central Alberta" value="central" />
+                      <Picker.Item label="Edmonton Area" value="edmonton" />
+                      <Picker.Item label="Calgary Area" value="calgary" />
+                      <Picker.Item label="Southern Alberta" value="southern" />
+                    </Picker>
+                  </View>
+                )}
 
                 <Text
                   style={[
@@ -285,6 +391,27 @@ const styles = StyleSheet.create({
   picker: {
     width: "100%",
     height: 50,
+  },
+  iosPickerButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  iosPickerText: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    flex: 1,
+  },
+  iosPickerPlaceholder: {
+    color: "#999",
+  },
+  iosPickerArrow: {
+    fontSize: 12,
+    color: "#2A7DE1",
+    marginLeft: 8,
   },
   helperText: {
     fontSize: 14,
