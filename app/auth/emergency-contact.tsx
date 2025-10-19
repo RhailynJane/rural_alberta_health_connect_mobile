@@ -27,6 +27,26 @@ export default function EmergencyContact() {
 
   const updateEmergencyContact = useMutation(api.emergencyContactOnboarding.update.withNameAndPhone);
 
+    // Format phone number as (XXX) XXX-XXXX
+    const formatPhoneNumber = (input: string) => {
+      // Remove all non-digit characters
+      const cleaned = input.replace(/\D/g, "");
+      const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
+      if (!match) return input;
+      let formatted = "";
+      if (match[1]) {
+        formatted += `(${match[1]}`;
+        if (match[1].length === 3) formatted += ") ";
+      }
+      if (match[2]) {
+        formatted += match[2];
+        if (match[2].length === 3 && match[3]) formatted += "-";
+      }
+      if (match[3]) {
+        formatted += match[3];
+      }
+      return formatted;
+    };
   const handleContinue = async () => {
     if (!contactName || !contactPhone) {
       Alert.alert("Required Fields", "Please enter both emergency contact name and phone number.");
@@ -120,7 +140,7 @@ export default function EmergencyContact() {
                   placeholder="Enter emergency contact phone"
                   placeholderTextColor="#999"
                   value={contactPhone}
-                  onChangeText={setContactPhone}
+                  onChangeText={text => setContactPhone(formatPhoneNumber(text))}
                   keyboardType="phone-pad"
                 />
               </View>
