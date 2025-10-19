@@ -99,7 +99,6 @@ export default function PersonalInfo() {
           await existingProfile.update((profile: any) => {
             profile.ageRange = ageRange;
             profile.location = location;
-            profile.updatedAt = Date.now();
           });
           console.log("✅ Personal Info - Updated existing local profile");
         } else {
@@ -109,8 +108,6 @@ export default function PersonalInfo() {
             profile.ageRange = ageRange;
             profile.location = location;
             profile.onboardingCompleted = false;
-            profile.createdAt = Date.now();
-            profile.updatedAt = Date.now();
           });
           console.log("✅ Personal Info - Created new local profile");
         }
