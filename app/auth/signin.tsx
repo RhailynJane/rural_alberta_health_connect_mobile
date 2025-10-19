@@ -132,7 +132,7 @@ export default function SignIn() {
                       <TextInput
                         style={[
                           styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
                           errors.password && touched.password && styles.inputError
                         ]}
                         placeholder="Enter your password"

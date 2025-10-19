@@ -274,7 +274,7 @@ export default function SignUp() {
                       <TextInput
                         style={[
                           styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
                           errors.password &&
                             touched.password &&
                             styles.inputError,
@@ -313,7 +313,7 @@ export default function SignUp() {
                       <TextInput
                         style={[
                           styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
                           errors.confirmPassword &&
                             touched.confirmPassword &&
                             styles.inputError,
