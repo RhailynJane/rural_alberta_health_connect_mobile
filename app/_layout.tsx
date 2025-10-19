@@ -5,6 +5,7 @@ import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SignUpFormProvider } from "./auth/SignUpFormContext";
 // import { database } from '../watermelon/database'; // TEMPORARILY COMMENT OUT
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -68,8 +69,9 @@ export default function RootLayout() {
 
   return (
     // <DatabaseProvider database={database}> {/* TEMPORARILY COMMENT OUT */}
-      <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
-        <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+    <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
+      <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+        <SignUpFormProvider>
           <SafeAreaProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
@@ -82,8 +84,9 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
             </Stack>
           </SafeAreaProvider>
-        </ConvexAuthProvider>
-      </SessionRefreshContext.Provider>
+        </SignUpFormProvider>
+      </ConvexAuthProvider>
+    </SessionRefreshContext.Provider>
     // </DatabaseProvider> {/* TEMPORARILY COMMENT OUT */}
   );
 }
