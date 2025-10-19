@@ -17,6 +17,7 @@
     "@convex-dev/auth": "^0.0.89",
     "@expo-google-fonts/barlow": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
+    "@nozbe/watermelondb": "^0.28.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/slider": "^5.0.1",
