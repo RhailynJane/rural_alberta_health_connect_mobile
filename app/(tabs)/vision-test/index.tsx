@@ -9,12 +9,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { LLAMA3_2_3B_QLORA, Message, useLLM } from "react-native-executorch";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSharedValue } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, runAtTargetFps, useCameraDevice, useCameraPermission, useSkiaFrameProcessor } from "react-native-vision-camera";
 import { Worklets } from "react-native-worklets-core";
 import { useResizePlugin } from "vision-camera-resize-plugin";
@@ -74,8 +74,10 @@ const getColorForClass = (className: string): string => {
 
 export default function VisionTest() {
   const [isInitializing, setIsInitializing] = useState(true);
-  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [hasUserStarted, setHasUserStarted] = useState(false);
+  const [isCapturingState, setIsCapturingState] = useState(false);
+  const isMountedRef = useRef(true);
 
   // Latest detections in JS thread (for capture)
   const [latestDetections, setLatestDetections] = useState<{
@@ -100,8 +102,8 @@ export default function VisionTest() {
 
   // User input state
   const [userDescription, setUserDescription] = useState("");
-  const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
   const [frameDimensions, setFrameDimensions] = useState({ width: 0, height: 0 });
+  const [imageLayout, setImageLayout] = useState({ width: 0, height: 0 });
 
   // Shared value for caching detections (updated at 10 FPS, drawn at 30-60 FPS)
   const cachedDetections = useSharedValue<{
@@ -145,6 +147,7 @@ export default function VisionTest() {
 
   // Initialize LLM for local AI assessment
   const llm = useLLM({ model: LLAMA3_2_3B_QLORA });
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     console.log("👁️ Vision Test Screen Mounted");
@@ -152,186 +155,221 @@ export default function VisionTest() {
       isReady: model.state === "loaded",
       state: model.state,
     });
+    console.log("🤖 LLM State:", {
+      isReady: llm.isReady,
+      isGenerating: llm.isGenerating,
+    });
 
     // Mark as initialized once model is ready
     if (model.state === "loaded" && isInitializing) {
       console.log("✅ Vision model initialized successfully");
       setIsInitializing(false);
     }
+
+    // Log any model loading errors
+    if (model.state === "error") {
+      console.error("❌ TFLite model failed to load");
+    }
+
+    // Lifecycle flags
+    isMountedRef.current = true;
+
+    return () => {
+      // Cleanup on unmount
+      isMountedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.state, isInitializing]);
 
   // Real-time TFLite detection with Skia rendering
   const frameProcessor = useSkiaFrameProcessor((frame) => {
     'worklet'
 
-    // STEP 1: Render the camera frame (REQUIRED)
-    frame.render();
+    try {
+      // Skip processing if we're capturing
+      if (isCapturing.value) {
+        frame.render();
+        return;
+      }
 
-    // Skip processing if we're capturing
-    if (isCapturing.value) {
-      return;
-    }
+      // Save frame dimensions once (for bounding box scaling)
+      if (frameDimensions.width === 0) {
+        saveFrameDimensions(frame.width, frame.height);
+      }
 
-    // Save frame dimensions once (for bounding box scaling)
-    if (frameDimensions.width === 0) {
-      saveFrameDimensions(frame.width, frame.height);
-    }
+      // STEP 1: Run detection at 10 FPS (update cache)
+      if (model.state === 'loaded') {
+        runAtTargetFps(10, () => {
+          'worklet'
 
-    // STEP 2: Run detection at 10 FPS (update cache)
-    if (model.state === 'loaded') {
-      runAtTargetFps(10, () => {
-        'worklet'
+          try {
+            // Resize frame to 300x300 RGB (COCO SSD requirement)
+            const resized = resize(frame, {
+              scale: { width: 300, height: 300 },
+              pixelFormat: 'rgb',
+              dataType: 'uint8',
+            });
 
-        try {
-          // Resize frame to 300x300 RGB (COCO SSD requirement)
-          const resized = resize(frame, {
-            scale: { width: 300, height: 300 },
-            pixelFormat: 'rgb',
-            dataType: 'uint8',
-          });
+            // Run TFLite inference
+            const outputs = model.model.runSync([resized]);
 
-          // Run TFLite inference
-          const outputs = model.model.runSync([resized]);
+            // Parse outputs
+            // SSD MobileNet V1 outputs:
+            //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
+            //   [1]: class indices [1, num_detections]
+            //   [2]: confidence scores [1, num_detections]
+            //   [3]: number of valid detections [1]
 
-          // Parse outputs
-          // SSD MobileNet V1 outputs:
-          //   [0]: bounding boxes [1, num_detections, 4] - [ymin, xmin, ymax, xmax] normalized 0-1
-          //   [1]: class indices [1, num_detections]
-          //   [2]: confidence scores [1, num_detections]
-          //   [3]: number of valid detections [1]
+            const boxes = outputs[0];
+            const classes = outputs[1];
+            const scores = outputs[2];
+            const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
 
-          const boxes = outputs[0];
-          const classes = outputs[1];
-          const scores = outputs[2];
-          const numDetections = Math.min(Number(outputs[3][0]) || 10, 10);
+            // Build detection array
+            const newDetections = [];
+            const detectionsForJS = [];
 
-          // Build detection array
-          const newDetections = [];
+            for (let i = 0; i < numDetections; i++) {
+              const confidence = Number(scores[i]);
 
-          for (let i = 0; i < numDetections; i++) {
-            const confidence = Number(scores[i]);
+              // Only show detections above 50% confidence
+              if (confidence > 0.5) {
+                const classIndex = Math.round(Number(classes[i]));
+                const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
 
-            // Only show detections above 50% confidence
-            if (confidence > 0.5) {
-              const classIndex = Math.round(Number(classes[i]));
-              const label = COCO_LABELS[classIndex] || `Class ${classIndex}`;
+                // Boxes are normalized [ymin, xmin, ymax, xmax]
+                const ymin = Number(boxes[i * 4 + 0]);
+                const xmin = Number(boxes[i * 4 + 1]);
+                const ymax = Number(boxes[i * 4 + 2]);
+                const xmax = Number(boxes[i * 4 + 3]);
 
-              // Boxes are normalized [ymin, xmin, ymax, xmax]
-              const ymin = Number(boxes[i * 4 + 0]);
-              const xmin = Number(boxes[i * 4 + 1]);
-              const ymax = Number(boxes[i * 4 + 2]);
-              const xmax = Number(boxes[i * 4 + 3]);
+                // Convert normalized coordinates to pixel coordinates
+                const x = xmin * frame.width;
+                const y = ymin * frame.height;
+                const width = (xmax - xmin) * frame.width;
+                const height = (ymax - ymin) * frame.height;
 
-              // Convert normalized coordinates to pixel coordinates
-              const x = xmin * frame.width;
-              const y = ymin * frame.height;
-              const width = (xmax - xmin) * frame.width;
-              const height = (ymax - ymin) * frame.height;
+                newDetections.push({
+                  label,
+                  color: getColorForClass(label),
+                  x,
+                  y,
+                  width,
+                  height,
+                });
 
-              newDetections.push({
-                label,
-                color: getColorForClass(label),
-                x,
-                y,
-                width,
-                height,
-              });
+                detectionsForJS.push({
+                  label,
+                  confidence,
+                  x,
+                  y,
+                  width,
+                  height,
+                });
+              }
             }
+
+            // Update cache for rendering (this happens at 10 FPS)
+            cachedDetections.value = newDetections;
+
+            // Update JS state for capture with actual confidence values
+            if (detectionsForJS.length > 0) {
+              updateLatestDetections(detectionsForJS);
+            }
+
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error("❌ Detection error:", errorMessage);
           }
+        });
+      }
 
-          // Update cache for rendering (this happens at 10 FPS)
-          cachedDetections.value = newDetections;
+      // STEP 2: Draw boxes from cached detections (runs every frame at 30-60 FPS)
+      const detections = cachedDetections.value;
 
-          // Also update JS state for capture (map to simpler format with confidence)
-          const detectionsForJS = newDetections.map(det => ({
-            label: det.label,
-            confidence: 0.85, // Placeholder - we can get actual confidence from scores array
-            x: det.x,
-            y: det.y,
-            width: det.width,
-            height: det.height,
-          }));
-          updateLatestDetections(detectionsForJS);
+      // Draw each bounding box
+      for (const detection of detections) {
+        // Draw bounding box
+        const rect = Skia.XYWHRect(detection.x, detection.y, detection.width, detection.height);
+        const paint = Skia.Paint();
+        paint.setColor(Skia.Color(detection.color));
+        paint.setStyle(PaintStyle.Stroke);
+        paint.setStrokeWidth(3);
+        frame.drawRect(rect, paint);
 
-          if (newDetections.length > 0) {
-            console.log(`Detected ${newDetections.length} objects`);
-          }
+        // Draw label background (filled rectangle)
+        const labelHeight = 25;
+        const labelWidth = 150;
+        const labelBgRect = Skia.XYWHRect(detection.x, detection.y - labelHeight, labelWidth, labelHeight);
+        const labelBgPaint = Skia.Paint();
+        labelBgPaint.setColor(Skia.Color(detection.color));
+        labelBgPaint.setStyle(PaintStyle.Fill);
+        frame.drawRect(labelBgRect, labelBgPaint);
+      }
 
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error("❌ Detection error:", errorMessage);
-        }
-      });
+      // STEP 3: Render the frame with boxes drawn (CRITICAL - without this you get white screen!)
+      frame.render();
+
+    } catch (error) {
+      // Catch any frame processor errors to prevent app crash
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("❌ Frame processor error:", errorMessage);
+      // Still render the frame even on error
+      frame.render();
     }
-
-    // STEP 3: Draw boxes EVERY frame from cached detections (runs at 30-60 FPS)
-    const detections = cachedDetections.value;
-
-    for (const detection of detections) {
-      // Draw bounding box
-      const rect = Skia.XYWHRect(detection.x, detection.y, detection.width, detection.height);
-      const paint = Skia.Paint();
-      paint.setColor(Skia.Color(detection.color));
-      paint.setStyle(PaintStyle.Stroke);
-      paint.setStrokeWidth(3);
-      frame.drawRect(rect, paint);
-
-      // Draw label background (filled rectangle)
-      const labelHeight = 25;
-      const labelWidth = 150;
-      const labelBgRect = Skia.XYWHRect(detection.x, detection.y - labelHeight, labelWidth, labelHeight);
-      const labelBgPaint = Skia.Paint();
-      labelBgPaint.setColor(Skia.Color(detection.color));
-      labelBgPaint.setStyle(PaintStyle.Fill);
-      frame.drawRect(labelBgRect, labelBgPaint);
-    }
-
   }, [model, resize, cachedDetections, updateLatestDetections, frameDimensions, saveFrameDimensions, isCapturing]);
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
 
     try {
-      // STEP 1: Stop frame processing immediately (but keep camera active)
-      isCapturing.value = true;
-
-      // STEP 2: Get current detections (from last processed frame)
+      console.log('📸 Starting capture...');
+      
+      // STEP 1: Get current detections FIRST (before any state changes)
       const currentDetections = [...latestDetections];
-      console.log('🎯 Detections at capture time:', currentDetections);
+      console.log('🎯 Detections to save:', currentDetections.length);
 
-      // STEP 3: Take photo (camera is still active)
-      const photo = await cameraRef.current.takePhoto();
-      console.log('📸 Photo captured:', photo.path);
+      // STEP 2: Pause frame processing (both worklet and UI state)
+      isCapturing.value = true;
+      setIsCapturingState(true);
 
-      // STEP 4: Now freeze camera completely
+      // STEP 3: Wait a tiny bit for the frame processor to pause
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // STEP 4: Take snapshot (use takeSnapshot for Skia frame processors, not takePhoto)
+      const snapshot = await cameraRef.current.takeSnapshot({
+        quality: 85,
+      });
+      console.log('📸 Snapshot path:', snapshot.path);
+
+      // STEP 5: Freeze camera
       setIsCameraActive(false);
 
-      // STEP 5: Save both to state
-      setCapturedImage(photo.path);
+      // STEP 6: Save to state
+      setCapturedImage(snapshot.path);
       setCapturedDetections(currentDetections);
 
-      console.log('✅ Capture complete with', currentDetections.length, 'detections');
+      console.log('✅ Capture complete with', currentDetections.length, 'detections saved');
 
     } catch (error) {
       console.error('❌ Capture failed:', error);
-      // Show the actual error message
       if (error instanceof Error) {
         console.error('Error details:', error.message);
       }
-      // Re-enable frame processing and camera on error
+      // Re-enable frame processing on error
       isCapturing.value = false;
-      setIsCameraActive(true);
+      setIsCapturingState(false);
     }
   };
 
   const handleReset = () => {
-    console.log("🔄 Resetting to landing page");
+    console.log("🔄 Resetting to camera view");
     setCapturedImage(null);
     setCapturedDetections(null);
     setUserDescription("");
     isCapturing.value = false;
+    setIsCapturingState(false);
     setIsCameraActive(true);
-    setHasUserStarted(false);
   };
 
   const handleAnalyzeWithAI = async () => {
@@ -380,46 +418,53 @@ Focus on immediate steps and when to seek professional help.
   // Show model loading error
   if (model.state === "error") {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <CurvedBackground>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
-
-            <View style={styles.contentSection}>
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={64} color="#DC3545" />
-                <Text
-                  style={[
-                    styles.errorTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  ❌ Model Loading Failed
-                </Text>
-                <Text
-                  style={[
-                    styles.errorMessage,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Failed to load TFLite model
-                </Text>
-                <Text
-                  style={[
-                    styles.errorHint,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Make sure coco_ssd_mobilenet_v1.tflite is in assets/models/
-                </Text>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={64} color="#DC3545" />
+                  <Text
+                    style={[
+                      styles.errorTitle,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    ❌ Model Loading Failed
+                  </Text>
+                  <Text
+                    style={[
+                      styles.errorMessage,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Failed to load TFLite model
+                  </Text>
+                  <Text
+                    style={[
+                      styles.errorHint,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Make sure coco_ssd_mobilenet_v1.tflite is in assets/models/
+                  </Text>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-          <BottomNavigation />
+            </ScrollView>
+          </View>
         </CurvedBackground>
+        <BottomNavigation />
       </SafeAreaView>
     );
   }
@@ -427,119 +472,130 @@ Focus on immediate steps and when to seek professional help.
   // Show initializing screen
   if (isInitializing || model.state !== "loaded") {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <CurvedBackground>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
-
-            <View style={styles.contentSection}>
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#2A7DE1" />
-                <Text
-                  style={[
-                    styles.loadingText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Loading vision model...
-                </Text>
-                <Text
-                  style={[
-                    styles.loadingSubtext,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  This may take a few moments
-                </Text>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#2A7DE1" />
+                  <Text
+                    style={[
+                      styles.loadingText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Loading vision model...
+                  </Text>
+                  <Text
+                    style={[
+                      styles.loadingSubtext,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    This may take a few moments
+                  </Text>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-          <BottomNavigation />
+            </ScrollView>
+          </View>
         </CurvedBackground>
+        <BottomNavigation />
       </SafeAreaView>
     );
   }
 
-  // Landing screen (shown before camera activation)
+  // Landing screen (shown before starting camera)
   if (!hasUserStarted) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <CurvedBackground>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Vision Detection Test" height={150} showLogo={true} />
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Vision Test"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                <View style={styles.featuresList}>
+                  <View style={styles.featureItem}>
+                    <Ionicons name="eye" size={24} color="#2A7DE1" />
+                    <View style={styles.featureTextContainer}>
+                      <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Real-time Object Detection
+                      </Text>
+                      <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Uses TensorFlow Lite COCO-SSD model for instant object recognition
+                      </Text>
+                    </View>
+                  </View>
 
-            <View style={styles.contentSection}>
-              <Text style={[styles.landingTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Test Local AI Detection
-              </Text>
-              <Text style={[styles.landingSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Test wound and medical condition detection with your device camera
-              </Text>
+                  <View style={styles.featureItem}>
+                    <Ionicons name="flash" size={24} color="#2A7DE1" />
+                    <View style={styles.featureTextContainer}>
+                      <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Local AI Medical Assessment
+                      </Text>
+                      <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Powered by Llama 3.2 3B running entirely on your device
+                      </Text>
+                    </View>
+                  </View>
 
-              <View style={styles.featuresList}>
-                <View style={styles.featureItem}>
-                  <Ionicons name="eye" size={24} color="#2A7DE1" />
-                  <View style={styles.featureTextContainer}>
-                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Real-time Object Detection
-                    </Text>
-                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Uses TensorFlow Lite COCO-SSD model for instant object recognition
-                    </Text>
+                  <View style={styles.featureItem}>
+                    <Ionicons name="lock-closed" size={24} color="#2A7DE1" />
+                    <View style={styles.featureTextContainer}>
+                      <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Privacy First
+                      </Text>
+                      <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        All processing happens on your device - no data sent to cloud
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.featureItem}>
-                  <Ionicons name="flash" size={24} color="#2A7DE1" />
-                  <View style={styles.featureTextContainer}>
-                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Local AI Medical Assessment
-                    </Text>
-                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Powered by Llama 3.2 1B running entirely on your device
-                    </Text>
-                  </View>
+                <View style={styles.disclaimerBox}>
+                  <Ionicons name="information-circle" size={20} color="#FF6B35" />
+                  <Text style={[styles.disclaimerBoxText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Testing Only - This feature is for workflow demonstration and not intended for actual medical diagnosis
+                  </Text>
                 </View>
 
-                <View style={styles.featureItem}>
-                  <Ionicons name="lock-closed" size={24} color="#2A7DE1" />
-                  <View style={styles.featureTextContainer}>
-                    <Text style={[styles.featureTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Privacy First
-                    </Text>
-                    <Text style={[styles.featureDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      All processing happens on your device - no data sent to cloud
-                    </Text>
-                  </View>
-                </View>
+                <TouchableOpacity
+                  style={styles.startButton}
+                  onPress={() => {
+                    console.log("🚀 Starting real-time detection...");
+                    setHasUserStarted(true);
+                    setIsCameraActive(true);
+                  }}
+                >
+                  <Ionicons name="camera" size={24} color="white" />
+                  <Text style={[styles.startButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Start Detection
+                  </Text>
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.disclaimerBox}>
-                <Ionicons name="information-circle" size={20} color="#FF6B35" />
-                <Text style={[styles.disclaimerBoxText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Testing Only - This feature is for workflow demonstration and not intended for actual medical diagnosis
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.startButton}
-                onPress={() => setHasUserStarted(true)}
-              >
-                <Ionicons name="camera" size={24} color="white" />
-                <Text style={[styles.startButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Start Detection
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-          <BottomNavigation />
+            </ScrollView>
+          </View>
         </CurvedBackground>
+        <BottomNavigation />
       </SafeAreaView>
     );
   }
@@ -547,51 +603,58 @@ Focus on immediate steps and when to seek professional help.
   // Camera permissions screen
   if (!hasPermission) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <CurvedBackground>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
-
-            <View style={styles.contentSection}>
-              <View style={styles.permissionsContainer}>
-                <Ionicons name="camera" size={64} color="#666" />
-                <Text
-                  style={[
-                    styles.permissionsTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Camera Permission Required
-                </Text>
-                <Text
-                  style={[
-                    styles.permissionsText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Vision test requires camera access to test Skia frame processor.
-                </Text>
-                <TouchableOpacity
-                  style={styles.permissionsButton}
-                  onPress={requestPermission}
-                >
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                <View style={styles.permissionsContainer}>
+                  <Ionicons name="camera" size={64} color="#666" />
                   <Text
                     style={[
-                      styles.permissionsButtonText,
+                      styles.permissionsTitle,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Grant Permission
+                    Camera Permission Required
                   </Text>
-                </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.permissionsText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Vision test requires camera access to test Skia frame processor.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.permissionsButton}
+                    onPress={requestPermission}
+                  >
+                    <Text
+                      style={[
+                        styles.permissionsButtonText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Grant Permission
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-          <BottomNavigation />
+            </ScrollView>
+          </View>
         </CurvedBackground>
+        <BottomNavigation />
       </SafeAreaView>
     );
   }
@@ -599,45 +662,53 @@ Focus on immediate steps and when to seek professional help.
   // No camera device found
   if (device == null) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={[]}>
-        <CurvedBackground>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
-
-            <View style={styles.contentSection}>
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={64} color="#DC3545" />
-                <Text
-                  style={[
-                    styles.errorTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  No Camera Found
-                </Text>
-                <Text
-                  style={[
-                    styles.errorMessage,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Could not find a camera device on this phone
-                </Text>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={64} color="#DC3545" />
+                  <Text
+                    style={[
+                      styles.errorTitle,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    No Camera Found
+                  </Text>
+                  <Text
+                    style={[
+                      styles.errorMessage,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Could not find a camera device on this phone
+                  </Text>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-          <BottomNavigation />
+            </ScrollView>
+          </View>
         </CurvedBackground>
+        <BottomNavigation />
       </SafeAreaView>
     );
   }
 
-  // Show camera view (active detection)
-  if (!capturedImage) {
+  // Show camera view (real-time detection active)
+  if (!capturedImage && hasUserStarted) {
     return (
+      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <View style={styles.fullScreen}>
         {/* Camera View with Skia Frame Processor */}
         <Camera
@@ -646,16 +717,21 @@ Focus on immediate steps and when to seek professional help.
           device={device}
           isActive={isCameraActive}
           frameProcessor={frameProcessor}
-          photo={true}
         />
 
         {/* Curved Header Overlay */}
         <View style={styles.headerOverlay}>
-          <CurvedHeader title="Real-Time Detection" height={150} showLogo={false} />
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
         </View>
 
-        {/* Status Overlay */}
-        <View style={styles.statusOverlay}>
+        {/* Status Overlay - positioned below header with safe area */}
+        <View style={[styles.statusOverlay, { top: insets.top + 160 }]}>
           <View style={styles.statusBadge}>
             <View style={styles.statusDot} />
             <Text
@@ -664,7 +740,7 @@ Focus on immediate steps and when to seek professional help.
                 { fontFamily: FONTS.BarlowSemiCondensed },
               ]}
             >
-              COCO Model Ready ✅
+              Detecting Objects...
             </Text>
           </View>
           <Text
@@ -673,7 +749,7 @@ Focus on immediate steps and when to seek professional help.
               { fontFamily: FONTS.BarlowSemiCondensed },
             ]}
           >
-            Point camera at objects to detect
+            Point camera at objects • {latestDetections.length} detected
           </Text>
         </View>
 
@@ -682,6 +758,7 @@ Focus on immediate steps and when to seek professional help.
           <TouchableOpacity
             style={styles.captureButton}
             onPress={handleCapture}
+            disabled={isCapturingState}
           >
             <Ionicons name="camera" size={70} color="white" />
             <Text
@@ -697,79 +774,85 @@ Focus on immediate steps and when to seek professional help.
 
         <BottomNavigation />
       </View>
+      </SafeAreaView>
     );
   }
 
-  // Show captured image review page (replaces camera completely)
-  return (
-    <SafeAreaView style={styles.safeArea} edges={[]}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <CurvedHeader title="Vision Detection Test" height={150} showLogo={true} />
-
-          <View style={styles.contentSection}>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Captured Image
-            </Text>
-
-            {/* Image Preview with Bounding Boxes */}
-            <View style={styles.imagePreviewContainer}>
-              <Image
-                source={{ uri: `file://${capturedImage}` }}
-                style={styles.previewImage}
-                resizeMode="contain"
-                onLayout={(event) => {
-                  const { width, height } = event.nativeEvent.layout;
-                  setImageLayout({ width, height });
-                }}
-              />
-              {/* Overlay bounding boxes - only show when image layout and frame dimensions are known */}
-              {imageLayout.width > 0 && frameDimensions.width > 0 && capturedDetections && capturedDetections.map((det, idx) => {
-                // Calculate scaling factors based on actual frame dimensions
-                const scaleX = imageLayout.width / frameDimensions.width;
-                const scaleY = imageLayout.height / frameDimensions.height;
-
-                return (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.boundingBox,
-                      {
-                        left: det.x * scaleX,
-                        top: det.y * scaleY,
-                        width: det.width * scaleX,
-                        height: det.height * scaleY,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.boundingBoxLabel}>{det.label}</Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Detection Results Summary */}
-            <View style={styles.detectionsSummary}>
-              <Text style={[styles.detectionsSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Detected Objects:
+  // Show captured image review page
+  if (capturedImage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+              <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Captured Image
               </Text>
-              {capturedDetections && capturedDetections.length > 0 ? (
-                capturedDetections.map((det, idx) => (
-                  <Text key={idx} style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    • {det.label} ({Math.round(det.confidence * 100)}%)
-                  </Text>
-                ))
-              ) : (
-                <Text style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  No objects detected
-                </Text>
-              )}
-            </View>
 
-            {/* Model Status Card */}
+              {/* Image Preview with Bounding Boxes */}
+              <View style={styles.imagePreviewContainer}>
+                <Image
+                  source={{ uri: `file://${capturedImage}` }}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                  onLayout={(event) => {
+                    const { width, height } = event.nativeEvent.layout;
+                    setImageLayout({ width, height });
+                  }}
+                />
+                {/* Overlay bounding boxes - only show when image layout and frame dimensions are known */}
+                {imageLayout.width > 0 && frameDimensions.width > 0 && capturedDetections && capturedDetections.map((det, idx) => {
+                  // Calculate scaling factors based on actual frame dimensions
+                  const scaleX = imageLayout.width / frameDimensions.width;
+                  const scaleY = imageLayout.height / frameDimensions.height;
+
+                  return (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.boundingBox,
+                        {
+                          left: det.x * scaleX,
+                          top: det.y * scaleY,
+                          width: det.width * scaleX,
+                          height: det.height * scaleY,
+                        },
+                      ]}
+                    >
+                      <Text style={styles.boundingBoxLabel}>{det.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Detection Results Summary */}
+              <View style={styles.detectionsSummary}>
+                <Text style={[styles.detectionsSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Detected Objects:
+                </Text>
+                {capturedDetections && capturedDetections.length > 0 ? (
+                  capturedDetections.map((det, idx) => (
+                    <Text key={idx} style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      • {det.label} ({Math.round(det.confidence * 100)}%)
+                    </Text>
+                  ))
+                ) : (
+                  <Text style={[styles.detectionItem, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    No objects detected
+                  </Text>
+                )}
+              </View>            {/* Model Status Card */}
             <View style={styles.statusCard}>
               <View style={styles.statusRow}>
                 <Text style={[styles.statusLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -871,12 +954,17 @@ Focus on immediate steps and when to seek professional help.
                 </TouchableOpacity>
               </View>
             )}
-          </View>
-        </ScrollView>
-        <BottomNavigation />
+            </View>
+          </ScrollView>
+        </View>
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
-  );
+    );
+  }
+
+  // If no captured image, return null (shouldn't happen, but safety check)
+  return null;
 }
 
 const styles = StyleSheet.create({
@@ -894,6 +982,9 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
     paddingBottom: 80,
+  },
+  contentArea: {
+    flex: 1,
   },
   contentSection: {
     padding: 24,

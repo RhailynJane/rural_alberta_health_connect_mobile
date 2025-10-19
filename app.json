@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "rahcapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.amirzhou.rahcapp",
@@ -118,7 +118,7 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud",
+        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud"
       },
       "android": {
         "buildType": "app-bundle"
