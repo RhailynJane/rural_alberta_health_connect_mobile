@@ -1,12 +1,13 @@
-import { useDatabase } from '@nozbe/watermelondb/react';
-import { Picker } from "@react-native-picker/picker";
+import { useDatabase } from "@nozbe/watermelondb/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,21 +21,46 @@ import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+const LOCATION_OPTIONS = [
+  { label: 'Calgary and Area', value: 'calgary' },
+  { label: 'Edmonton and Area', value: 'edmonton' },
+  { label: 'Red Deer and Central Alberta', value: 'central' },
+  { label: 'Lethbridge and Southern Alberta', value: 'southern' },
+  { label: 'Medicine Hat and Southeast', value: 'southeast' },
+  { label: 'Grande Prairie and Northwest', value: 'northwest' },
+  { label: 'Fort McMurray and Northeast', value: 'northeast' },
+  { label: 'Peace Country Region', value: 'peace' },
+  { label: 'Alberta Rockies Region', value: 'rockies' },
+  { label: 'Rural Northern Alberta', value: 'northern_rural' },
+  { label: 'Rural Central Alberta', value: 'central_rural' },
+  { label: 'Rural Southern Alberta', value: 'southern_rural' },
+];
+
+const LOCATION_LABELS = Object.fromEntries(LOCATION_OPTIONS.map(opt => [opt.value, opt.label]));
 
 export default function PersonalInfo() {
   const router = useRouter();
   const database = useDatabase();
   const { isAuthenticated } = useConvexAuth();
-  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isAuthenticated ? {} : "skip"
+  );
   const [age, setAge] = useState("");
   const [location, setLocation] = useState("");
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
+  const updatePersonalInfo = useMutation(
+    api.personalInfoOnboarding.update.withAgeRangeAndLocation
+  );
 
   const handleContinue = async () => {
     if (!age || !location) {
-      Alert.alert("Required Fields", "Please enter both age and location to continue.");
+      Alert.alert(
+        "Required Fields",
+        "Please enter both age and location to continue."
+      );
       return;
     }
 
@@ -52,22 +78,22 @@ export default function PersonalInfo() {
 
     console.log("🔄 Personal Info - Starting submission");
     setIsSubmitting(true);
-    
+
     try {
       // Convert age to age range for your existing schema
       const ageRange = getAgeRange(ageNum);
-      
+
       // Save to WatermelonDB first (offline)
       await database.write(async () => {
-        const userProfilesCollection = database.get('user_profiles');
-        
+        const userProfilesCollection = database.get("user_profiles");
+
         // Check if profile already exists for this user
-        const existingProfiles = await userProfilesCollection
-          .query()
-          .fetch();
-        
-        const existingProfile = existingProfiles.find((p: any) => p.userId === currentUser._id);
-        
+        const existingProfiles = await userProfilesCollection.query().fetch();
+
+        const existingProfile = existingProfiles.find(
+          (p: any) => p.userId === currentUser._id
+        );
+
         if (existingProfile) {
           // Update existing profile
           await existingProfile.update((profile: any) => {
@@ -97,16 +123,21 @@ export default function PersonalInfo() {
         await updatePersonalInfo({ ageRange, location });
         console.log("✅ Personal Info - Synced with Convex");
       } catch (syncError) {
-        console.log("⚠️ Personal Info - Saved locally, will sync when online:", syncError);
+        console.log(
+          "⚠️ Personal Info - Saved locally, will sync when online:",
+          syncError
+        );
         // Don't show error to user - data is saved locally
       }
-      
+
       console.log("➡️ Navigating to emergency contact");
       router.push("/auth/emergency-contact");
-      
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
-      Alert.alert("Error", "Failed to save personal information. Please try again.");
+      Alert.alert(
+        "Error",
+        "Failed to save personal information. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -199,26 +230,85 @@ export default function PersonalInfo() {
                   style={[
                     styles.fieldLabel,
                     { fontFamily: FONTS.BarlowSemiCondensed },
-                    styles.locationLabel
+                    styles.locationLabel,
                   ]}
                 >
                   Location
                 </Text>
                 <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={location}
-                    onValueChange={setLocation}
-                    itemStyle={styles.pickerItem}
+                  <TouchableOpacity
+                    style={styles.customPickerButton}
+                    onPress={() => setLocationModalVisible(true)}
                   >
-                    <Picker.Item label="Enter your location" value="" color="#999" />
-                    <Picker.Item label="Northern Alberta" value="northern" color="#1A1A1A" />
-                    <Picker.Item label="Central Alberta" value="central" color="#1A1A1A" />
-                    <Picker.Item label="Edmonton Area" value="edmonton" color="#1A1A1A" />
-                    <Picker.Item label="Calgary Area" value="calgary" color="#1A1A1A" />
-                    <Picker.Item label="Southern Alberta" value="southern" color="#1A1A1A" />
-                  </Picker>
+                    <Text
+                      style={[
+                        styles.customPickerText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        !location && { color: "#999" },
+                      ]}
+                    >
+                      {location ? LOCATION_LABELS[location] : "Enter your location"}
+                    </Text>
+                  </TouchableOpacity>
+                  <Modal
+                    visible={locationModalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setLocationModalVisible(false)}
+                  >
+                    <View style={styles.modalOverlay}>
+                      <View style={styles.modalContent}>
+                        <Text
+                          style={[
+                            styles.modalTitle,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          Select Location
+                        </Text>
+                        <View style={{ maxHeight: 320 }}>
+                          <FlatList
+                            data={LOCATION_OPTIONS}
+                            keyExtractor={(item) => item.value}
+                            renderItem={({ item, index }) => (
+                              <TouchableOpacity
+                                style={[
+                                  styles.modalItem,
+                                  index === 0 && { borderTopWidth: 0 },
+                                ]}
+                                onPress={() => {
+                                  setLocation(item.value);
+                                  setLocationModalVisible(false);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.modalItemText,
+                                    { fontFamily: FONTS.BarlowSemiCondensed },
+                                  ]}
+                                >
+                                  {item.label}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          style={styles.modalCancel}
+                          onPress={() => setLocationModalVisible(false)}
+                        >
+                          <Text
+                            style={[
+                              styles.modalCancelText,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            Cancel
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Modal>
                 </View>
 
                 <Text
@@ -234,7 +324,8 @@ export default function PersonalInfo() {
               <TouchableOpacity
                 style={[
                   styles.continueButton,
-                  (isSubmitting || !age || !location) && styles.continueButtonDisabled
+                  (isSubmitting || !age || !location) &&
+                    styles.continueButtonDisabled,
                 ]}
                 onPress={handleContinue}
                 disabled={isSubmitting || !age || !location}
@@ -330,6 +421,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 16,
     fontSize: 15,
+    color: "#1A1A1A",
     marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -350,18 +442,63 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  picker: {
+  customPickerButton: {
     width: "100%",
-    height: 50,
-    color: "#1A1A1A",
+    minHeight: 50,
+    justifyContent: "center",
     backgroundColor: "white",
-    fontFamily: FONTS.BarlowSemiCondensed,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    paddingHorizontal: 16,
   },
-  pickerItem: {
-    color: "#1A1A1A",
+  customPickerText: {
     fontSize: 15,
-    fontFamily: FONTS.BarlowSemiCondensed,
+    color: "#1A1A1A",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
     backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "80%",
+    maxWidth: 350,
+    alignItems: "stretch",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  modalCancel: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f2f2f2",
+  },
+  modalCancelText: {
+    color: "#2A7DE1",
+    fontSize: 16,
+    textAlign: "center",
+    fontWeight: "600",
   },
   helperText: {
     fontSize: 14,
