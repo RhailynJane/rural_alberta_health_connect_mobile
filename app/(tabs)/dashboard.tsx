@@ -207,7 +207,7 @@ export default function Dashboard() {
           screenType="signin"
           bottomSpacing={0}
         />
-        
+
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
           <ScrollView
@@ -446,8 +446,6 @@ export default function Dashboard() {
           </ScrollView>
         </View>
       </CurvedBackground>
-      
-      {/* Bottom Navigation - Fixed at bottom, outside CurvedBackground */}
       <BottomNavigation />
     </SafeAreaView>
   );
@@ -463,13 +461,12 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 90, // Add padding to prevent content from being hidden behind bottom nav
   },
   contentSection: {
     padding: 24,
   },
   welcomeContainer: {
-    marginBottom: 5,
+    marginBottom: 10,
     marginTop: -20,
   },
   welcomeText: {
@@ -486,7 +483,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: 5,
+    marginBottom: 10,
   },
   healthStatusLabel: {
     fontSize: 16,
@@ -505,7 +502,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: 9,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -516,7 +513,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   healthScoreTitle: {
     fontSize: 18,
@@ -540,7 +537,7 @@ const styles = StyleSheet.create({
   healthScoreSubtitle: {
     fontSize: 14,
     color: "#666",
-    marginBottom: 16,
+    marginBottom: 10,
     textAlign: "center",
   },
   progressBarContainer: {
@@ -548,7 +545,7 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: "#E9ECEF",
     borderRadius: 4,
-    marginBottom: 16,
+    marginBottom: 10,
     overflow: "hidden",
   },
   progressBar: {
@@ -569,7 +566,7 @@ const styles = StyleSheet.create({
   },
   // Quick Actions Styles
   quickActionsContainer: {
-    marginBottom: 9,
+    marginBottom: 20,
   },
   quickActionsTitle: {
     fontSize: 18,
@@ -619,7 +616,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
-    marginBottom: 9,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -637,7 +634,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FFEAA7",
-    marginBottom: 9,
+    marginBottom: 24,
   },
   disclaimerTitle: {
     fontSize: 16,
@@ -667,7 +664,7 @@ const styles = StyleSheet.create({
   emergencyText: {
     fontSize: 14,
     color: "#721C24",
-    marginBottom: 16,
+    marginBottom: 10,
     lineHeight: 20,
   },
   emergencyButtonsContainer: {
