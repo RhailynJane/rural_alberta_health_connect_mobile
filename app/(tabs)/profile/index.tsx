@@ -27,6 +27,10 @@ export default function Profile() {
   const updatePersonalInfo = useMutation(
     api.profile.personalInformation.updatePersonalInfo
   );
+  const ensureProfileExists = useMutation(
+    (api as any)["profile/ensureProfileExists"].ensureProfileExists
+  );
+  
   // Skip queries if not authenticated
   const userProfile = useQuery(
     api.profile.personalInformation.getProfile,
@@ -111,8 +115,18 @@ export default function Profile() {
         location: userProfile.location || "",
         medicalConditions: userProfile.medicalConditions || "",
       }));
+    } else if (userProfile === null && isAuthenticated && !isLoading) {
+      // Profile is null but user is authenticated - create profile
+      console.log("⚠️ Profile not found, creating one...");
+      ensureProfileExists()
+        .then(() => {
+          console.log("✅ Profile created successfully");
+        })
+        .catch((error) => {
+          console.error("❌ Error creating profile:", error);
+        });
     }
-  }, [userProfile]);
+  }, [userProfile, isAuthenticated, isLoading, ensureProfileExists]);
 
   // State for expandable sections
   const [expandedSections, setExpandedSections] = useState({

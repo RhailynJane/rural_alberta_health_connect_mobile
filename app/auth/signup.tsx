@@ -1,5 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Ionicons } from "@expo/vector-icons";
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
@@ -16,6 +17,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
+import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
@@ -62,9 +64,11 @@ export default function SignUp() {
   >(null);
   const { values: persistedValues, setValues: setPersistedValues } =
     useSignUpForm();
+  const ensureProfileExists = useMutation((api as any)["profile/ensureProfileExists"].ensureProfileExists);
 
   const handleSignUp = async (values: SignUpFormValues) => {
-    console.log("Sign up attempted with:", values);
+    const { password, confirmPassword, ...safeValues } = values;
+    console.log("Sign up attempted with:", safeValues);
     setSubmitError(null);
     try {
       await signIn("password", {
@@ -75,6 +79,8 @@ export default function SignUp() {
         hasCompletedOnboarding: false,
         flow: "signUp",
       });
+      // Ensure profile exists in Convex
+      await ensureProfileExists();
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);

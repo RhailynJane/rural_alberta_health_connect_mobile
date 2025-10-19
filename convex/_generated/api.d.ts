@@ -24,6 +24,7 @@ import type * as medicalHistoryOnboarding_update from "../medicalHistoryOnboardi
 import type * as model_user from "../model/user.js";
 import type * as model_userProfile from "../model/userProfile.js";
 import type * as personalInfoOnboarding_update from "../personalInfoOnboarding/update.js";
+import type * as profile_ensureProfileExists from "../profile/ensureProfileExists.js";
 import type * as profile_personalInformation from "../profile/personalInformation.js";
 import type * as sync from "../sync.js";
 import type * as users from "../users.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   "model/user": typeof model_user;
   "model/userProfile": typeof model_userProfile;
   "personalInfoOnboarding/update": typeof personalInfoOnboarding_update;
+  "profile/ensureProfileExists": typeof profile_ensureProfileExists;
   "profile/personalInformation": typeof profile_personalInformation;
   sync: typeof sync;
   users: typeof users;
