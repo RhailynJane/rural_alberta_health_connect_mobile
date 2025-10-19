@@ -20,7 +20,7 @@ export default function TermsOfService() {
           {/* Header */}
           <CurvedHeader
             title="Terms of Service"
-            height={120}
+            height={150}
             showLogo={false}
           />
 

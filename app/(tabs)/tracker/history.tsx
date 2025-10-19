@@ -166,7 +166,7 @@ export default function History() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="History" height={120} showLogo={true} />
+          <CurvedHeader title="History" height={150} showLogo={true} />
 
           <View style={styles.contentSection}>
             {/* Medical Disclaimer */}

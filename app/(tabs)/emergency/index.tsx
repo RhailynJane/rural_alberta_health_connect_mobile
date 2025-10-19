@@ -187,7 +187,7 @@ export default function Emergency() {
 
   return (
     <CurvedBackground>
-      <CurvedHeader title="Emergency" height={120} showLogo={true} />
+  <CurvedHeader title="Emergency" height={150} showLogo={true} />
 
       <ScrollView style={styles.container}>
         {/* Emergency Warning Banner */}

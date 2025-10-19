@@ -8,7 +8,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from 'yup';
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -84,7 +84,7 @@ export default function SignIn() {
             {/* Logo and Header Container */}
             <CurvedHeader
               title="Alberta Health Connect"
-              height={120}
+              height={150}
               showLogo={true}
               screenType="signin"
             />

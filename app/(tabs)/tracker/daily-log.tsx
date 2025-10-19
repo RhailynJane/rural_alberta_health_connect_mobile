@@ -66,7 +66,7 @@ export default function DailyLog() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+          <CurvedHeader title="Health Tracker" height={150} showLogo={true} />
 
           <View>
             <View style={styles.contentSection}>

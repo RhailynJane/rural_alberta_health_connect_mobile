@@ -335,7 +335,7 @@ export default function SymptomAssessment() {
         >
           <CurvedHeader
             title="Symptom Assessment"
-            height={120}
+            height={150}
             showLogo={true}
           />
 

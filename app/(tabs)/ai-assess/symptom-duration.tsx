@@ -71,7 +71,7 @@ export default function SymptomDuration() {
           {/* Header with logo */}
           <CurvedHeader
             title="Symptom Assessment"
-            height={120}
+            height={150}
             showLogo={true}
           />
 

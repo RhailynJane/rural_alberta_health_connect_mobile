@@ -6,7 +6,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -71,7 +71,7 @@ export default function EmergencyContact() {
             {/* Header with logo */}
             <CurvedHeader
               title="Alberta Health Connect"
-              height={120}
+              height={150}
               showLogo={true}
               screenType="signin"
             />

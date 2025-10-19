@@ -268,7 +268,7 @@ export default function AddHealthEntry() {
             keyboardShouldPersistTaps="handled"
           >
             {/* Header with title */}
-            <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+            <CurvedHeader title="Health Tracker" height={150} showLogo={true} />
 
             <View>
               <Text

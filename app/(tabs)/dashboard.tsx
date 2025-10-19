@@ -7,13 +7,13 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
@@ -206,7 +206,7 @@ export default function Dashboard() {
           {/* Header with logo */}
           <CurvedHeader
             title="Alberta Health Connect"
-            height={120}
+            height={150}
             showLogo={true}
           />
 

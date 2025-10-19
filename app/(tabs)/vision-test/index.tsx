@@ -386,7 +386,7 @@ Focus on immediate steps and when to seek professional help.
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <CurvedHeader title="Vision Model Test" height={120} showLogo={true} />
+            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
 
             <View style={styles.contentSection}>
               <View style={styles.errorContainer}>
@@ -433,7 +433,7 @@ Focus on immediate steps and when to seek professional help.
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <CurvedHeader title="Vision Model Test" height={120} showLogo={true} />
+            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
 
             <View style={styles.contentSection}>
               <View style={styles.loadingContainer}>
@@ -472,7 +472,7 @@ Focus on immediate steps and when to seek professional help.
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <CurvedHeader title="Vision Detection Test" height={120} showLogo={true} />
+            <CurvedHeader title="Vision Detection Test" height={150} showLogo={true} />
 
             <View style={styles.contentSection}>
               <Text style={[styles.landingTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -553,7 +553,7 @@ Focus on immediate steps and when to seek professional help.
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <CurvedHeader title="Vision Model Test" height={120} showLogo={true} />
+            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
 
             <View style={styles.contentSection}>
               <View style={styles.permissionsContainer}>
@@ -605,7 +605,7 @@ Focus on immediate steps and when to seek professional help.
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
-            <CurvedHeader title="Vision Model Test" height={120} showLogo={true} />
+            <CurvedHeader title="Vision Model Test" height={150} showLogo={true} />
 
             <View style={styles.contentSection}>
               <View style={styles.errorContainer}>
@@ -651,7 +651,7 @@ Focus on immediate steps and when to seek professional help.
 
         {/* Curved Header Overlay */}
         <View style={styles.headerOverlay}>
-          <CurvedHeader title="Real-Time Detection" height={100} showLogo={false} />
+          <CurvedHeader title="Real-Time Detection" height={150} showLogo={false} />
         </View>
 
         {/* Status Overlay */}
@@ -708,7 +708,7 @@ Focus on immediate steps and when to seek professional help.
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Vision Detection Test" height={120} showLogo={true} />
+          <CurvedHeader title="Vision Detection Test" height={150} showLogo={true} />
 
           <View style={styles.contentSection}>
             <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>

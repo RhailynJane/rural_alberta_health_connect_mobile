@@ -204,7 +204,7 @@ export default function Profile() {
   if (isLoading) {
     return (
       <CurvedBackground>
-        <CurvedHeader title="Profile" height={120} showLogo={true} />
+  <CurvedHeader title="Profile" height={150} showLogo={true} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
@@ -217,7 +217,7 @@ export default function Profile() {
     // This should trigger automatically due to your AuthGuard, but as a safeguard:
     return (
       <CurvedBackground>
-        <CurvedHeader title="Profile" height={120} showLogo={true} />
+  <CurvedHeader title="Profile" height={150} showLogo={true} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Redirecting...</Text>
         </View>
@@ -231,7 +231,7 @@ export default function Profile() {
   if (userProfile === undefined) {
     return (
       <CurvedBackground>
-        <CurvedHeader title="Profile" height={120} showLogo={true} />
+  <CurvedHeader title="Profile" height={150} showLogo={true} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
@@ -243,7 +243,7 @@ export default function Profile() {
   if (userProfile === null) {
     return (
       <CurvedBackground>
-        <CurvedHeader title="Profile" height={120} showLogo={true} />
+  <CurvedHeader title="Profile" height={150} showLogo={true} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Profile not found...</Text>
         </View>
@@ -253,7 +253,7 @@ export default function Profile() {
 
   return (
     <CurvedBackground>
-      <CurvedHeader title="Profile" height={120} showLogo={true} />
+  <CurvedHeader title="Profile" height={150} showLogo={true} />
       <ScrollView style={styles.container}>
         {/* Privacy Notice */}
         <View style={styles.card}>

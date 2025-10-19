@@ -23,7 +23,7 @@ export default function PrivacyPolicy() {
       <CurvedBackground>
         <ScrollView contentContainerStyle={styles.contentContainer}>
           {/* Header */}
-          <CurvedHeader title="Privacy Policy" height={120} showLogo={false} />
+          <CurvedHeader title="Privacy Policy" height={150} showLogo={false} />
 
           <View style={styles.contentSection}>
             <Text

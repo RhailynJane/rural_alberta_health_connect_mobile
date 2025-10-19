@@ -311,7 +311,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
         >
           <CurvedHeader
             title="Assessment Results"
-            height={120}
+            height={150}
             showLogo={true}
           />
 

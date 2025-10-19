@@ -2,13 +2,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel"; // Add this import
@@ -71,7 +71,7 @@ export default function LogDetails() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Entry Details" height={120} showLogo={true} />
+          <CurvedHeader title="Entry Details" height={150} showLogo={true} />
 
           <View style={styles.contentSection}>
             {/* Back Button */}

@@ -1,5 +1,6 @@
 import { router } from "expo-router";
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -25,7 +26,7 @@ export default function Tracker() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+          <CurvedHeader title="Health Tracker" height={150} showLogo={true} />
 
           <View style={styles.contentSection}>
             {/* Medical Disclaimer */}
