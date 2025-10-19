@@ -109,6 +109,15 @@ export default function SignUp() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
+        {/* Fixed header: outside the ScrollView so it doesn't scroll */}
+        <CurvedHeader
+          title="Alberta Health Connect"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
+
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.container}
@@ -116,15 +125,8 @@ export default function SignUp() {
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Logo and Header Container */}
-            <CurvedHeader
-              title="Alberta Health Connect"
-              height={150}
-              showLogo={true}
-              screenType="signin"
-            />
-
             <View style={styles.contentSection}>
               {submitError && (
                 <Text style={[{ color: '#ff3b30', textAlign: 'center', marginBottom: 8, fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -546,7 +548,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A1A1A",
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,

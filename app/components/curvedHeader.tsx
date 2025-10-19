@@ -8,7 +8,7 @@ const { width: screenWidth } = Dimensions.get("window");
 // Constants for better maintainability
 const CURVE_HEIGHT = 70;
 const LOGO_SIZE_ONBOARDING = 80;
-const LOGO_SIZE_SIGNIN = 90;
+const LOGO_SIZE_SIGNIN = 80;
 
 interface CurvedHeaderProps {
   title?: string;
@@ -19,6 +19,7 @@ interface CurvedHeaderProps {
   children?: React.ReactNode;
   showLogo?: boolean;
   screenType?: 'onboarding' | 'signin'; // New prop to determine screen type
+  bottomSpacing?: number; // controls margin below header container
 }
 
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
@@ -30,6 +31,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   children,
   showLogo = false,
   screenType = 'onboarding', // Default to onboarding
+  bottomSpacing = 20,
 }) => {
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
@@ -40,9 +42,9 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   }
 
   return (
-    <View style={[styles.container, { height }]}>
-      {/* Main background */}
-      <View style={[styles.background, { backgroundColor, height: height - CURVE_HEIGHT }]} />
+    <View style={[styles.container, { height, marginBottom: bottomSpacing }]}>
+      {/* Main background - extended slightly to ensure no gap */}
+      <View style={[styles.background, { backgroundColor, height: height - CURVE_HEIGHT + 2 }]} />
       {/* Curved bottom section */}
 <View style={[styles.curveContainer, { top: height - CURVE_HEIGHT }]}>
   <Svg
