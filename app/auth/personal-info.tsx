@@ -1,5 +1,6 @@
+import { useDatabase } from '@nozbe/watermelondb/react';
 import { Picker } from "@react-native-picker/picker";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -11,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -19,19 +21,32 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
-
 export default function PersonalInfo() {
   const router = useRouter();
-  const [ageRange, setAgeRange] = useState("");
+  const database = useDatabase();
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
+  const [age, setAge] = useState("");
   const [location, setLocation] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
 
-
   const handleContinue = async () => {
-    if (!ageRange || !location) {
-      Alert.alert("Required Fields", "Please select both age range and location to continue.");
+    if (!age || !location) {
+      Alert.alert("Required Fields", "Please enter both age and location to continue.");
+      return;
+    }
+
+    if (!currentUser?._id) {
+      Alert.alert("Authentication Error", "Please sign in to continue.");
+      return;
+    }
+
+    // Validate age
+    const ageNum = parseInt(age);
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+      Alert.alert("Invalid Age", "Please enter a valid age between 1 and 120.");
       return;
     }
 
@@ -39,8 +54,31 @@ export default function PersonalInfo() {
     setIsSubmitting(true);
     
     try {
-      await updatePersonalInfo({ ageRange, location });
-      console.log("✅ Personal Info - Saved successfully");
+      // Convert age to age range for your existing schema
+      const ageRange = getAgeRange(ageNum);
+      
+      // Save to WatermelonDB first (offline)
+      await database.write(async () => {
+        await database.get('user_profiles').create((profile: any) => {
+          profile.userId = currentUser._id;
+          profile.ageRange = ageRange;
+          profile.location = location;
+          profile.onboardingCompleted = false;
+          profile.createdAt = Date.now();
+          profile.updatedAt = Date.now();
+        });
+      });
+
+      console.log("✅ Personal Info - Saved to local database");
+
+      // Then sync with Convex (online) - this will work when there's internet
+      try {
+        await updatePersonalInfo({ ageRange, location });
+        console.log("✅ Personal Info - Synced with Convex");
+      } catch (syncError) {
+        console.log("⚠️ Personal Info - Saved locally, will sync when online:", syncError);
+        // Don't show error to user - data is saved locally
+      }
       
       console.log("➡️ Navigating to emergency contact");
       router.push("/auth/emergency-contact");
@@ -53,6 +91,15 @@ export default function PersonalInfo() {
     }
   };
 
+  const getAgeRange = (age: number): string => {
+    if (age < 18) return "under18";
+    if (age <= 24) return "18-24";
+    if (age <= 34) return "25-34";
+    if (age <= 44) return "35-44";
+    if (age <= 54) return "45-54";
+    if (age <= 64) return "55-64";
+    return "65plus";
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -112,30 +159,26 @@ export default function PersonalInfo() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Age Range
+                  Age
                 </Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={ageRange}
-                    onValueChange={setAgeRange}
-                  >
-                    <Picker.Item label="Select your age range" value="" />
-                    <Picker.Item label="Under 18" value="under18" />
-                    <Picker.Item label="18-24" value="18-24" />
-                    <Picker.Item label="25-34" value="25-34" />
-                    <Picker.Item label="35-44" value="35-44" />
-                    <Picker.Item label="45-54" value="45-54" />
-                    <Picker.Item label="55-64" value="55-64" />
-                    <Picker.Item label="65+" value="65plus" />
-                  </Picker>
-                </View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                  placeholder="Enter your age"
+                  placeholderTextColor="#999"
+                  value={age}
+                  onChangeText={setAge}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
 
                 <Text
                   style={[
                     styles.fieldLabel,
                     { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel
                   ]}
                 >
                   Location
@@ -169,10 +212,10 @@ export default function PersonalInfo() {
               <TouchableOpacity
                 style={[
                   styles.continueButton,
-                  (isSubmitting || !ageRange || !location) && styles.continueButtonDisabled
+                  (isSubmitting || !age || !location) && styles.continueButtonDisabled
                 ]}
                 onPress={handleContinue}
-                disabled={isSubmitting || !ageRange || !location}
+                disabled={isSubmitting || !age || !location}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="white" size="small" />
@@ -223,7 +266,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    width: "33%", // 1 out of 3 steps completed
+    width: "33%",
     backgroundColor: "#2A7DE1",
     borderRadius: 3,
   },
@@ -254,7 +297,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 8,
+  },
+  locationLabel: {
     marginTop: 16,
+  },
+  input: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 16,
+    fontSize: 15,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   pickerContainer: {
     backgroundColor: "white",

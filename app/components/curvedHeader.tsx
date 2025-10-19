@@ -5,6 +5,11 @@ import Svg, { Path } from "react-native-svg";
 
 const { width: screenWidth } = Dimensions.get("window");
 
+// Constants for better maintainability
+const CURVE_HEIGHT = 70;
+const LOGO_SIZE_ONBOARDING = 80;
+const LOGO_SIZE_SIGNIN = 90;
+
 interface CurvedHeaderProps {
   title?: string;
   subtitle?: string;
@@ -19,7 +24,7 @@ interface CurvedHeaderProps {
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   title,
   subtitle,
-  backgroundColor = "#D6E3F0",
+  backgroundColor = "#B8C6D1",
   textColor = "#2c3e50",
   height = 100,
   children,
@@ -29,8 +34,6 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
   });
-
-  const curveHeight = 70;
   
   if (!fontsLoaded) {
     return null;
@@ -39,25 +42,25 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   return (
     <View style={[styles.container, { height }]}>
       {/* Main background */}
-      <View style={[styles.background, { backgroundColor, height: height - curveHeight }]} />
-      
+      <View style={[styles.background, { backgroundColor, height: height - CURVE_HEIGHT }]} />
       {/* Curved bottom section */}
-      <View style={[styles.curveContainer, { top: height - curveHeight }]}>
-        <Svg
-          width={screenWidth}
-          height={curveHeight}
-          viewBox={`0 0 ${screenWidth} ${curveHeight}`}
-        >
-          <Path
-            d={`M0,0 
-               L${screenWidth},0 
-               L${screenWidth},${curveHeight} 
-               C${screenWidth},${curveHeight} ${screenWidth * 0.7},${curveHeight * 0.3} ${screenWidth * 0.5},${curveHeight * 0.5} 
-               C${screenWidth * 0.3},${curveHeight * 0.7} 0,${curveHeight} 0,${curveHeight}`}
-            fill={backgroundColor}
-          />
-        </Svg>
-      </View>
+<View style={[styles.curveContainer, { top: height - CURVE_HEIGHT }]}>
+  <Svg
+    width={screenWidth}
+    height={CURVE_HEIGHT}
+    viewBox={`0 0 ${screenWidth} ${CURVE_HEIGHT}`}
+  >
+    <Path
+      d={`M0,0 
+         L${screenWidth},0
+         L${screenWidth},${CURVE_HEIGHT * 0.3}
+         Q${screenWidth * 0.75},${CURVE_HEIGHT * 0.8} ${screenWidth * 0.5},${CURVE_HEIGHT * 0.3}
+         Q${screenWidth * 0.25},${CURVE_HEIGHT * -0.2} 0,${CURVE_HEIGHT * 0.3}
+         Z`}
+      fill={backgroundColor}
+    />
+  </Svg>
+</View>
 
       {/* Content */}
       <View style={styles.content}>
@@ -70,22 +73,19 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
           ]}>
             {showLogo && (
               <Image 
-                source={require("../../assets/images/logo.png")} 
+                source={require("../../assets/images/logo-no-name.png")} 
                 style={[
-                  styles.logo,
                   screenType === 'signin' ? styles.signinLogo : styles.onboardingLogo
                 ]}
                 resizeMode="contain"
               />
             )}
             <View style={[
-              styles.textContainer,
               screenType === 'signin' ? styles.signinTextContainer : styles.onboardingTextContainer
             ]}>
               {title && (
                 <Text 
                   style={[
-                    styles.title, 
                     { color: textColor, fontFamily: 'BarlowSemiCondensed' },
                     screenType === 'signin' ? styles.signinTitle : styles.onboardingTitle
                   ]}
@@ -97,7 +97,6 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
               )}
               {subtitle && (
                 <Text style={[
-                  styles.subtitle, 
                   { color: textColor, fontFamily: 'BarlowSemiCondensed' },
                   screenType === 'signin' ? styles.signinSubtitle : styles.onboardingSubtitle
                 ]}>
@@ -134,7 +133,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    bottom: CURVE_HEIGHT,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
@@ -143,13 +142,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  // Onboarding layout (multi-line title, centered)
   onboardingLayout: {
     justifyContent: "center",
   },
   onboardingLogo: {
-    width: 90,
-    height: 90,
+    width: LOGO_SIZE_ONBOARDING,
+    height: LOGO_SIZE_ONBOARDING,
     marginRight: 20,
   },
   onboardingTextContainer: {
@@ -169,49 +167,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   // Signin layout (single line title, left-aligned with logo)
-signinLayout: {
-  justifyContent: "flex-start",
-  alignItems: "center",
-},
-signinLogo: {
-  width: 90,
-  height: 90,
-  marginRight: 10, 
-  justifyContent: "flex-start",
-},
-signinTextContainer: {
-  flex: 1,
-  marginLeft: 1, 
-},
-signinTitle: {
-  fontSize: 22,
-  textAlign: "left",
-  marginBottom: 4,
-  lineHeight: 26,
-  letterSpacing: 0.5,
-},
-signinSubtitle: {
-  fontSize: 18,
-  textAlign: "left",
-  lineHeight: 22,
-  letterSpacing: 0.3,
-},
-logo: {
-  width: 90,
-  height: 90,
-  marginRight: 20,
-},
-  textContainer: {
-    flex: 1,
+  signinLayout: {
+    justifyContent: "flex-start",
+    alignItems: "center",
   },
-  title: {
-    fontSize: 20,
-    textAlign: "center",
-    marginBottom: 8,
-    lineHeight: 28,
+  signinLogo: {
+    width: LOGO_SIZE_SIGNIN,
+    height: LOGO_SIZE_SIGNIN,
+    marginRight: 10,
+  },
+  signinTextContainer: {
+    flex: 1,
+    marginLeft: 1,
+  },
+  signinTitle: {
+    fontSize: 22,
+    textAlign: "left",
+    marginBottom: 4,
+    lineHeight: 26,
     letterSpacing: 0.5,
   },
-  subtitle: {
+  signinSubtitle: {
     fontSize: 18,
     textAlign: "left",
     lineHeight: 22,

@@ -9,10 +9,13 @@ export default class User extends Model {
   @field('first_name') firstName!: string;
   @field('last_name') lastName!: string;
   @field('has_completed_onboarding') hasCompletedOnboarding!: boolean;
+  @field('email_verification_time') emailVerificationTime?: number;
+  @field('phone') phone?: string;
+  @field('phone_verification_time') phoneVerificationTime?: number;
+  @field('is_anonymous') isAnonymous?: boolean;
+  @field('name') name?: string;
+  @field('image') image?: string;
   
   @readonly @date('created_at') createdAt!: number;
   @readonly @date('updated_at') updatedAt!: number;
-  
-  @field('_status') _status!: string;
-  @field('_changed') _changed!: string;
 }

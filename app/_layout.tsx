@@ -1,11 +1,11 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { DatabaseProvider } from '@nozbe/watermelondb/react';
+// import { DatabaseProvider } from '@nozbe/watermelondb/react'; // TEMPORARILY COMMENT OUT
 import { ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { database } from '../watermelon/database';
+// import { database } from '../watermelon/database'; // TEMPORARILY COMMENT OUT
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
@@ -67,7 +67,7 @@ export default function RootLayout() {
   };
 
   return (
-    <DatabaseProvider database={database}>
+    // <DatabaseProvider database={database}> {/* TEMPORARILY COMMENT OUT */}
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
           <SafeAreaProvider>
@@ -84,6 +84,6 @@ export default function RootLayout() {
           </SafeAreaProvider>
         </ConvexAuthProvider>
       </SessionRefreshContext.Provider>
-    </DatabaseProvider>
+    // </DatabaseProvider> {/* TEMPORARILY COMMENT OUT */}
   );
 }

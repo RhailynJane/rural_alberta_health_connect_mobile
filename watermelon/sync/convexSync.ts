@@ -10,12 +10,11 @@ export async function syncWithConvex() {
 
   await synchronize({
     database,
-    pullChanges: async ({ lastPulledAt, schemaVersion, migration }) => {
-      // Pull changes from Convex
+    pullChanges: async ({ lastPulledAt }) => {
       const response = await fetch(`${CONVEX_URL}/sync/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lastPulledAt, schemaVersion, migration }),
+        body: JSON.stringify({ lastPulledAt }),
       });
       
       if (!response.ok) {
@@ -26,7 +25,6 @@ export async function syncWithConvex() {
       return { changes, timestamp };
     },
     pushChanges: async ({ changes, lastPulledAt }) => {
-      // Push changes to Convex
       const response = await fetch(`${CONVEX_URL}/sync/push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,4 +37,13 @@ export async function syncWithConvex() {
     },
     migrationsEnabledAtVersion: 1,
   });
+}
+
+// Helper to sync specific tables
+export async function syncHealthEntries(userId: string) {
+  // Implementation for syncing health entries
+}
+
+export async function syncUserProfile(userId: string) {
+  // Implementation for syncing user profile
 }

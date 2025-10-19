@@ -25,6 +25,7 @@ import type * as model_user from "../model/user.js";
 import type * as model_userProfile from "../model/userProfile.js";
 import type * as personalInfoOnboarding_update from "../personalInfoOnboarding/update.js";
 import type * as profile_personalInformation from "../profile/personalInformation.js";
+import type * as sync from "../sync.js";
 import type * as users from "../users.js";
 import type * as utils_sanitize from "../utils/sanitize.js";
 
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   "model/userProfile": typeof model_userProfile;
   "personalInfoOnboarding/update": typeof personalInfoOnboarding_update;
   "profile/personalInformation": typeof profile_personalInformation;
+  sync: typeof sync;
   users: typeof users;
   "utils/sanitize": typeof utils_sanitize;
 }>;

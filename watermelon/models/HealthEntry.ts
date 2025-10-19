@@ -18,13 +18,11 @@ export default class HealthEntry extends Model {
   photos?: string[];
   
   @field('notes') notes?: string;
+  @field('created_by') createdBy!: string;
   @field('type') type?: string;
   @field('is_synced') isSynced!: boolean;
   @field('sync_error') syncError?: string;
   
   @readonly @date('created_at') createdAt!: number;
   @readonly @date('updated_at') updatedAt!: number;
-  
-  @field('_status') _status!: string;
-  @field('_changed') _changed!: string;
 }

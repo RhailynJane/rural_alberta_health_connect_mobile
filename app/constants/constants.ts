@@ -1,4 +1,3 @@
-// constants.js
 import {
   Barlow_700Bold,
   Barlow_800ExtraBold,
@@ -12,9 +11,9 @@ export const FONTS = {
 };
 
 export const FONT_CONFIG = {
-  BarlowSemiCondensed: Barlow_700Bold, // Changed from 600 to 700
+  BarlowSemiCondensed: Barlow_700Bold,
   BarlowSemiCondensedBold: Barlow_800ExtraBold,
-  BarlowSemiCondensedExtraBold: Barlow_900Black, // Boldest option
+  BarlowSemiCondensedExtraBold: Barlow_900Black,
 };
 
 export const COLORS = {
@@ -40,3 +39,12 @@ export const COLORS = {
   success: '#2ecc71',
   warning: '#f39c12',
 };
+
+// Add default export at the bottom
+const constants = {
+  FONTS,
+  FONT_CONFIG,
+  COLORS,
+};
+
+export default constants;

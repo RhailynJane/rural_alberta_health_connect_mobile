@@ -12,11 +12,9 @@ export default class UserProfile extends Model {
   @field('medical_conditions') medicalConditions?: string;
   @field('current_medications') currentMedications?: string;
   @field('allergies') allergies?: string;
+  @field('location_services_enabled') locationServicesEnabled?: boolean;
   @field('onboarding_completed') onboardingCompleted!: boolean;
   
   @readonly @date('created_at') createdAt!: number;
   @readonly @date('updated_at') updatedAt!: number;
-  
-  @field('_status') _status!: string;
-  @field('_changed') _changed!: string;
 }
