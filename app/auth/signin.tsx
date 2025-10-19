@@ -43,9 +43,10 @@ export default function SignIn() {
     setIsLoading(true);
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      // AuthWrapper will handle navigation based on auth state and onboarding status
-      // not for now
-      router.push("/(tabs)/dashboard");
+      
+      // Navigate directly to dashboard after successful sign-in
+      console.log("🚀 Navigating to dashboard after sign-in");
+      router.replace("/(tabs)/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);
       

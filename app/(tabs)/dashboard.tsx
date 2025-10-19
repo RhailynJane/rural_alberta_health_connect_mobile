@@ -132,7 +132,7 @@ export default function Dashboard() {
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
-    router.push("../ai-assess");
+    router.push("/(tabs)/ai-assess");
   };
 
   const handleEmergencyCall = (): void => {
@@ -198,250 +198,255 @@ export default function Dashboard() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header with logo */}
-          <CurvedHeader
-            title="Alberta Health Connect"
-            height={150}
-            showLogo={true}
-          />
-
-          <View style={styles.contentSection}>
-            {/* Welcome Section */}
-            <View style={styles.welcomeContainer}>
-              <Text
-                style={[
-                  styles.welcomeText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Welcome, {userName}!
-              </Text>
-              <View style={styles.healthStatusContainer}>
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Alberta Health Connect"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
+        
+        {/* Content Area - Takes all available space minus header and bottom nav */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.contentSection}>
+              {/* Welcome Section */}
+              <View style={styles.welcomeContainer}>
                 <Text
                   style={[
-                    styles.healthStatusLabel,
+                    styles.welcomeText,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Health Status
+                  Welcome, {userName}!
                 </Text>
-                <HealthStatusTag status={healthStatus} />
-              </View>
-            </View>
-
-            {/* Weekly Health Score Card */}
-            <View style={styles.healthScoreCard}>
-              <View style={styles.healthScoreHeader}>
-                <Text
-                  style={[
-                    styles.healthScoreTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Weekly Health Score
-                </Text>
-                <TouchableOpacity onPress={navigateToHistory}>
+                <View style={styles.healthStatusContainer}>
                   <Text
                     style={[
-                      styles.viewDetailsText,
+                      styles.healthStatusLabel,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    View Details
+                    Health Status
                   </Text>
-                </TouchableOpacity>
+                  <HealthStatusTag status={healthStatus} />
+                </View>
               </View>
 
-              <View style={styles.healthScoreContent}></View>
-              <Text
-                style={[
-                  styles.healthScoreValue,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                {weeklyEntries && weeklyEntries.length > 0
-                  ? `${weeklyHealthScore}/10`
-                  : "N/A"}
-              </Text>
-              <Text
-                style={[
-                  styles.healthScoreSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                {weeklyEntries && weeklyEntries.length > 0
-                  ? `Based on ${weeklyEntries.length} entries this week`
-                  : "No entries this week"}
-              </Text>
-
-              {/* Health Score Progress Bar - only show if there are entries */}
-              {weeklyEntries && weeklyEntries.length > 0 && (
-                <>
-                  <View style={styles.progressBarContainer}>
-                    <View
-                      style={[
-                        styles.progressBar,
-                        { width: `${parseFloat(weeklyHealthScore) * 10}%` },
-                      ]}
-                    />
-                  </View>
-
-                  <View style={styles.scoreInterpretation}>
+              {/* Weekly Health Score Card */}
+              <View style={styles.healthScoreCard}>
+                <View style={styles.healthScoreHeader}>
+                  <Text
+                    style={[
+                      styles.healthScoreTitle,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Weekly Health Score
+                  </Text>
+                  <TouchableOpacity onPress={navigateToHistory}>
                     <Text
                       style={[
-                        styles.interpretationText,
+                        styles.viewDetailsText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      {parseFloat(weeklyHealthScore) >= 8.0
-                        ? "🎉 Excellent! Keep up the good work!"
-                        : parseFloat(weeklyHealthScore) >= 6.0
-                          ? "👍 Good overall health status"
-                          : parseFloat(weeklyHealthScore) >= 4.0
-                            ? "⚠️ Fair - monitor your symptoms"
-                            : "🚨 Poor - consider seeking medical advice"}
+                      View Details
                     </Text>
-                  </View>
-                </>
-              )}
-            </View>
+                  </TouchableOpacity>
+                </View>
 
-            {/* Quick Actions */}
-            <View style={styles.quickActionsContainer}>
-              <Text
-                style={[
-                  styles.quickActionsTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Quick Actions
-              </Text>
-
-              <View style={styles.quickActionsRow}>
-                <TouchableOpacity
-                  style={styles.quickActionButton}
-                  onPress={handleSymptomAssessment}
+                <View style={styles.healthScoreContent}></View>
+                <Text
+                  style={[
+                    styles.healthScoreValue,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
                 >
-                  <View style={styles.quickActionIcon}>
-                    <Text style={styles.quickActionEmoji}>🤖</Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.quickActionText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    AI Assessment
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.quickActionButton}
-                  onPress={navigateToDailyLog}
+                  {weeklyEntries && weeklyEntries.length > 0
+                    ? `${weeklyHealthScore}/10`
+                    : "N/A"}
+                </Text>
+                <Text
+                  style={[
+                    styles.healthScoreSubtitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
                 >
-                  <View style={styles.quickActionIcon}>
-                    <Text style={styles.quickActionEmoji}>📝</Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.quickActionText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
+                  {weeklyEntries && weeklyEntries.length > 0
+                    ? `Based on ${weeklyEntries.length} entries this week`
+                    : "No entries this week"}
+                </Text>
+
+                {/* Health Score Progress Bar - only show if there are entries */}
+                {weeklyEntries && weeklyEntries.length > 0 && (
+                  <>
+                    <View style={styles.progressBarContainer}>
+                      <View
+                        style={[
+                          styles.progressBar,
+                          { width: `${parseFloat(weeklyHealthScore) * 10}%` },
+                        ]}
+                      />
+                    </View>
+
+                    <View style={styles.scoreInterpretation}>
+                      <Text
+                        style={[
+                          styles.interpretationText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {parseFloat(weeklyHealthScore) >= 8.0
+                          ? "🎉 Excellent! Keep up the good work!"
+                          : parseFloat(weeklyHealthScore) >= 6.0
+                            ? "👍 Good overall health status"
+                            : parseFloat(weeklyHealthScore) >= 4.0
+                              ? "⚠️ Fair - monitor your symptoms"
+                              : "🚨 Poor - consider seeking medical advice"}
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Quick Actions */}
+              <View style={styles.quickActionsContainer}>
+                <Text
+                  style={[
+                    styles.quickActionsTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Quick Actions
+                </Text>
+
+                <View style={styles.quickActionsRow}>
+                  <TouchableOpacity
+                    style={styles.quickActionButton}
+                    onPress={handleSymptomAssessment}
                   >
-                    Daily Log
-                  </Text>
-                </TouchableOpacity>
+                    <View style={styles.quickActionIcon}>
+                      <Text style={styles.quickActionEmoji}>🤖</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.quickActionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      AI Assessment
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.quickActionButton}
+                    onPress={navigateToDailyLog}
+                  >
+                    <View style={styles.quickActionIcon}>
+                      <Text style={styles.quickActionEmoji}>📝</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.quickActionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Daily Log
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Medical Disclaimer */}
+              <View style={styles.disclaimerContainer}>
+                <Text
+                  style={[
+                    styles.disclaimerTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Medical Disclaimer
+                </Text>
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  This app provides health guidance only. It does not replace
+                  professional medical advice.
+                </Text>
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Always consult healthcare professionals for medical concerns.
+                </Text>
+              </View>
+
+              {/* Emergency Notice */}
+              <View style={styles.emergencyContainer}>
+                <Text
+                  style={[
+                    styles.emergencyTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Emergency Notice
+                </Text>
+                <Text
+                  style={[
+                    styles.emergencyText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  For life-threatening emergencies, call 911 immediately. For
+                  urgent health concerns, contact Health Link Alberta at 811.
+                </Text>
+
+                <View style={styles.emergencyButtonsContainer}>
+                  <TouchableOpacity
+                    style={styles.emergencyButton}
+                    onPress={handleEmergencyCall}
+                  >
+                    <Text
+                      style={[
+                        styles.emergencyButtonText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Call 911
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.healthLinkButton}
+                    onPress={callHealthLink}
+                  >
+                    <Text
+                      style={[
+                        styles.healthLinkButtonText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Call Health Link
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
+          </ScrollView>
+        </View>
 
-            {/* Medical Disclaimer */}
-            <View style={styles.disclaimerContainer}>
-              <Text
-                style={[
-                  styles.disclaimerTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Medical Disclaimer
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                This app provides health guidance only. It does not replace
-                professional medical advice.
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Always consult healthcare professionals for medical concerns.
-              </Text>
-            </View>
-
-            {/* Emergency Notice */}
-            <View style={styles.emergencyContainer}>
-              <Text
-                style={[
-                  styles.emergencyTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Emergency Notice
-              </Text>
-              <Text
-                style={[
-                  styles.emergencyText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                For life-threatening emergencies, call 911 immediately. For
-                urgent health concerns, contact Health Link Alberta at 811.
-              </Text>
-
-              <View style={styles.emergencyButtonsContainer}>
-                <TouchableOpacity
-                  style={styles.emergencyButton}
-                  onPress={handleEmergencyCall}
-                >
-                  <Text
-                    style={[
-                      styles.emergencyButtonText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Call 911
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.healthLinkButton}
-                  onPress={callHealthLink}
-                >
-                  <Text
-                    style={[
-                      styles.healthLinkButtonText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Call Health Link
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation - Fixed at bottom */}
         <BottomNavigation />
       </CurvedBackground>
     </SafeAreaView>
@@ -453,13 +458,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  contentArea: {
+    flex: 1, // Takes all available space between header and bottom nav
+  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 60, // Add padding to account for bottom navigation
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
   },
   welcomeContainer: {
     marginBottom: 25,

@@ -29,7 +29,14 @@ export default function Index() {
       return;
     }
 
+    // Wait for auth to finish loading
     if (isLoading) {
+      return;
+    }
+
+    // If authenticated, wait for user data to load before routing
+    if (isAuthenticated && user === undefined) {
+      console.log("⏸️  Waiting for user data to load...");
       return;
     }
 
@@ -37,11 +44,11 @@ export default function Index() {
     hasNavigated.current = true;
 
     if (isAuthenticated && user) {
-      // User is authenticated and exists - go to dashboard
+      // Authenticated - go to dashboard regardless of onboarding status
       console.log("🔄 Initial route: navigating to dashboard");
       router.replace('/(tabs)/dashboard');
     } else {
-      // No authenticated user - show onboarding flow
+      // Not authenticated - show onboarding flow
       console.log("🔄 Initial route: navigating to onboarding");
       router.replace('/onboarding');
     }

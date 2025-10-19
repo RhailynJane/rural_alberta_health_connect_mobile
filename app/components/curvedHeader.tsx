@@ -141,11 +141,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
   },
   onboardingLayout: {
-    justifyContent: "center",
+  justifyContent: "center",
+  alignItems: "center",
   },
   onboardingLogo: {
     width: LOGO_SIZE_ONBOARDING,
