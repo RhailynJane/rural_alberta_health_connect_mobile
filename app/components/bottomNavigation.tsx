@@ -100,6 +100,10 @@ const BottomNavigation: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     height: 70,
     backgroundColor: 'white',

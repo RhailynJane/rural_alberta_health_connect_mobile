@@ -445,10 +445,10 @@ export default function Dashboard() {
             </View>
           </ScrollView>
         </View>
-
-        {/* Bottom Navigation - Fixed at bottom */}
-        <BottomNavigation />
       </CurvedBackground>
+      
+      {/* Bottom Navigation - Fixed at bottom, outside CurvedBackground */}
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -463,19 +463,20 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
+    paddingBottom: 90, // Add padding to prevent content from being hidden behind bottom nav
   },
   contentSection: {
     padding: 24,
   },
   welcomeContainer: {
-    marginBottom: 25,
+    marginBottom: 5,
     marginTop: -20,
   },
   welcomeText: {
     fontSize: 28,
     fontWeight: "700",
     color: "#1A1A1A",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   healthStatusContainer: {
     flexDirection: "row",
@@ -485,7 +486,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: 16,
+    marginBottom: 5,
   },
   healthStatusLabel: {
     fontSize: 16,
@@ -504,7 +505,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: 20,
+    marginBottom: 9,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
   },
   // Quick Actions Styles
   quickActionsContainer: {
-    marginBottom: 20,
+    marginBottom: 9,
   },
   quickActionsTitle: {
     fontSize: 18,
@@ -618,7 +619,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 9,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -636,7 +637,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FFEAA7",
-    marginBottom: 24,
+    marginBottom: 9,
   },
   disclaimerTitle: {
     fontSize: 16,
