@@ -189,13 +189,14 @@ export default function PersonalInfo() {
                     dropdownIconColor="#2A7DE1"
                     selectedValue={location}
                     onValueChange={setLocation}
+                    itemStyle={styles.pickerItem}
                   >
-                    <Picker.Item label="Select your location" value="" />
-                    <Picker.Item label="Northern Alberta" value="northern" />
-                    <Picker.Item label="Central Alberta" value="central" />
-                    <Picker.Item label="Edmonton Area" value="edmonton" />
-                    <Picker.Item label="Calgary Area" value="calgary" />
-                    <Picker.Item label="Southern Alberta" value="southern" />
+                    <Picker.Item label="Select your location" value="" color="#999" />
+                    <Picker.Item label="Northern Alberta" value="northern" color="#1A1A1A" />
+                    <Picker.Item label="Central Alberta" value="central" color="#1A1A1A" />
+                    <Picker.Item label="Edmonton Area" value="edmonton" color="#1A1A1A" />
+                    <Picker.Item label="Calgary Area" value="calgary" color="#1A1A1A" />
+                    <Picker.Item label="Southern Alberta" value="southern" color="#1A1A1A" />
                   </Picker>
                 </View>
 
@@ -331,6 +332,12 @@ const styles = StyleSheet.create({
   picker: {
     width: "100%",
     height: 50,
+    color: "#1A1A1A",
+  },
+  pickerItem: {
+    color: "#1A1A1A",
+    fontSize: 15,
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
   helperText: {
     fontSize: 14,

@@ -29,27 +29,22 @@ export default function Index() {
       return;
     }
 
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        return;
-      }
+    if (isLoading) {
+      return;
+    }
 
-      // Mark that we've navigated
-      hasNavigated.current = true;
+    // Mark that we've navigated
+    hasNavigated.current = true;
 
-      if (isAuthenticated && user) {
-        // User is authenticated and exists - go to dashboard
-        console.log("🔄 Initial route: navigating to dashboard");
-        router.replace('/(tabs)/dashboard');
-      } else {
-        // No authenticated user - show onboarding flow
-        console.log("🔄 Initial route: navigating to onboarding");
-        router.replace('/onboarding');
-      }
-    }, 5000); // 5000ms = 5 seconds
-
-    // Cleanup timer if component unmounts
-    return () => clearTimeout(timer);
+    if (isAuthenticated && user) {
+      // User is authenticated and exists - go to dashboard
+      console.log("🔄 Initial route: navigating to dashboard");
+      router.replace('/(tabs)/dashboard');
+    } else {
+      // No authenticated user - show onboarding flow
+      console.log("🔄 Initial route: navigating to onboarding");
+      router.replace('/onboarding');
+    }
   }, [router, isAuthenticated, isLoading, user, isRefreshing]);
   
   return (
