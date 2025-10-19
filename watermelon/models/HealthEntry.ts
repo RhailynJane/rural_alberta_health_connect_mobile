@@ -14,7 +14,7 @@ export default class HealthEntry extends Model {
   @field('duration') duration?: string;
   @field('ai_context') aiContext?: string;
   
-  @json('photos', (photos: string) => JSON.parse(photos))
+  @json('photos', (photos: string | null) => photos ? JSON.parse(photos) : [])
   photos?: string[];
   
   @field('notes') notes?: string;
@@ -22,8 +22,8 @@ export default class HealthEntry extends Model {
   @field('is_synced') isSynced!: boolean;
   @field('sync_error') syncError?: string;
   
-  @readonly @date('created_at') createdAt!: Date;
-  @readonly @date('updated_at') updatedAt!: Date;
+  @readonly @date('created_at') createdAt!: number;
+  @readonly @date('updated_at') updatedAt!: number;
   
   @field('_status') _status!: string;
   @field('_changed') _changed!: string;

@@ -10,8 +10,8 @@ export default class User extends Model {
   @field('last_name') lastName!: string;
   @field('has_completed_onboarding') hasCompletedOnboarding!: boolean;
   
-  @readonly @date('created_at') createdAt!: Date;
-  @readonly @date('updated_at') updatedAt!: Date;
+  @readonly @date('created_at') createdAt!: number;
+  @readonly @date('updated_at') updatedAt!: number;
   
   @field('_status') _status!: string;
   @field('_changed') _changed!: string;

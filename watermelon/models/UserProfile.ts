@@ -14,8 +14,8 @@ export default class UserProfile extends Model {
   @field('allergies') allergies?: string;
   @field('onboarding_completed') onboardingCompleted!: boolean;
   
-  @readonly @date('created_at') createdAt!: Date;
-  @readonly @date('updated_at') updatedAt!: Date;
+  @readonly @date('created_at') createdAt!: number;
+  @readonly @date('updated_at') updatedAt!: number;
   
   @field('_status') _status!: string;
   @field('_changed') _changed!: string;
