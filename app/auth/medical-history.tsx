@@ -49,10 +49,7 @@ export default function MedicalHistory() {
       // Refresh session to update auth state with new onboarding status
       console.log("🔄 Refreshing session via custom method...");
       refreshSession();
-
-      // Wait for session to refresh before navigating
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
+      
       // Navigate to dashboard with fresh session data
       console.log("🚀 Navigating to dashboard");
       router.replace("/(tabs)/dashboard");

@@ -8,7 +8,7 @@ import { safeString } from "../utils/sanitize";
 export async function updatePersonalInfoModel(
   ctx: MutationCtx,
   userId: Id<"users">,
-  data: { ageRange: string; location: string }
+  data: { ageRange: string; location: string; onboardingCompleted?: boolean }
 ) {
   // Validate required fields
   if (!data.ageRange || !data.location) {
@@ -26,6 +26,7 @@ export async function updatePersonalInfoModel(
     await ctx.db.patch(existingProfile._id, {
       ageRange: safeString(data.ageRange),
       location: safeString(data.location),
+      onboardingCompleted: typeof data.onboardingCompleted === "boolean" ? data.onboardingCompleted : existingProfile.onboardingCompleted,
       updatedAt: Date.now(),
     });
     return existingProfile._id;
@@ -35,7 +36,7 @@ export async function updatePersonalInfoModel(
       userId,
       ageRange: safeString(data.ageRange),
       location: safeString(data.location),
-      onboardingCompleted: false,
+      onboardingCompleted: typeof data.onboardingCompleted === "boolean" ? data.onboardingCompleted : false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });

@@ -117,7 +117,7 @@ export default function PersonalInfo() {
 
       // Then sync with Convex (online) - this will work when there's internet
       try {
-        await updatePersonalInfo({ ageRange, location });
+        await updatePersonalInfo({ ageRange, location, onboardingCompleted: false });
         console.log("✅ Personal Info - Synced with Convex");
       } catch (syncError) {
         console.log(
