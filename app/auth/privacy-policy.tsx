@@ -21,13 +21,12 @@ export default function PrivacyPolicy() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
+        {/* Fixed Header */}
+          <CurvedHeader title="Privacy Policy" height={150} showLogo={false} bottomSpacing={0} />
         <ScrollView contentContainerStyle={styles.contentContainer}>
-          {/* Header */}
-          <CurvedHeader title="Privacy Policy" height={150} showLogo={false} />
-
           <View style={styles.contentSection}>
             <Text
-              style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}
+              style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}
             >
               Privacy Policy for Rural Alberta Health Connect
             </Text>

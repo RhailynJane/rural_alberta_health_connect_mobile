@@ -109,7 +109,7 @@ export default function SignUp() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
-        {/* Fixed header: outside the ScrollView so it doesn't scroll */}
+        {/* Fixed Header */}
         <CurvedHeader
           title="Alberta Health Connect"
           height={150}
@@ -117,7 +117,6 @@ export default function SignUp() {
           screenType="signin"
           bottomSpacing={0}
         />
-
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.container}
