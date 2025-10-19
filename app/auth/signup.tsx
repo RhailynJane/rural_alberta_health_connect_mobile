@@ -370,6 +370,26 @@ export default function SignUp() {
                           />
                         </TouchableOpacity>
                       </View>
+                      {/* Real-time password matching feedback */}
+                      {values.confirmPassword.length > 0 && (
+                        <View style={styles.passwordMatchContainer}>
+                          {values.password === values.confirmPassword ? (
+                            <View style={styles.passwordMatchRow}>
+                              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                              <Text style={[styles.passwordMatchText, styles.passwordMatchSuccess]}>
+                                Passwords match
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.passwordMatchRow}>
+                              <Ionicons name="close-circle" size={16} color="#ff3b30" />
+                              <Text style={[styles.passwordMatchText, styles.passwordMatchError]}>
+                                Passwords do not match
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                       {errors.confirmPassword && touched.confirmPassword && (
                         <Text style={styles.errorText}>
                           {errors.confirmPassword}
@@ -718,6 +738,25 @@ const styles = StyleSheet.create({
     color: "#2A7DE1",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  passwordMatchContainer: {
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  passwordMatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  passwordMatchText: {
+    fontSize: 14,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  passwordMatchSuccess: {
+    color: "#34C759",
+  },
+  passwordMatchError: {
+    color: "#ff3b30",
   },
   // Modal Styles
   modalOverlay: {

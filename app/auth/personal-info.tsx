@@ -59,14 +59,35 @@ export default function PersonalInfo() {
       
       // Save to WatermelonDB first (offline)
       await database.write(async () => {
-        await database.get('user_profiles').create((profile: any) => {
-          profile.userId = currentUser._id;
-          profile.ageRange = ageRange;
-          profile.location = location;
-          profile.onboardingCompleted = false;
-          profile.createdAt = Date.now();
-          profile.updatedAt = Date.now();
-        });
+        const userProfilesCollection = database.get('user_profiles');
+        
+        // Check if profile already exists for this user
+        const existingProfiles = await userProfilesCollection
+          .query()
+          .fetch();
+        
+        const existingProfile = existingProfiles.find((p: any) => p.userId === currentUser._id);
+        
+        if (existingProfile) {
+          // Update existing profile
+          await existingProfile.update((profile: any) => {
+            profile.ageRange = ageRange;
+            profile.location = location;
+            profile.updatedAt = Date.now();
+          });
+          console.log("✅ Personal Info - Updated existing local profile");
+        } else {
+          // Create new profile
+          await userProfilesCollection.create((profile: any) => {
+            profile.userId = currentUser._id;
+            profile.ageRange = ageRange;
+            profile.location = location;
+            profile.onboardingCompleted = false;
+            profile.createdAt = Date.now();
+            profile.updatedAt = Date.now();
+          });
+          console.log("✅ Personal Info - Created new local profile");
+        }
       });
 
       console.log("✅ Personal Info - Saved to local database");
@@ -191,7 +212,7 @@ export default function PersonalInfo() {
                     onValueChange={setLocation}
                     itemStyle={styles.pickerItem}
                   >
-                    <Picker.Item label="Select your location" value="" color="#999" />
+                    <Picker.Item label="Enter your location" value="" color="#999" />
                     <Picker.Item label="Northern Alberta" value="northern" color="#1A1A1A" />
                     <Picker.Item label="Central Alberta" value="central" color="#1A1A1A" />
                     <Picker.Item label="Edmonton Area" value="edmonton" color="#1A1A1A" />
@@ -333,11 +354,14 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 50,
     color: "#1A1A1A",
+    backgroundColor: "white",
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
   pickerItem: {
     color: "#1A1A1A",
     fontSize: 15,
     fontFamily: FONTS.BarlowSemiCondensed,
+    backgroundColor: "white",
   },
   helperText: {
     fontSize: 14,
