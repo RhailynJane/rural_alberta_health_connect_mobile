@@ -3,6 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAction, useMutation, useQuery } from "convex/react";
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -23,12 +24,48 @@ import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 /**
+ * Compresses and resizes an image to reduce file size for API transmission
+ * Target: Keep images under 500KB each
+ */
+async function compressImage(uri: string): Promise<string> {
+  try {
+    console.log(`🔄 Compressing image: ${uri.substring(0, 50)}...`);
+    
+    // Resize to max 1200px width/height while maintaining aspect ratio
+    // Compress to 0.7 quality (good balance between quality and size)
+    const manipulatedImage = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1200 } }], // Maintains aspect ratio
+      { 
+        compress: 0.7, 
+        format: ImageManipulator.SaveFormat.JPEG 
+      }
+    );
+    
+    console.log(`✅ Image compressed: ${manipulatedImage.uri.substring(0, 50)}...`);
+    return manipulatedImage.uri;
+  } catch (error) {
+    console.error("⚠️ Error compressing image, using original:", error);
+    return uri; // Fallback to original if compression fails
+  }
+}
+
+/**
  * Converts an image URI to base64 string using Expo SDK 54+ File API
+ * Now includes automatic compression before conversion
  */
 async function convertImageToBase64(uri: string): Promise<string> {
   try {
-    const file = new FileSystem.File(uri);
+    // Compress image first
+    const compressedUri = await compressImage(uri);
+    
+    const file = new FileSystem.File(compressedUri);
     const base64 = await file.base64();
+    
+    // Log approximate size
+    const sizeKB = Math.round((base64.length * 0.75) / 1024);
+    console.log(`📊 Converted image size: ~${sizeKB}KB`);
+    
     return base64;
   } catch (error) {
     console.error("Error converting image to base64:", error);
@@ -37,11 +74,14 @@ async function convertImageToBase64(uri: string): Promise<string> {
 }
 
 /**
- * Converts multiple image URIs to base64 strings
+ * Converts multiple image URIs to base64 strings with compression
  */
 async function convertImagesToBase64(uris: string[]): Promise<string[]> {
+  console.log(`📸 Converting ${uris.length} images to base64 with compression...`);
   const conversionPromises = uris.map(uri => convertImageToBase64(uri));
-  return await Promise.all(conversionPromises);
+  const results = await Promise.all(conversionPromises);
+  console.log(`✅ All ${results.length} images converted and compressed`);
+  return results;
 }
 
 // Helper functions

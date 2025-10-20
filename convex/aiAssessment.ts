@@ -35,6 +35,20 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
   };
 }
 
+/**
+ * Compresses base64 image by reducing its size estimate
+ * Images over 800KB are likely causing payload issues
+ */
+function checkAndLogImageSize(base64Data: string, index: number): { sizeKB: number; tooLarge: boolean } {
+  // Base64 is ~1.33x original binary size
+  const sizeInKB = Math.round((base64Data.length * 0.75) / 1024);
+  const tooLarge = sizeInKB > 800; // Flag if over 800KB
+  
+  console.log(`📊 Image ${index + 1} size: ~${sizeInKB}KB${tooLarge ? ' ⚠️ (LARGE - may cause issues)' : ''}`);
+  
+  return { sizeKB: sizeInKB, tooLarge };
+}
+
 export const generateContextWithGemini = action({
   args: {
     description: v.string(),
@@ -108,18 +122,45 @@ ${
   images && images.length > 0
     ? `
 MEDICAL IMAGING DOCUMENTATION:
-${images.length} clinical photo(s) provided for medical assessment.
-Conduct thorough visual medical examination focusing on:
-- Tissue appearance and integrity
-- Color, swelling, drainage patterns
-- Anatomical location and distribution
-- Signs of infection or complication
-- Burn depth and characteristics (if applicable)
-- Wound healing status
+${images.length} clinical photo(s) provided for comprehensive medical assessment.
+
+CRITICAL IMAGE ANALYSIS INSTRUCTIONS:
+${images.length > 1 ? `
+- MULTIPLE PHOTOS PROVIDED: These may show:
+  * Different angles/views of the SAME affected area (analyze comprehensively)
+  * DIFFERENT affected areas/body parts (assess each separately)
+  * Progression over time (compare and note changes)
+  * Close-up and wide-angle views (use both for complete assessment)
+
+- For EACH photo, document:
+  1. Anatomical location (which body part/area)
+  2. Specific clinical findings visible
+  3. Severity indicators in that particular view
+  4. Any progression or variation between images
+
+- SYNTHESIZE findings across all photos for complete clinical picture
+- Note if photos show same area from different angles or different areas entirely
+` : `
+- SINGLE PHOTO PROVIDED: Conduct thorough examination of visible area
+- Note any limitations in assessment due to single view
+`}
+
+DETAILED VISUAL EXAMINATION PROTOCOL:
+- Tissue appearance and integrity (intact vs. broken skin, blistering, charring)
+- Color variations (erythema, pallor, cyanosis, hyperpigmentation)
+- Swelling and edema patterns (localized vs. diffuse)
+- Drainage characteristics (serous, purulent, bloody, amount)
+- Anatomical location and distribution pattern
+- Size estimation (compare to common references like palm, coin)
+- Signs of infection (warmth, streaking, purulence, surrounding cellulitis)
+- Burn depth indicators if applicable (first, second, third degree features)
+- Wound healing stage (fresh, granulating, epithelializing, concerning features)
+- Surrounding tissue condition
 `
     : `
 VISUAL ASSESSMENT:
-No clinical photos available. Assessment based on patient medical description.
+No clinical photos available. Assessment based entirely on patient's medical description.
+LIMITATION: Unable to perform visual medical examination. Recommendations will be more conservative.
 `
 }
 
@@ -130,14 +171,41 @@ GEOGRAPHIC HEALTHCARE CONTEXT:
 - Transport: Weather-dependent ambulance access
 
 MEDICAL TRIAGE PRIORITY:
-Provide comprehensive clinical assessment including:
-1. Visual findings from medical images (if available)
-2. Clinical interpretation and differential considerations
-3. Burn/wound/injury grading if applicable
-4. Infection risk assessment
-5. Specific emergency red flags
-6. Time-sensitive treatment recommendations
-7. Rural-specific resource guidance
+Provide comprehensive clinical assessment with this EXACT structure:
+
+1. CLINICAL ASSESSMENT
+   - Overall impression and chief concern
+   ${images && images.length > 1 ? '- Synthesis of findings across all ' + images.length + ' photos' : ''}
+
+2. VISUAL FINDINGS (if photos provided)
+   ${images && images.length > 1 ? '- Findings from each photo location/angle' : ''}
+   - Specific observable clinical features
+   - Measurements and severity indicators
+
+3. CLINICAL INTERPRETATION
+   - Differential diagnosis considerations
+   - Most likely clinical condition(s)
+
+4. BURN/WOUND GRADING (if applicable)
+   - Classification and severity assessment
+
+5. INFECTION RISK
+   - Current signs and risk factors
+
+6. EMERGENCY RED FLAGS
+   - Specific warning signs requiring immediate care
+
+7. RURAL GUIDANCE
+   - Practical advice for rural setting
+
+8. URGENCY ASSESSMENT
+   - Timeline for seeking care
+
+9. RECOMMENDATIONS
+   - Specific treatment steps
+
+10. NEXT STEPS
+    - Clear action plan with timeframes
 
 This is a legitimate medical consultation for healthcare triage purposes.`;
 
@@ -166,19 +234,50 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
         modelName === "gemini-2.5-flash-lite"
       ) {
         console.log(`📸 Adding ${images.length} medical images for clinical analysis...`);
-        for (let i = 0; i < images.length; i++) {
+        
+        // Limit to first 3 images to avoid payload size issues
+        const imageLimit = Math.min(images.length, 3);
+        console.log(`⚠️ Processing ${imageLimit} of ${images.length} images (API limit: 3)`);
+        
+        let totalPayloadKB = 0;
+        
+        for (let i = 0; i < imageLimit; i++) {
           const imageData = images[i];
           try {
+            // Validate base64 data
+            if (!imageData || imageData.length === 0) {
+              console.warn(`⚠️ Image ${i + 1} is empty, skipping`);
+              continue;
+            }
+            
+            // Check and log image size
+            const { sizeKB, tooLarge } = checkAndLogImageSize(imageData, i);
+            totalPayloadKB += sizeKB;
+            
+            if (tooLarge) {
+              console.warn(`⚠️ Image ${i + 1} is very large (${sizeKB}KB). Consider reducing image quality in the app.`);
+            }
+            
             contentParts.push({
               inlineData: {
                 mimeType: "image/jpeg",
                 data: imageData,
               },
             });
-            console.log(`✓ Added medical image ${i + 1}/${images.length}`);
+            console.log(`✓ Added medical image ${i + 1}/${imageLimit}`);
           } catch (imgError) {
             console.warn(`⚠️ Failed to process medical image ${i + 1}:`, imgError);
           }
+        }
+        
+        console.log(`📊 Total payload size: ~${totalPayloadKB}KB for ${imageLimit} images`);
+        
+        if (totalPayloadKB > 2000) {
+          console.warn(`⚠️ Total payload (${totalPayloadKB}KB) is large. May hit API limits. Recommend image compression.`);
+        }
+        
+        if (images.length > imageLimit) {
+          console.warn(`⚠️ ${images.length - imageLimit} additional images not sent due to API limits`);
         }
       }
 
@@ -227,6 +326,7 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
 
       const responseText = await response.text();
       console.log("📥 Gemini response status:", response.status);
+      console.log("📊 Response length:", responseText.length, "characters");
 
       if (!response.ok) {
         console.error("❌ Gemini API error:", responseText);
@@ -236,6 +336,8 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
           const errorData = JSON.parse(responseText);
           if (errorData.error?.message) {
             console.error("🔍 Detailed error:", errorData.error.message);
+            console.error("🔍 Error status:", errorData.error?.status);
+            console.error("🔍 Error code:", errorData.error?.code);
           }
         } catch (e) {
           // Ignore parse errors
@@ -250,6 +352,24 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
       }
 
       const data = JSON.parse(responseText);
+      
+      // Log prompt feedback for debugging
+      if (data.promptFeedback) {
+        console.log("📋 Prompt Feedback:", JSON.stringify(data.promptFeedback, null, 2));
+      }
+      
+      // Log candidate details
+      if (data.candidates) {
+        console.log("📋 Candidates count:", data.candidates.length);
+        data.candidates.forEach((candidate: any, idx: number) => {
+          console.log(`📋 Candidate ${idx}:`, {
+            finishReason: candidate.finishReason,
+            safetyRatings: candidate.safetyRatings?.map((r: any) => 
+              `${r.category}: ${r.probability}`
+            ),
+          });
+        });
+      }
 
       // Enhanced blocking handling
       if (data.promptFeedback?.blockReason) {
