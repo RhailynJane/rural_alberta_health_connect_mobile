@@ -35,16 +35,29 @@ export const getProfile = query({
 });
 
 export const updatePersonalInfo = mutation({
-
-  args: { ageRange: v.string(), location: v.string() },
-
+  args: { 
+    age: v.string(), 
+    address1: v.optional(v.string()),
+    address2: v.optional(v.string()),
+    city: v.string(),
+    province: v.string(),
+    postalCode: v.optional(v.string()),
+    location: v.string() 
+  },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new ConvexError("User not authenticated");
     }
-    return await updatePersonalInfoModel(ctx, userId, args);
+    return await updatePersonalInfoModel(ctx, userId, {
+      age: args.age,
+      address1: args.address1 || "",
+      address2: args.address2 || "",
+      city: args.city,
+      province: args.province,
+      postalCode: args.postalCode || "",
+      location: args.location,
+    });
   },
-
 });
 

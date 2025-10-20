@@ -438,8 +438,10 @@ export default function Emergency() {
           </View>
         </View>
 
-        {/* Offline Map Section */}
-        {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
+        {/* Offline Map Section - TEMPORARILY DISABLED */}
+        {/* TODO: Rebuild app with device/emulator: npx expo run:android */}
+        {/* Maps require native module rebuild - uncomment after building new dev client */}
+        {false && locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
             <View style={styles.card}>

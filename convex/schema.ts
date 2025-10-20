@@ -19,7 +19,13 @@ export default defineSchema({
 
   userProfiles: defineTable({
     userId: v.id("users"),
-    ageRange: v.optional(v.string()),
+    age: v.optional(v.string()),
+    ageRange: v.optional(v.string()), // Deprecated: kept for backward compatibility
+    address1: v.optional(v.string()),
+    address2: v.optional(v.string()),
+    city: v.optional(v.string()),
+    province: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
     location: v.optional(v.string()),
     emergencyContactName: v.optional(v.string()),
     emergencyContactPhone: v.optional(v.string()),

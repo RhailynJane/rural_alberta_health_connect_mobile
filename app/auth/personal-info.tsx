@@ -80,9 +80,6 @@ export default function PersonalInfo() {
     setIsSubmitting(true);
 
     try {
-      // Convert age to age range for your existing schema
-      const ageRange = getAgeRange(ageNum);
-
       // Save to WatermelonDB first (offline)
       await database.write(async () => {
         const userProfilesCollection = database.get("user_profiles");
@@ -97,7 +94,9 @@ export default function PersonalInfo() {
         if (existingProfile) {
           // Update existing profile
           await existingProfile.update((profile: any) => {
-            profile.ageRange = ageRange;
+            profile.age = age;
+            profile.city = "";
+            profile.province = "";
             profile.location = location;
           });
           console.log("✅ Personal Info - Updated existing local profile");
@@ -105,7 +104,9 @@ export default function PersonalInfo() {
           // Create new profile
           await userProfilesCollection.create((profile: any) => {
             profile.userId = currentUser._id;
-            profile.ageRange = ageRange;
+            profile.age = age;
+            profile.city = "";
+            profile.province = "";
             profile.location = location;
             profile.onboardingCompleted = false;
           });
@@ -117,7 +118,13 @@ export default function PersonalInfo() {
 
       // Then sync with Convex (online) - this will work when there's internet
       try {
-        await updatePersonalInfo({ ageRange, location, onboardingCompleted: false });
+        await updatePersonalInfo({ 
+          age, 
+          city: "",
+          province: "",
+          location, 
+          onboardingCompleted: false 
+        });
         console.log("✅ Personal Info - Synced with Convex");
       } catch (syncError) {
         console.log(
@@ -138,16 +145,6 @@ export default function PersonalInfo() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const getAgeRange = (age: number): string => {
-    if (age < 18) return "under18";
-    if (age <= 24) return "18-24";
-    if (age <= 34) return "25-34";
-    if (age <= 44) return "35-44";
-    if (age <= 54) return "45-54";
-    if (age <= 64) return "55-64";
-    return "65plus";
   };
 
   return (

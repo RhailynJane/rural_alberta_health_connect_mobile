@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -30,7 +31,7 @@ export default function Profile() {
   const ensureProfileExists = useMutation(
     (api as any)["profile/ensureProfileExists"].ensureProfileExists
   );
-  
+
   // Skip queries if not authenticated
   const userProfile = useQuery(
     api.profile.personalInformation.getProfile,
@@ -38,7 +39,7 @@ export default function Profile() {
   );
 
   // Get location services status
-   const locationStatus = useQuery(
+  const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
     isAuthenticated && !isLoading ? {} : "skip"
   );
@@ -89,12 +90,17 @@ export default function Profile() {
 
   // State for user data
   const [userData, setUserData] = useState({
-    ageRange: "",
+    age: "",
+    address1: "",
+    address2: "",
+    city: "",
+    province: "",
+    postalCode: "",
+    location: "",
     allergies: "",
     currentMedications: "",
     emergencyContactName: "",
     emergencyContactPhone: "",
-    location: "",
     medicalConditions: "",
     symptomReminder: true,
     dataEncryption: true,
@@ -107,12 +113,17 @@ export default function Profile() {
       console.log("📥 Loading user profile data:", userProfile);
       setUserData((prev) => ({
         ...prev,
-        ageRange: userProfile.ageRange || "",
+        age: userProfile.age || "",
+        address1: userProfile.address1 || "",
+        address2: userProfile.address2 || "",
+        city: userProfile.city || "",
+        province: userProfile.province || "",
+        postalCode: userProfile.postalCode || "",
+        location: userProfile.location || "",
         allergies: userProfile.allergies || "",
         currentMedications: userProfile.currentMedications || "",
         emergencyContactName: userProfile.emergencyContactName || "",
         emergencyContactPhone: userProfile.emergencyContactPhone || "",
-        location: userProfile.location || "",
         medicalConditions: userProfile.medicalConditions || "",
       }));
     } else if (userProfile === null && isAuthenticated && !isLoading) {
@@ -139,7 +150,12 @@ export default function Profile() {
   const handleUpdatePersonalInfo = async () => {
     try {
       await updatePersonalInfo({
-        ageRange: userData.ageRange,
+        age: userData.age,
+        address1: userData.address1,
+        address2: userData.address2,
+        city: userData.city,
+        province: userData.province,
+        postalCode: userData.postalCode,
         location: userData.location,
       });
       Alert.alert("Success", "Personal information updated successfully");
@@ -194,14 +210,13 @@ export default function Profile() {
         onPress: async () => {
           try {
             console.log("🔄 Signing out...");
-            
+
             // Simple sign out without refreshSession
             await signOut();
             console.log("✅ Signed out successfully");
-            
+
             // Navigate to signin
             router.replace("/auth/signin");
-            
           } catch (error) {
             console.error("❌ Sign out failed:", error);
             // Still navigate to signin even if signOut fails
@@ -213,16 +228,23 @@ export default function Profile() {
     ]);
   };
 
-
   // Show loading while auth is loading
   if (isLoading) {
     return (
-      <CurvedBackground>
-  <CurvedHeader title="Profile" height={150} showLogo={true} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </CurvedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <CurvedHeader
+            title="Profile"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading...</Text>
+          </View>
+        </CurvedBackground>
+      </SafeAreaView>
     );
   }
 
@@ -230,12 +252,20 @@ export default function Profile() {
   if (!isAuthenticated) {
     // This should trigger automatically due to your AuthGuard, but as a safeguard:
     return (
-      <CurvedBackground>
-  <CurvedHeader title="Profile" height={150} showLogo={true} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Redirecting...</Text>
-        </View>
-      </CurvedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <CurvedHeader 
+            title="Profile" 
+            height={150} 
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Redirecting...</Text>
+          </View>
+        </CurvedBackground>
+      </SafeAreaView>
     );
   }
 
@@ -244,274 +274,368 @@ export default function Profile() {
   // but since we're checking isAuthenticated above, it should load data
   if (userProfile === undefined) {
     return (
-      <CurvedBackground>
-  <CurvedHeader title="Profile" height={150} showLogo={true} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </CurvedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <CurvedHeader 
+            title="Profile" 
+            height={150} 
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        </CurvedBackground>
+      </SafeAreaView>
     );
   }
 
   // Handle case where profile is null (shouldn't happen due to auth check above)
   if (userProfile === null) {
     return (
-      <CurvedBackground>
-  <CurvedHeader title="Profile" height={150} showLogo={true} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Profile not found...</Text>
-        </View>
-      </CurvedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground>
+          <CurvedHeader 
+            title="Profile" 
+            height={150} 
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Profile not found...</Text>
+          </View>
+        </CurvedBackground>
+      </SafeAreaView>
     );
   }
 
   return (
-    <CurvedBackground>
-  <CurvedHeader title="Profile" height={150} showLogo={true} />
-      <ScrollView style={styles.container}>
-        {/* Privacy Notice */}
-        <View style={styles.card}>
-          <View style={styles.privacyHeader}>
-            <View style={styles.privacyIcon}>
-              <Text style={styles.privacyIconText}>✓</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
+        <CurvedHeader 
+          title="Profile" 
+          height={150} 
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
+        <ScrollView style={styles.container}>
+          {/* Privacy Notice */}
+          <View style={styles.card}>
+            <View style={styles.privacyHeader}>
+              <View style={styles.privacyIcon}>
+                <Text style={styles.privacyIconText}>✓</Text>
+              </View>
+              <Text style={styles.cardTitle}>Privacy Protected</Text>
             </View>
-            <Text style={styles.cardTitle}>Privacy Protected</Text>
-          </View>
-          <Text style={styles.privacyText}>
-            Your personal information is encrypted and stored locally. No data
-            is shared without your consent.
-          </Text>
-        </View>
-
-        {/* Personal Information Card */}
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.cardHeader}
-            onPress={() => toggleSection("personalInfo")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cardTitle}>Personal Information</Text>
-            <Text style={styles.editButton}>
-              {expandedSections.personalInfo ? "Done" : "Edit"}
+            <Text style={styles.privacyText}>
+              Your personal information is encrypted and stored locally. No data
+              is shared without your consent.
             </Text>
-          </TouchableOpacity>
-
-          {expandedSections.personalInfo ? (
-            <>
-              <Text style={styles.sectionTitle}>Age Range</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.ageRange}
-                onChangeText={(text) => handleInputChange("ageRange", text)}
-                placeholder="e.g., 25-34"
-                placeholderTextColor={COLORS.lightGray}
-              />
-
-              <Text style={styles.sectionTitle}>Location</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.location}
-                onChangeText={(text) => handleInputChange("location", text)}
-                placeholder="Enter your location"
-                placeholderTextColor={COLORS.lightGray}
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Age Range:</Text>{" "}
-                {userData.ageRange || "Not set"}
-              </Text>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Location:</Text>{" "}
-                {userData.location || "Not set"}
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* Emergency Contacts Card */}
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.cardHeader}
-            onPress={() => toggleSection("emergencyContacts")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cardTitle}>Emergency Contact</Text>
-            <Text style={styles.editButton}>
-              {expandedSections.emergencyContacts ? "Done" : "Edit"}
-            </Text>
-          </TouchableOpacity>
-
-          {expandedSections.emergencyContacts ? (
-            <>
-              <Text style={styles.sectionTitle}>Contact Name</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.emergencyContactName}
-                onChangeText={(text) =>
-                  handleInputChange("emergencyContactName", text)
-                }
-                placeholder="Emergency contact name"
-                placeholderTextColor={COLORS.lightGray}
-              />
-
-              <Text style={styles.sectionTitle}>Phone Number</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.emergencyContactPhone}
-                onChangeText={(text) =>
-                  handleInputChange("emergencyContactPhone", text)
-                }
-                placeholder="Emergency contact phone"
-                placeholderTextColor={COLORS.lightGray}
-                keyboardType="phone-pad"
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Name:</Text>{" "}
-                {userData.emergencyContactName || "Not set"}
-              </Text>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Phone:</Text>{" "}
-                {userData.emergencyContactPhone || "Not set"}
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* Medical Information Card */}
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.cardHeader}
-            onPress={() => toggleSection("medicalInfo")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cardTitle}>Medical Information</Text>
-            <Text style={styles.editButton}>
-              {expandedSections.medicalInfo ? "Done" : "Edit"}
-            </Text>
-          </TouchableOpacity>
-
-          {expandedSections.medicalInfo ? (
-            <>
-              <Text style={styles.sectionTitle}>Allergies</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.allergies}
-                onChangeText={(text) => handleInputChange("allergies", text)}
-                placeholder="List any allergies"
-                placeholderTextColor={COLORS.lightGray}
-                multiline
-              />
-
-              <Text style={styles.sectionTitle}>Current Medications</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.currentMedications}
-                onChangeText={(text) =>
-                  handleInputChange("currentMedications", text)
-                }
-                placeholder="List current medications"
-                placeholderTextColor={COLORS.lightGray}
-                multiline
-              />
-
-              <Text style={styles.sectionTitle}>Medical Conditions</Text>
-              <TextInput
-                style={styles.input}
-                value={userData.medicalConditions}
-                onChangeText={(text) =>
-                  handleInputChange("medicalConditions", text)
-                }
-                placeholder="List medical conditions"
-                placeholderTextColor={COLORS.lightGray}
-                multiline
-              />
-            </>
-          ) : (
-            <>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Allergies:</Text>{" "}
-                {userData.allergies || "Not set"}
-              </Text>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Medications:</Text>{" "}
-                {userData.currentMedications || "Not set"}
-              </Text>
-              <Text style={styles.text}>
-                <Text style={{ fontWeight: "bold" }}>Conditions:</Text>{" "}
-                {userData.medicalConditions || "Not set"}
-              </Text>
-            </>
-          )}
-        </View>
-
-        {/* App Settings Card */}
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.cardHeader}
-            onPress={() => toggleSection("appSettings")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.cardTitle}>App Settings</Text>
-          </TouchableOpacity>
-
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
-            <Switch
-              value={userData.symptomReminder}
-              onValueChange={(value) =>
-                handleInputChange("symptomReminder", value)
-              }
-            />
           </View>
 
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleText}>Data Encryption</Text>
-            <Switch
-              value={userData.dataEncryption}
-              onValueChange={(value) =>
-                handleInputChange("dataEncryption", value)
-              }
-            />
+          {/* Personal Information Card */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardHeader}
+              onPress={() => toggleSection("personalInfo")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cardTitle}>Personal Information</Text>
+              <Text style={styles.editButton}>
+                {expandedSections.personalInfo ? "Done" : "Edit"}
+              </Text>
+            </TouchableOpacity>
+
+            {expandedSections.personalInfo ? (
+              <>
+                <Text style={styles.sectionTitle}>Age</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.age}
+                  onChangeText={(text) => handleInputChange("age", text)}
+                  placeholder="e.g., 25"
+                  placeholderTextColor={COLORS.lightGray}
+                  keyboardType="numeric"
+                />
+
+                <Text style={styles.sectionTitle}>Address Line 1</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.address1}
+                  onChangeText={(text) => handleInputChange("address1", text)}
+                  placeholder="Street address, P.O. box"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+
+                <Text style={styles.sectionTitle}>Address Line 2</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.address2}
+                  onChangeText={(text) => handleInputChange("address2", text)}
+                  placeholder="Apartment, suite, unit, building (optional)"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+
+                <Text style={styles.sectionTitle}>City</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.city}
+                  onChangeText={(text) => handleInputChange("city", text)}
+                  placeholder="e.g., Calgary"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+
+                <Text style={styles.sectionTitle}>Province</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.province}
+                  onChangeText={(text) => handleInputChange("province", text)}
+                  placeholder="e.g., Alberta"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+
+                <Text style={styles.sectionTitle}>Postal Code</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.postalCode}
+                  onChangeText={(text) => handleInputChange("postalCode", text)}
+                  placeholder="e.g., T2X 0M4"
+                  placeholderTextColor={COLORS.lightGray}
+                  autoCapitalize="characters"
+                />
+
+                <Text style={styles.sectionTitle}>Location (for services)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.location}
+                  onChangeText={(text) => handleInputChange("location", text)}
+                  placeholder="City or region for nearby clinics"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Age:</Text>{" "}
+                  {userData.age || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Address:</Text>{" "}
+                  {userData.address1 || "Not set"}
+                  {userData.address2 ? `, ${userData.address2}` : ""}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>City:</Text>{" "}
+                  {userData.city || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Province:</Text>{" "}
+                  {userData.province || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Postal Code:</Text>{" "}
+                  {userData.postalCode || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Location:</Text>{" "}
+                  {userData.location || "Not set"}
+                </Text>
+              </>
+            )}
           </View>
 
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleText}>Location Services</Text>
-            <Switch
-              value={userData.locationServices}
-              onValueChange={handleLocationServicesToggle}
-            />
-          </View>
-        </View>
+          {/* Emergency Contacts Card */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardHeader}
+              onPress={() => toggleSection("emergencyContacts")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cardTitle}>Emergency Contact</Text>
+              <Text style={styles.editButton}>
+                {expandedSections.emergencyContacts ? "Done" : "Edit"}
+              </Text>
+            </TouchableOpacity>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={handleSignOut}
-          activeOpacity={0.7}
-        >
-          <Icon
-            name="exit-to-app"
-            size={20}
-            color={COLORS.white}
-            style={styles.signOutIcon}
-          />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
-      </ScrollView>
+            {expandedSections.emergencyContacts ? (
+              <>
+                <Text style={styles.sectionTitle}>Contact Name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.emergencyContactName}
+                  onChangeText={(text) =>
+                    handleInputChange("emergencyContactName", text)
+                  }
+                  placeholder="Emergency contact name"
+                  placeholderTextColor={COLORS.lightGray}
+                />
+
+                <Text style={styles.sectionTitle}>Phone Number</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.emergencyContactPhone}
+                  onChangeText={(text) =>
+                    handleInputChange("emergencyContactPhone", text)
+                  }
+                  placeholder="Emergency contact phone"
+                  placeholderTextColor={COLORS.lightGray}
+                  keyboardType="phone-pad"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Name:</Text>{" "}
+                  {userData.emergencyContactName || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Phone:</Text>{" "}
+                  {userData.emergencyContactPhone || "Not set"}
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* Medical Information Card */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardHeader}
+              onPress={() => toggleSection("medicalInfo")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cardTitle}>Medical Information</Text>
+              <Text style={styles.editButton}>
+                {expandedSections.medicalInfo ? "Done" : "Edit"}
+              </Text>
+            </TouchableOpacity>
+
+            {expandedSections.medicalInfo ? (
+              <>
+                <Text style={styles.sectionTitle}>Allergies</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.allergies}
+                  onChangeText={(text) => handleInputChange("allergies", text)}
+                  placeholder="List any allergies"
+                  placeholderTextColor={COLORS.lightGray}
+                  multiline
+                />
+
+                <Text style={styles.sectionTitle}>Current Medications</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.currentMedications}
+                  onChangeText={(text) =>
+                    handleInputChange("currentMedications", text)
+                  }
+                  placeholder="List current medications"
+                  placeholderTextColor={COLORS.lightGray}
+                  multiline
+                />
+
+                <Text style={styles.sectionTitle}>Medical Conditions</Text>
+                <TextInput
+                  style={styles.input}
+                  value={userData.medicalConditions}
+                  onChangeText={(text) =>
+                    handleInputChange("medicalConditions", text)
+                  }
+                  placeholder="List medical conditions"
+                  placeholderTextColor={COLORS.lightGray}
+                  multiline
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Allergies:</Text>{" "}
+                  {userData.allergies || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Medications:</Text>{" "}
+                  {userData.currentMedications || "Not set"}
+                </Text>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Conditions:</Text>{" "}
+                  {userData.medicalConditions || "Not set"}
+                </Text>
+              </>
+            )}
+          </View>
+
+          {/* App Settings Card */}
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardHeader}
+              onPress={() => toggleSection("appSettings")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cardTitle}>App Settings</Text>
+            </TouchableOpacity>
+
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
+              <Switch
+                value={userData.symptomReminder}
+                onValueChange={(value) =>
+                  handleInputChange("symptomReminder", value)
+                }
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleText}>Data Encryption</Text>
+              <Switch
+                value={userData.dataEncryption}
+                onValueChange={(value) =>
+                  handleInputChange("dataEncryption", value)
+                }
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleText}>Location Services</Text>
+              <Switch
+                value={userData.locationServices}
+                onValueChange={handleLocationServicesToggle}
+              />
+            </View>
+          </View>
+
+          {/* Sign Out Button */}
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+            activeOpacity={0.7}
+          >
+            <Icon
+              name="exit-to-app"
+              size={20}
+              color={COLORS.white}
+              style={styles.signOutIcon}
+            />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </CurvedBackground>
       <BottomNavigation />
-    </CurvedBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
   container: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 16,
     backgroundColor: "transparent",
   },
   loadingContainer: {
@@ -651,7 +775,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderRadius: 8,
-    marginBottom: 32,
+    marginBottom: 100,
     marginTop: 8,
   },
   signOutText: {
