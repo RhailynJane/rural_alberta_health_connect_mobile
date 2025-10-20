@@ -1,14 +1,14 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -20,24 +20,34 @@ export default function SymptomSeverity() {
   const [severityLevel, setSeverityLevel] = useState(5);
 
   const handleContinue = () => {
-  console.log("Severity level selected:", severityLevel);
-  
-  router.push({
-    pathname: "/(tabs)/ai-assess/symptom-duration",
-    params: {
-      ...params,
-      severity: severityLevel.toString(),
-    },
-  });
-};
+    console.log("Severity level selected:", severityLevel);
+
+    router.push({
+      pathname: "/(tabs)/ai-assess/symptom-duration",
+      params: {
+        ...params,
+        severity: severityLevel.toString(),
+      },
+    });
+  };
 
   const renderSeverityLabels = () => {
     return (
       <View style={styles.severityLabels}>
-        <Text style={[styles.severityLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+        <Text
+          style={[
+            styles.severityLabel,
+            { fontFamily: FONTS.BarlowSemiCondensed },
+          ]}
+        >
           Mild (1)
         </Text>
-        <Text style={[styles.severityLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+        <Text
+          style={[
+            styles.severityLabel,
+            { fontFamily: FONTS.BarlowSemiCondensed },
+          ]}
+        >
           Severe (10)
         </Text>
       </View>
@@ -53,7 +63,7 @@ export default function SymptomSeverity() {
               key={index}
               style={[
                 styles.scalePoint,
-                index + 1 <= severityLevel && styles.scalePointActive
+                index + 1 <= severityLevel && styles.scalePointActive,
               ]}
               onPress={() => setSeverityLevel(index + 1)}
             />
@@ -61,12 +71,12 @@ export default function SymptomSeverity() {
         </View>
         <View style={styles.scaleNumbers}>
           {[...Array(10)].map((_, index) => (
-            <Text 
-              key={index} 
+            <Text
+              key={index}
               style={[
                 styles.scaleNumber,
                 { fontFamily: FONTS.BarlowSemiCondensed },
-                index + 1 === severityLevel && styles.scaleNumberActive
+                index + 1 === severityLevel && styles.scaleNumberActive,
               ]}
             >
               {index + 1}
@@ -85,66 +95,101 @@ export default function SymptomSeverity() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header with logo */}
-          <CurvedHeader
-            title="Symptom Assessment"
-            height={150}
-            showLogo={true}
-          />
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Symptom Assessment"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-          <View style={styles.contentSection}>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Symptom Severity
-            </Text>
-            <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Rate your overall discomfort level from 1-10
-            </Text>
-
-            {renderSeverityLabels()}
-            
-            {renderSeverityScale()}
-
-            <View style={styles.severityIndicator}>
-              <Text style={[styles.severityValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Level: {severityLevel}
-              </Text>
-              <Text style={[styles.severityDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                {getSeverityDescription()}
-              </Text>
-            </View>
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity 
-                style={styles.backButton} 
-                onPress={() => router.back()}
+        {/* Content Area - Takes all available space minus header and bottom nav */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.contentSection}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
               >
-                <Ionicons name="arrow-back" size={20} color="#666" />
-                <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Back
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.continueButton} 
-                onPress={handleContinue}
+                Symptom Severity
+              </Text>
+              <Text
+                style={[
+                  styles.sectionSubtitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
               >
-                <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Continue
+                Rate your overall discomfort level from 1-10
+              </Text>
+
+              {renderSeverityLabels()}
+
+              {renderSeverityScale()}
+
+              <View style={styles.severityIndicator}>
+                <Text
+                  style={[
+                    styles.severityValue,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Level: {severityLevel}
                 </Text>
-                <Ionicons name="arrow-forward" size={20} color="white" />
-              </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.severityDescription,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  {getSeverityDescription()}
+                </Text>
+              </View>
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={() => router.back()}
+                >
+                  <Ionicons name="arrow-back" size={20} color="#666" />
+                  <Text
+                    style={[
+                      styles.backButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Back
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.continueButton}
+                  onPress={handleContinue}
+                >
+                  <Text
+                    style={[
+                      styles.continueButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Continue
+                  </Text>
+                  <Ionicons name="arrow-forward" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
 
         {/* Bottom Navigation */}
-        <BottomNavigation />
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -154,13 +199,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  contentArea: {
+    flex: 1,
+  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 60,
+    paddingBottom: 80,
   },
   contentSection: {
     padding: 24,
-    paddingTop: 0,
+    paddingTop: 24,
   },
   sectionTitle: {
     fontSize: 24,
@@ -240,8 +288,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   backButton: {
     flexDirection: "row",
