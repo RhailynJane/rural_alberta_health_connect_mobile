@@ -6,7 +6,6 @@ import { useState } from "react";
 import {
   Alert,
   Image,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -328,16 +328,22 @@ export default function SymptomAssessment() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <CurvedHeader
-            title="Symptom Assessment"
-            height={150}
-            showLogo={true}
-          />
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Symptom Assessment"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
+
+        {/* Content Area - Takes all available space minus header and bottom nav */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
 
           <View style={styles.contentSection}>
             <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -557,6 +563,7 @@ export default function SymptomAssessment() {
             </View>
           </View>
         </ScrollView>
+        </View>
 
         <BottomNavigation />
       </CurvedBackground>
@@ -569,13 +576,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  contentArea: {
+    flex: 1,
+  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 60,
+    paddingBottom: 80,
   },
   contentSection: {
     padding: 24,
-    paddingTop: 0,
+    paddingTop: 24,
   },
   sectionTitle: {
     fontSize: 24,
