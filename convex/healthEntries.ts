@@ -63,15 +63,15 @@ export const logManualEntry = mutation({
 });
 
 export const getTodaysEntries = query({
-  args: { userId: v.id("users") },
+  args: { 
+    userId: v.id("users"),
+    localDate: v.string(), // Frontend passes the local date string
+  },
   handler: async (ctx, args) => {
-    // Get today's date in local timezone (same as frontend)
-    const now = new Date();
-    const today = new Date(now.getTime() - (now.getTimezoneOffset() * 60000))
-      .toISOString()
-      .split('T')[0];
+    // Use the local date provided by the frontend (already formatted as YYYY-MM-DD)
+    const today = args.localDate;
     
-    console.log("🔍 Querying for today (local):", today, "user:", args.userId);
+    console.log("🔍 Querying for today (from frontend):", today, "user:", args.userId);
     
     const allUserEntries = await ctx.db
       .query("healthEntries")
@@ -146,5 +146,44 @@ export const getEntryById = query({
   args: { entryId: v.id("healthEntries") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.entryId);
+  },
+});
+
+// One-time migration to fix incorrect dates caused by UTC/local timezone mismatch
+export const fixIncorrectDates = mutation({
+  args: {
+    userId: v.id("users"),
+    wrongDate: v.string(),
+    correctDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    console.log(`🔧 Starting date fix: ${args.wrongDate} -> ${args.correctDate}`);
+    
+    // Find all entries with the wrong date
+    const allEntries = await ctx.db
+      .query("healthEntries")
+      .withIndex("byUserId", (q) => q.eq("userId", args.userId))
+      .collect();
+    
+    const entriesToFix = allEntries.filter(entry => entry.date === args.wrongDate);
+    
+    console.log(`📝 Found ${entriesToFix.length} entries to fix`);
+    
+    // Update each entry
+    let fixed = 0;
+    for (const entry of entriesToFix) {
+      await ctx.db.patch(entry._id, {
+        date: args.correctDate,
+      });
+      fixed++;
+    }
+    
+    console.log(`✅ Fixed ${fixed} entries`);
+    
+    return {
+      success: true,
+      entriesFixed: fixed,
+      message: `Updated ${fixed} entries from ${args.wrongDate} to ${args.correctDate}`,
+    };
   },
 });

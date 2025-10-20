@@ -155,9 +155,20 @@ const styles = StyleSheet.create({
 export default function DailyLog() {
   const insets = useSafeAreaInsets();
   const currentUser = useQuery(api.users.getCurrentUser);
+  
+  // Get today's date in local timezone - computed fresh on each render
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayLocalDate = `${year}-${month}-${day}`;
+  
   const todaysEntries = useQuery(
     api.healthEntries.getTodaysEntries,
-    currentUser?._id ? { userId: currentUser._id } : "skip"
+    currentUser?._id ? { 
+      userId: currentUser._id,
+      localDate: todayLocalDate
+    } : "skip"
   );
 
   const handleAddLogEntry = () => {

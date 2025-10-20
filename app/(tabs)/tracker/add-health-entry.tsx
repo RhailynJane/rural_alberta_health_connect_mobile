@@ -51,7 +51,8 @@ export default function AddHealthEntry() {
     (i + 1).toString()
   );
 
-  // Format date as local YYYY-MM-DD to match backend's local-day logic
+  // Format date as YYYY-MM-DD using LOCAL date parts (not UTC)
+  // This ensures the date shown matches the user's local timezone
   const formatDate = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");

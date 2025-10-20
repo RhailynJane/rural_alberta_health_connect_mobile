@@ -386,8 +386,24 @@ export default function AssessmentResults() {
       if (currentUser?._id && !isLogged) {
         try {
           const today = new Date();
-          const dateString = today.toISOString().split("T")[0];
+          // Use LOCAL date parts (not UTC) to match manual entry format
+          const year = today.getFullYear();
+          const month = String(today.getMonth() + 1).padStart(2, "0");
+          const day = String(today.getDate()).padStart(2, "0");
+          const dateString = `${year}-${month}-${day}`;
           const timestamp = today.getTime();
+
+          console.log("🔍 AI Assessment Date Debug:", {
+            rawDate: today.toString(),
+            year,
+            month,
+            day,
+            dateString,
+            getDate: today.getDate(),
+            getUTCDate: today.getUTCDate(),
+            getMonth: today.getMonth(),
+            getUTCMonth: today.getUTCMonth(),
+          });
 
           await logAIAssessment({
             userId: currentUser._id,
@@ -403,7 +419,8 @@ export default function AssessmentResults() {
           });
 
           console.log(
-            "✅ AI assessment automatically logged to health entries"
+            "✅ AI assessment automatically logged to health entries with date:",
+            dateString
           );
           setIsLogged(true);
         } catch (logError) {
