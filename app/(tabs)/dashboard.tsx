@@ -457,7 +457,8 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   contentArea: {
-    flex: 1, // Takes all available space between header and bottom nav
+    flex: 1, 
+    paddingBottom: 60, 
   },
   contentContainer: {
     flexGrow: 1,
