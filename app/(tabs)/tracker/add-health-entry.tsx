@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "convex/react";
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,6 +18,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -30,7 +30,7 @@ export default function AddHealthEntry() {
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
   const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
-  
+
   // State for form fields
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedTime, setSelectedTime] = useState(new Date());
@@ -44,17 +44,18 @@ export default function AddHealthEntry() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Severity options (1-10)
   const severityOptions = Array.from({ length: 10 }, (_, i) =>
     (i + 1).toString()
   );
 
-  // Format date as YYYY-MM-DD in UTC to match the query
+  // Format date as local YYYY-MM-DD to match backend's local-day logic
   const formatDate = (date: Date) => {
-    const year = date.getUTCFullYear();
-    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(date.getUTCDate()).padStart(2, "0");
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   };
 
@@ -74,9 +75,13 @@ export default function AddHealthEntry() {
   const pickImage = async () => {
     try {
       // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Sorry, we need camera roll permissions to upload photos.');
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission required",
+          "Sorry, we need camera roll permissions to upload photos."
+        );
         return;
       }
 
@@ -92,8 +97,8 @@ export default function AddHealthEntry() {
         await uploadImage(selectedImage.uri);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image. Please try again.");
     }
   };
 
@@ -102,8 +107,11 @@ export default function AddHealthEntry() {
     try {
       // Request permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Sorry, we need camera permissions to take photos.');
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission required",
+          "Sorry, we need camera permissions to take photos."
+        );
         return;
       }
 
@@ -118,47 +126,47 @@ export default function AddHealthEntry() {
         await uploadImage(takenPhoto.uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      console.error("Error taking photo:", error);
+      Alert.alert("Error", "Failed to take photo. Please try again.");
     }
   };
 
   // Upload image to Convex storage
   const uploadImage = async (imageUri: string) => {
     if (uploading) return;
-    
+
     setUploading(true);
     try {
       // Generate upload URL
       const uploadUrl = await generateUploadUrl();
-      
+
       // Convert image to blob
       const response = await fetch(imageUri);
       const blob = await response.blob();
-      
+
       // Upload to Convex
       const result = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': blob.type },
+        method: "POST",
+        headers: { "Content-Type": blob.type },
         body: blob,
       });
-      
+
       if (!result.ok) {
-        throw new Error('Upload failed');
+        throw new Error("Upload failed");
       }
-      
+
       const { storageId } = await result.json();
-      
+
       // Store the photo reference
       const photoUrl = await storeUploadedPhoto({ storageId });
-      
+
       // Add to local state
-      setPhotos(prev => [...prev, photoUrl]);
-      
-      console.log('✅ Photo uploaded successfully:', photoUrl);
+      setPhotos((prev) => [...prev, photoUrl]);
+
+      console.log("✅ Photo uploaded successfully:", photoUrl);
     } catch (error) {
-      console.error('❌ Error uploading image:', error);
-      Alert.alert('Upload Error', 'Failed to upload photo. Please try again.');
+      console.error("❌ Error uploading image:", error);
+      Alert.alert("Upload Error", "Failed to upload photo. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -166,7 +174,7 @@ export default function AddHealthEntry() {
 
   // Remove photo from list
   const removePhoto = (index: number) => {
-    setPhotos(prev => prev.filter((_, i) => i !== index));
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Handle date picker change
@@ -192,16 +200,16 @@ export default function AddHealthEntry() {
   // Create timestamp from date and time
   const createTimestamp = (date: Date, time: Date) => {
     const combinedDate = new Date(date);
-    const [timeStr, modifier] = formatTime(time).split(' ');
-    let [hours, minutes] = timeStr.split(':');
-    
-    if (modifier === 'PM' && hours !== '12') {
+    const [timeStr, modifier] = formatTime(time).split(" ");
+    let [hours, minutes] = timeStr.split(":");
+
+    if (modifier === "PM" && hours !== "12") {
       hours = (parseInt(hours) + 12).toString();
     }
-    if (modifier === 'AM' && hours === '12') {
-      hours = '00';
+    if (modifier === "AM" && hours === "12") {
+      hours = "00";
     }
-    
+
     combinedDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     return combinedDate.getTime();
   };
@@ -214,7 +222,10 @@ export default function AddHealthEntry() {
     }
 
     if (!symptoms.trim() || !severity) {
-      Alert.alert("Missing Information", "Please fill in symptoms and severity.");
+      Alert.alert(
+        "Missing Information",
+        "Please fill in symptoms and severity."
+      );
       return;
     }
 
@@ -238,12 +249,12 @@ export default function AddHealthEntry() {
         symptoms,
         severity: parseInt(severity),
         notes,
-        photos: photos, 
+        photos: photos,
         createdBy: currentUser.firstName || "User",
       });
 
       console.log("✅ Manual entry saved successfully with photos");
-      router.back();
+      setShowSuccessModal(true);
     } catch (error) {
       console.error("❌ Failed to save manual entry:", error);
       Alert.alert("Error", "Failed to save entry. Please try again.");
@@ -257,315 +268,382 @@ export default function AddHealthEntry() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <KeyboardAvoidingView 
-          style={styles.keyboardAvoidingView}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header (not scrollable) */}
+        <CurvedHeader
+          title="Tracker - Add Entry"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
+
+        {/* Scrollable content under header */}
+        <View style={styles.contentArea}>
+          <KeyboardAvoidingView
+            style={styles.keyboardAvoidingView}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            {/* Header with title */}
-            <CurvedHeader title="Health Tracker" height={150} showLogo={true} />
-
-            <View>
-              <Text
-                style={[
-                  styles.headerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Add a new health entry
-              </Text>
-            </View>
-
-            <View style={styles.contentSection}>
-              {/* Date selection */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Select Date
-                </Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowDatePicker(true)}
-                >
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.contentSection}>
+                {/* Date selection */}
+                <View style={styles.inputGroup}>
                   <Text
                     style={[
-                      styles.pickerText,
+                      styles.label,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {formatDate(selectedDate)}
+                    Select Date
                   </Text>
-                </TouchableOpacity>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                  />
-                )}
-              </View>
-
-              {/* Time selection */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Select Time
-                </Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowTimePicker(true)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {formatTime(selectedTime)}
-                  </Text>
-                </TouchableOpacity>
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={selectedTime}
-                    mode="time"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={handleTimeChange}
-                  />
-                )}
-              </View>
-
-              {/* Photo Upload Section */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Add Photos ({photos.length}/5)
-                </Text>
-                
-                {/* Photo Upload Buttons */}
-                <View style={styles.photoButtonsContainer}>
                   <TouchableOpacity
-                    style={styles.photoButton}
-                    onPress={pickImage}
-                    disabled={uploading || photos.length >= 5}
+                    style={styles.pickerButton}
+                    onPress={() => setShowDatePicker(true)}
                   >
-                    <Ionicons name="image-outline" size={20} color="#2A7DE1" />
-                    <Text style={styles.photoButtonText}>Choose from Library</Text>
+                    <Text
+                      style={[
+                        styles.pickerText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {formatDate(selectedDate)}
+                    </Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.photoButton}
-                    onPress={takePhoto}
-                    disabled={uploading || photos.length >= 5}
-                  >
-                    <Ionicons name="camera-outline" size={20} color="#2A7DE1" />
-                    <Text style={styles.photoButtonText}>Take Photo</Text>
-                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      onChange={handleDateChange}
+                      maximumDate={new Date()}
+                    />
+                  )}
                 </View>
 
-                {/* Uploading Indicator */}
-                {uploading && (
-                  <View style={styles.uploadingContainer}>
-                    <Text style={styles.uploadingText}>Uploading photo...</Text>
-                  </View>
-                )}
-
-                {/* Selected Photos Preview */}
-                {photos.length > 0 && (
-                  <View style={styles.photosContainer}>
-                    <Text style={styles.photosLabel}>Selected Photos:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View style={styles.photosList}>
-                        {photos.map((photo, index) => (
-                          <View key={index} style={styles.photoItem}>
-                            <Image source={{ uri: photo }} style={styles.photoPreview} />
-                            <TouchableOpacity
-                              style={styles.removePhotoButton}
-                              onPress={() => removePhoto(index)}
-                            >
-                              <Ionicons name="close-circle" size={20} color="#DC3545" />
-                            </TouchableOpacity>
-                          </View>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              {/* Symptoms input */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Symptoms/Details
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textInput,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                  placeholder="e.g: Headache, Fatigue"
-                  placeholderTextColor="#999"
-                  value={symptoms}
-                  onChangeText={setSymptoms}
-                  multiline
-                />
-              </View>
-
-              {/* Severity dropdown */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Severity (1-10)
-                </Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowSeverityDropdown(true)}
-                >
+                {/* Time selection */}
+                <View style={styles.inputGroup}>
                   <Text
                     style={[
-                      styles.pickerText,
+                      styles.label,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {severity || "Select severity"}
+                    Select Time
                   </Text>
-                </TouchableOpacity>
-
-                {/* Dropdown modal */}
-                <Modal
-                  visible={showSeverityDropdown}
-                  transparent={true}
-                  animationType="fade"
-                  onRequestClose={() => setShowSeverityDropdown(false)}
-                >
-                  <TouchableWithoutFeedback
-                    onPress={() => setShowSeverityDropdown(false)}
+                  <TouchableOpacity
+                    style={styles.pickerButton}
+                    onPress={() => setShowTimePicker(true)}
                   >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.dropdownContainer}>
-                        <ScrollView
-                          style={styles.dropdownScrollView}
-                          showsVerticalScrollIndicator={true}
-                        >
-                          {severityOptions.map((option) => (
-                            <TouchableOpacity
-                              key={option}
-                              style={[
-                                styles.dropdownItem,
-                                { backgroundColor: "white" },
-                              ]}
-                              onPress={() => {
-                                setSeverity(option);
-                                setShowSeverityDropdown(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dropdownText,
-                                  { fontFamily: FONTS.BarlowSemiCondensed },
-                                ]}
-                              >
-                                {option}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
+                    <Text
+                      style={[
+                        styles.pickerText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {formatTime(selectedTime)}
+                    </Text>
+                  </TouchableOpacity>
+                  {showTimePicker && (
+                    <DateTimePicker
+                      value={selectedTime}
+                      mode="time"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      onChange={handleTimeChange}
+                    />
+                  )}
+                </View>
+
+                {/* Photo Upload Section */}
+                <View style={styles.inputGroup}>
+                  <Text
+                    style={[
+                      styles.label,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Add Photos ({photos.length}/5)
+                  </Text>
+
+                  {/* Photo Upload Buttons */}
+                  <View style={styles.photoButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.photoButton}
+                      onPress={pickImage}
+                      disabled={uploading || photos.length >= 5}
+                    >
+                      <Ionicons
+                        name="image-outline"
+                        size={20}
+                        color="#2A7DE1"
+                      />
+                      <Text style={styles.photoButtonText}>
+                        Choose from Library
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.photoButton}
+                      onPress={takePhoto}
+                      disabled={uploading || photos.length >= 5}
+                    >
+                      <Ionicons
+                        name="camera-outline"
+                        size={20}
+                        color="#2A7DE1"
+                      />
+                      <Text style={styles.photoButtonText}>Take Photo</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Uploading Indicator */}
+                  {uploading && (
+                    <View style={styles.uploadingContainer}>
+                      <Text style={styles.uploadingText}>
+                        Uploading photo...
+                      </Text>
                     </View>
-                  </TouchableWithoutFeedback>
-                </Modal>
-              </View>
+                  )}
 
-              {/* Additional notes */}
-              <View style={styles.inputGroup}>
-                <Text
-                  style={[
-                    styles.label,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Notes
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textInput,
-                    styles.notesInput,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                  placeholder="Additional Details"
-                  placeholderTextColor="#999"
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
+                  {/* Selected Photos Preview */}
+                  {photos.length > 0 && (
+                    <View style={styles.photosContainer}>
+                      <Text style={styles.photosLabel}>Selected Photos:</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        <View style={styles.photosList}>
+                          {photos.map((photo, index) => (
+                            <View key={index} style={styles.photoItem}>
+                              <Image
+                                source={{ uri: photo }}
+                                style={styles.photoPreview}
+                              />
+                              <TouchableOpacity
+                                style={styles.removePhotoButton}
+                                onPress={() => removePhoto(index)}
+                              >
+                                <Ionicons
+                                  name="close-circle"
+                                  size={20}
+                                  color="#DC3545"
+                                />
+                              </TouchableOpacity>
+                            </View>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
 
-              {/* Action buttons */}
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton]}
-                  onPress={handleCancel}
-                >
+                {/* Symptoms input */}
+                <View style={styles.inputGroup}>
                   <Text
                     style={[
-                      styles.buttonText,
+                      styles.label,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Cancel
+                    Symptoms/Details
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                    placeholder="e.g: Headache, Fatigue"
+                    placeholderTextColor="#999"
+                    value={symptoms}
+                    onChangeText={setSymptoms}
+                    multiline
+                  />
+                </View>
+
+                {/* Severity dropdown */}
+                <View style={styles.inputGroup}>
+                  <Text
+                    style={[
+                      styles.label,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Severity (1-10)
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.pickerButton}
+                    onPress={() => setShowSeverityDropdown(true)}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {severity || "Select severity"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Dropdown modal */}
+                  <Modal
+                    visible={showSeverityDropdown}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={() => setShowSeverityDropdown(false)}
+                  >
+                    <TouchableWithoutFeedback
+                      onPress={() => setShowSeverityDropdown(false)}
+                    >
+                      <View style={styles.modalOverlay}>
+                        <View style={styles.dropdownContainer}>
+                          <ScrollView
+                            style={styles.dropdownScrollView}
+                            showsVerticalScrollIndicator={true}
+                          >
+                            {severityOptions.map((option) => (
+                              <TouchableOpacity
+                                key={option}
+                                style={[
+                                  styles.dropdownItem,
+                                  { backgroundColor: "white" },
+                                ]}
+                                onPress={() => {
+                                  setSeverity(option);
+                                  setShowSeverityDropdown(false);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.dropdownText,
+                                    { fontFamily: FONTS.BarlowSemiCondensed },
+                                  ]}
+                                >
+                                  {option}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </Modal>
+                </View>
+
+                {/* Additional notes */}
+                <View style={styles.inputGroup}>
+                  <Text
+                    style={[
+                      styles.label,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Notes
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      styles.notesInput,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                    placeholder="Additional Details"
+                    placeholderTextColor="#999"
+                    value={notes}
+                    onChangeText={setNotes}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Action buttons */}
+                <View style={styles.buttonContainer}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.cancelButton]}
+                    onPress={handleCancel}
+                  >
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.saveButton]}
+                    onPress={handleSaveEntry}
+                    disabled={uploading}
+                  >
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {uploading ? "Uploading..." : "Save Entry"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+
+        {/* Success Modal */}
+        <Modal
+          visible={showSuccessModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowSuccessModal(false)}
+        >
+          <View style={styles.successModalOverlay}>
+            <View style={styles.successModalContainer}>
+              <View style={styles.successIconContainer}>
+                <Ionicons name="checkmark-circle" size={64} color="#28A745" />
+              </View>
+              <Text style={[styles.successTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Entry Logged Successfully!
+              </Text>
+              <Text style={[styles.successMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Your health entry has been saved.
+              </Text>
+              <View style={styles.successButtonContainer}>
+                <TouchableOpacity
+                  style={[styles.successButton, styles.goToLogButton]}
+                  onPress={() => {
+                    setShowSuccessModal(false);
+                    router.push("/(tabs)/tracker/daily-log");
+                  }}
+                >
+                  <Ionicons name="calendar" size={20} color="white" />
+                  <Text style={[styles.successButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Go to Log
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.button, styles.saveButton]}
-                  onPress={handleSaveEntry}
-                  disabled={uploading}
+                  style={[styles.successButton, styles.dismissButton]}
+                  onPress={() => {
+                    setShowSuccessModal(false);
+                    router.back();
+                  }}
                 >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {uploading ? "Uploading..." : "Save Entry"}
+                  <Text style={[styles.successButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Done
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </View>
+        </Modal>
 
         {/* Bottom navigation */}
-        <BottomNavigation />
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -575,16 +653,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  contentArea: {
+    flex: 1,
+  },
   keyboardAvoidingView: {
     flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 80,
+    paddingBottom: 200,
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
   },
   inputGroup: {
     marginBottom: 24,
@@ -695,17 +775,17 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   dropdownContainer: {
-    backgroundColor: 'white',
+    backgroundColor: "white",
     borderRadius: 12,
-    width: '80%',
-    maxHeight: '60%',
-    overflow: 'hidden',
+    width: "80%",
+    maxHeight: "60%",
+    overflow: "hidden",
   },
   dropdownScrollView: {
     maxHeight: 300,
@@ -713,15 +793,15 @@ const styles = StyleSheet.create({
   dropdownItem: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
-    backgroundColor: 'white',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderBottomColor: "#E9ECEF",
+    backgroundColor: "white",
+    alignItems: "center",
+    justifyContent: "center",
   },
   dropdownText: {
     fontSize: 18,
     color: "#1A1A1A",
-    fontWeight: '500',
+    fontWeight: "500",
   },
   buttonContainer: {
     flexDirection: "row",
@@ -742,6 +822,69 @@ const styles = StyleSheet.create({
     backgroundColor: "#6C757D",
   },
   buttonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Success Modal Styles
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  successModalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 32,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  successIconContainer: {
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  successMessage: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 24,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  successButtonContainer: {
+    flexDirection: "column",
+    width: "100%",
+    gap: 12,
+  },
+  successButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    borderRadius: 12,
+    width: "100%",
+    gap: 8,
+  },
+  goToLogButton: {
+    backgroundColor: "#2A7DE1",
+  },
+  dismissButton: {
+    backgroundColor: "#6C757D",
+  },
+  successButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
