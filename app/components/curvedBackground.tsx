@@ -24,6 +24,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
         height={screenHeight}
         viewBox={`0 0 ${screenWidth} ${screenHeight}`}
         style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
       >
         <Defs>
           <RadialGradient id="bgGradient1" cx="50%" cy="50%" r="50%">

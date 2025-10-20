@@ -8,7 +8,7 @@ const { width: screenWidth } = Dimensions.get("window");
 // Constants for better maintainability
 const CURVE_HEIGHT = 70;
 const LOGO_SIZE_ONBOARDING = 80;
-const LOGO_SIZE_SIGNIN = 80;
+const LOGO_SIZE_SIGNIN = 56;
 
 interface CurvedHeaderProps {
   title?: string;
@@ -144,6 +144,8 @@ const styles = StyleSheet.create({
   flexDirection: "row",
   alignItems: "center",
   justifyContent: "center",
+  alignSelf: 'stretch',
+  width: '100%',
   },
   onboardingLayout: {
   justifyContent: "center",
@@ -178,11 +180,13 @@ const styles = StyleSheet.create({
   signinLogo: {
     width: LOGO_SIZE_SIGNIN,
     height: LOGO_SIZE_SIGNIN,
-    marginRight: 10,
+    marginRight: 8,
+    flexShrink: 0,
   },
   signinTextContainer: {
     flex: 1,
     marginLeft: 1,
+    minWidth: 0,
   },
   signinTitle: {
     fontSize: 22,
@@ -190,6 +194,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 26,
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   signinSubtitle: {
     fontSize: 18,
