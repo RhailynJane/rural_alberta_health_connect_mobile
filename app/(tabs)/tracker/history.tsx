@@ -577,11 +577,11 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   searchContainer: {
-    backgroundColor: "white",
+    backgroundColor: "transparent",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#E9ECEF",
+    borderBottomColor: "transparent",
   },
   searchInputWrapper: {
     flexDirection: "row",
