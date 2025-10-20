@@ -177,31 +177,41 @@ export const getRealTimeClinicData = action({
         10000
       );
       if (foursquareData && foursquareData.length > 0) {
+        console.log(`📋 Foursquare raw results: ${foursquareData.length} facilities`);
         const filteredData = filterMedicalFacilities(foursquareData);
-        console.log(`✅ Found ${filteredData.length} clinics via Foursquare`);
+        console.log(`✅ Found ${filteredData.length} valid clinics via Foursquare`);
         if (filteredData.length > 0) {
-          return { source: "Foursquare", facilities: filteredData };
+          // Return only the closest 10 facilities
+          return {
+            source: "Foursquare",
+            facilities: filteredData.slice(0, 10),
+          };
         }
       }
     } catch (error) {
-      console.log("Foursquare API failed:", error);
+      console.log("❌ Foursquare API failed:", error);
     }
 
     try {
       console.log("🔄 Trying OpenStreetMap API...");
       const osmData = await fetchFromOpenStreetMap(args.location, 10000);
       if (osmData && osmData.length > 0) {
+        console.log(`📋 OpenStreetMap raw results: ${osmData.length} facilities`);
         const filteredData = filterMedicalFacilities(osmData);
-        console.log(`✅ Found ${filteredData.length} clinics via OSM`);
+        console.log(`✅ Found ${filteredData.length} valid clinics via OSM`);
         if (filteredData.length > 0) {
-          return { source: "OpenStreetMap", facilities: filteredData };
+          // Return only the closest 10 facilities
+          return {
+            source: "OpenStreetMap",
+            facilities: filteredData.slice(0, 10),
+          };
         }
       }
     } catch (error) {
-      console.log("OpenStreetMap API failed:", error);
+      console.log("❌ OpenStreetMap API failed:", error);
     }
 
-    console.log("Using fallback Alberta clinic data");
+    console.log("⚠️ Using fallback Alberta clinic data");
     return getEnhancedAlbertaClinicsWithMoreOptions(args.location);
   },
 });
@@ -329,59 +339,178 @@ function toRad(degrees: number): number {
 function filterMedicalFacilities(
   facilities: ClinicFacility[]
 ): ClinicFacility[] {
-  const medicalKeywords = [
+  // Strict medical keywords that MUST be present
+  const strictMedicalKeywords = [
     "hospital",
     "clinic",
+    "medical center",
+    "medical centre",
+    "health center",
+    "health centre",
+    "urgent care",
+    "emergency",
+    "surgery center",
+    "surgery centre",
+    "family medicine",
+    "walk-in clinic",
+    "healthcare",
+  ];
+
+  // Additional medical indicators (less strict)
+  const additionalMedicalKeywords = [
     "medical",
     "health",
     "surgery",
-    "care",
-    "urgent",
-    "emergency",
+    "care center",
+    "care centre",
+    "physician",
+    "doctor",
   ];
 
+  // Comprehensive exclusion list
   const excludeKeywords = [
+    // Commercial
     "restaurant",
     "cafe",
+    "coffee",
     "shop",
     "store",
     "mall",
     "plaza",
+    "market",
+    "grocery",
+    "supermarket",
+    "shopping",
+    // Entertainment
     "museum",
     "gallery",
     "theatre",
+    "theater",
     "cinema",
+    "movie",
     "hotel",
+    "motel",
+    "resort",
+    // Beauty/Wellness (non-medical)
     "spa",
     "salon",
+    "barber",
+    "massage",
+    "nail",
+    "beauty",
+    "cosmetic",
+    // Pharmacies (separate from clinics)
     "pharmacy",
+    "drugstore",
+    "drug store",
+    "shoppers",
+    "rexall",
+    "london drugs",
+    // Labs (separate from clinics)
     "laboratory",
-    "lab",
+    "lab corp",
+    "dynacare",
+    "lifelabs",
+    "diagnostic",
+    // Veterinary
     "vet",
     "veterinary",
+    "animal",
+    "pet",
+    // Specialized services (non-emergency)
     "passport",
     "lasik",
     "optical",
     "optometrist",
+    "optician",
+    "eyewear",
+    "vision center",
+    "hearing",
+    "audiology",
+    "dental",
+    "dentist",
+    "orthodont",
+    "chiropract",
+    "physiotherapy",
+    "physio",
+    "acupuncture",
+    "massage therapy",
+    "counseling",
+    "counselling",
+    "psycholog",
+    "psychiatr",
+    // Educational/Administrative
+    "university",
+    "college",
+    "school",
+    "education",
+    "office building",
+    "administration",
+    "corporate",
+    // Other
+    "parking",
+    "atm",
+    "bank",
+    "insurance",
   ];
 
   return facilities.filter((facility) => {
     const name = facility.name.toLowerCase();
     const type = facility.type.toLowerCase();
-    const address = facility.address.toLowerCase();
+    const combinedText = `${name} ${type}`;
 
-    const isMedical = medicalKeywords.some(
-      (keyword) =>
-        name.includes(keyword) ||
-        type.includes(keyword) ||
-        address.includes(keyword)
-    );
+    // First, check exclusions (highest priority)
+    const isExcluded = excludeKeywords.some((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return (
+        name.includes(keywordLower) ||
+        type.includes(keywordLower) ||
+        combinedText.includes(keywordLower)
+      );
+    });
 
-    const isExcluded = excludeKeywords.some(
-      (keyword) => name.includes(keyword) || type.includes(keyword)
-    );
+    if (isExcluded) {
+      console.log(`❌ Excluded: ${facility.name} (matched exclusion keyword)`);
+      return false;
+    }
 
-    return isMedical && !isExcluded;
+    // Check for strict medical keywords (highest priority for inclusion)
+    const hasStrictMedicalKeyword = strictMedicalKeywords.some((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return name.includes(keywordLower) || type.includes(keywordLower);
+    });
+
+    if (hasStrictMedicalKeyword) {
+      console.log(`✅ Included: ${facility.name} (matched strict medical keyword)`);
+      return true;
+    }
+
+    // For additional keywords, require at least 2 matches or specific patterns
+    const additionalMatches = additionalMedicalKeywords.filter((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return (
+        name.includes(keywordLower) ||
+        type.includes(keywordLower) ||
+        combinedText.includes(keywordLower)
+      );
+    });
+
+    // Also check if it's from a trusted source with medical type
+    const isTrustedMedicalType =
+      type === "hospital" ||
+      type === "clinic" ||
+      type === "medical" ||
+      type === "healthcare" ||
+      type === "urgent care" ||
+      type === "emergency";
+
+    if (additionalMatches.length >= 2 || isTrustedMedicalType) {
+      console.log(`✅ Included: ${facility.name} (matched medical criteria)`);
+      return true;
+    }
+
+    console.log(`❌ Excluded: ${facility.name} (insufficient medical indicators)`);
+    return false;
   });
 }
 
@@ -401,8 +530,13 @@ async function fetchFromNewFoursquareAPI(
       return null;
     }
 
-    const categories = "15014,15015,15017";
-    const searchUrl = `https://places-api.foursquare.com/places/search?ll=${coords.lat},${coords.lon}&radius=${radius}&categories=${categories}&limit=20&sort=DISTANCE`;
+    // More specific medical categories for Foursquare
+    // 15014: Hospital, 15015: Medical Center, 15017: Urgent Care
+    // 15018: Doctor's Office, 15019: Emergency Room
+    const categories = "15014,15015,15017,15018,15019";
+    const searchUrl = `https://places-api.foursquare.com/places/search?ll=${coords.lat},${coords.lon}&radius=${radius}&categories=${categories}&limit=30&sort=DISTANCE`;
+
+    console.log(`🔍 Searching Foursquare near ${coords.lat},${coords.lon} within ${radius}m`);
 
     const response = await fetch(searchUrl, {
       headers: {
@@ -413,14 +547,18 @@ async function fetchFromNewFoursquareAPI(
     });
 
     if (!response.ok) {
+      console.log(`❌ Foursquare API error: ${response.status}`);
       return null;
     }
 
     const data = await response.json();
 
     if (!data.results || data.results.length === 0) {
+      console.log("❌ No results from Foursquare");
       return null;
     }
+
+    console.log(`📋 Foursquare returned ${data.results.length} places`);
 
     const facilities: ClinicFacility[] = data.results
       .map((place: any) => {
@@ -452,10 +590,13 @@ async function fetchFromNewFoursquareAPI(
             .join(", ") ||
           "Address not available";
 
+        // Get category name for better filtering
+        const categoryName = place.categories?.[0]?.name || "medical";
+
         return {
           id: `foursquare-${placeId}`,
           name: place.name || "Medical Facility",
-          type: place.categories?.[0]?.name || "medical",
+          type: categoryName,
           address: address,
           phone: place.tel || place.phone || place.contact?.phone || null,
           coordinates: {
@@ -489,18 +630,27 @@ async function fetchFromOpenStreetMap(
       return null;
     }
 
+    // More specific OSM query focusing on hospitals and clinics only
     const overpassQuery = `
       [out:json][timeout:25];
       (
         node["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
         node["amenity"="clinic"](around:${radius},${coords.lat},${coords.lon});
+        node["amenity"="doctors"](around:${radius},${coords.lat},${coords.lon});
         node["healthcare"="hospital"](around:${radius},${coords.lat},${coords.lon});
         node["healthcare"="clinic"](around:${radius},${coords.lat},${coords.lon});
+        node["healthcare"="centre"](around:${radius},${coords.lat},${coords.lon});
+        node["healthcare"="doctor"](around:${radius},${coords.lat},${coords.lon});
         way["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
         way["amenity"="clinic"](around:${radius},${coords.lat},${coords.lon});
+        way["amenity"="doctors"](around:${radius},${coords.lat},${coords.lon});
+        way["healthcare"="hospital"](around:${radius},${coords.lat},${coords.lon});
+        way["healthcare"="clinic"](around:${radius},${coords.lat},${coords.lon});
       );
       out body;
     `;
+
+    console.log(`🔍 Querying OpenStreetMap near ${coords.lat},${coords.lon}`);
 
     const response = await fetch("https://overpass-api.de/api/interpreter", {
       method: "POST",
@@ -510,8 +660,11 @@ async function fetchFromOpenStreetMap(
     const data = await response.json();
 
     if (!data.elements || data.elements.length === 0) {
+      console.log("❌ No results from OpenStreetMap");
       return null;
     }
+
+    console.log(`📋 OpenStreetMap returned ${data.elements.length} places`);
 
     const facilities: ClinicFacility[] = data.elements
       .map((element: any) => {
@@ -539,15 +692,27 @@ async function fetchFromOpenStreetMap(
         const amenity = tags.amenity || "";
         const healthcare = tags.healthcare || "";
 
-        let facilityType = "medical";
-        if (amenity === "hospital" || healthcare === "hospital")
+        // Determine facility type more accurately
+        let facilityType = "clinic";
+        if (amenity === "hospital" || healthcare === "hospital") {
           facilityType = "hospital";
-        else if (amenity === "clinic" || healthcare === "clinic")
+        } else if (amenity === "clinic" || healthcare === "clinic") {
           facilityType = "clinic";
+        } else if (amenity === "doctors" || healthcare === "doctor") {
+          facilityType = "medical center";
+        } else if (healthcare === "centre") {
+          facilityType = "health center";
+        }
+
+        // Skip if no proper name
+        const facilityName = tags.name || tags.operator;
+        if (!facilityName || facilityName === "Medical Facility") {
+          return null;
+        }
 
         return {
           id: `osm-${element.id}`,
-          name: tags.name || tags.operator || "Medical Facility",
+          name: facilityName,
           type: facilityType,
           address: address,
           phone: tags.phone || tags["contact:phone"] || null,

@@ -12,10 +12,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import OfflineMap from "../../components/OfflineMap";
 import { FONTS } from "../../constants/constants";
 
 // Define types for our component
@@ -165,12 +167,28 @@ export default function Emergency() {
     if (locationStatus) {
       try {
         const newEnabledState = !locationStatus.locationServicesEnabled;
-        await toggleLocationServices({ enabled: newEnabledState });
-
-        // Show feedback
+        
+        // If enabling, show permission alert
         if (newEnabledState) {
-          console.log("📍 Location services enabled");
+          Alert.alert(
+            "Enable Location Services",
+            "This app would like to access your location to provide better emergency assistance and find nearby clinics.",
+            [
+              {
+                text: "Cancel",
+                style: "cancel"
+              },
+              {
+                text: "Enable",
+                onPress: async () => {
+                  await toggleLocationServices({ enabled: true });
+                  console.log("📍 Location services enabled");
+                }
+              }
+            ]
+          );
         } else {
+          await toggleLocationServices({ enabled: false });
           console.log("📍 Location services disabled");
           // Clear real-time clinics when disabled
           setRealTimeClinics([]);
@@ -186,10 +204,24 @@ export default function Emergency() {
   const nearestClinic = realTimeClinics[0]; // Get the closest clinic
 
   return (
-    <CurvedBackground>
-  <CurvedHeader title="Emergency" height={150} showLogo={true} />
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header (not scrollable) */}
+        <CurvedHeader
+          title="Emergency"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-      <ScrollView style={styles.container}>
+        {/* Scrollable content area below header */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
         {/* Emergency Warning Banner */}
         <View style={styles.emergencyBanner}>
           <Icon name="warning" size={24} color="#cb2a2aff" />
@@ -405,6 +437,46 @@ export default function Emergency() {
             )}
           </View>
         </View>
+
+        {/* Offline Map Section */}
+        {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
+            <View style={styles.card}>
+              <View style={styles.cardContent}>
+                <Text style={styles.mapDescription}>
+                  Interactive map showing nearby clinics. Works offline once loaded.
+                </Text>
+                <OfflineMap
+                  clinics={realTimeClinics}
+                  onMarkerPress={(clinicId) => {
+                    const clinic = realTimeClinics.find((c) => c.id === clinicId);
+                    if (clinic) {
+                      Alert.alert(
+                        clinic.name,
+                        `${clinic.address}\n\nDistance: ${clinic.distanceText}`,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Call",
+                            onPress: () =>
+                              clinic.phone && handleEmergencyCall(clinic.phone),
+                          },
+                          {
+                            text: "Directions",
+                            onPress: () => openInMaps(clinic),
+                          },
+                        ]
+                      );
+                    }
+                  }}
+                  height={350}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
         {/* Additional Clinics Section */}
         {realTimeClinics.length > 1 && (
           <>
@@ -467,13 +539,26 @@ export default function Emergency() {
             ))}
           </View>
         </View>
-      </ScrollView>
+          </ScrollView>
+        </View>
+      </CurvedBackground>
       <BottomNavigation />
-    </CurvedBackground>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  contentArea: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
   container: {
     flex: 1,
     padding: 16,
@@ -552,6 +637,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
+  },
+  mapDescription: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
+    lineHeight: 20,
   },
   clinicName: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -687,10 +779,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   enableButton: {
+    flexDirection: "row",
     backgroundColor: "#2D89E1",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
+    justifyContent: "center",
     marginTop: 16,
   },
   enableButtonText: {
@@ -698,6 +792,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 16,
     fontWeight: "600",
+    marginLeft: 8,
   },
   clinicActions: {
     marginTop: 12,
