@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   },
   quickActionText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#2A7DE1",
     textAlign: "center",
   },

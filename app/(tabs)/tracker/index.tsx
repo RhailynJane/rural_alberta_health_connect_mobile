@@ -32,7 +32,13 @@ export default function Tracker() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Health Tracker" height={150} showLogo={true} />
+          <CurvedHeader
+            title="Health Tracker"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
 
           <View style={styles.contentSection}>
             {/* Medical Disclaimer */}

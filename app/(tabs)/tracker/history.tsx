@@ -5,13 +5,13 @@ import { useState } from "react";
 import {
   Alert,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -161,322 +161,336 @@ export default function History() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <CurvedHeader title="History" height={150} showLogo={true} />
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header (not scrollable) */}
+        <CurvedHeader
+          title="History"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-          <View style={styles.contentSection}>
-            {/* Medical Disclaimer */}
-            <View style={styles.disclaimerContainer}>
-              <Text
-                style={[
-                  styles.disclaimerTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Medical Disclaimer
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                This tracker is for personal monitoring only.
-              </Text>
-              <Text
-                style={[
-                  styles.disclaimerText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Seek immediate medical attention for severe symptoms or
-                emergencies.
-              </Text>
-            </View>
-
-            {/* Date Range Selection */}
-            <View style={styles.dateRangeContainer}>
-              <View style={styles.dateRangeHeader}>
-                <Ionicons
-                  name="calendar"
-                  size={20}
-                  color="#2A7DE1"
-                  style={styles.icon}
-                />
+        {/* Scrollable content area below header */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.contentSection}>
+              {/* Medical Disclaimer */}
+              <View style={styles.disclaimerContainer}>
                 <Text
                   style={[
-                    styles.dateRangeText,
+                    styles.disclaimerTitle,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Select Date Range
+                  Medical Disclaimer
+                </Text>
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  This tracker is for personal monitoring only.
+                </Text>
+                <Text
+                  style={[
+                    styles.disclaimerText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Seek immediate medical attention for severe symptoms or
+                  emergencies.
                 </Text>
               </View>
 
-              {/* Quick Selection Buttons */}
-              <View style={styles.quickSelectContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.quickSelectButton,
-                    selectedRange === "today" && styles.quickSelectButtonActive,
-                  ]}
-                  onPress={() => handleRangeSelection("today")}
-                >
+              {/* Date Range Selection */}
+              <View style={styles.dateRangeContainer}>
+                <View style={styles.dateRangeHeader}>
+                  <Ionicons
+                    name="calendar"
+                    size={20}
+                    color="#2A7DE1"
+                    style={styles.icon}
+                  />
                   <Text
                     style={[
-                      styles.quickSelectText,
-                      selectedRange === "today" && styles.quickSelectTextActive,
+                      styles.dateRangeText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Today
+                    Select Date Range
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.quickSelectButton,
-                    selectedRange === "7d" && styles.quickSelectButtonActive,
-                  ]}
-                  onPress={() => handleRangeSelection("7d")}
-                >
-                  <Text
-                    style={[
-                      styles.quickSelectText,
-                      selectedRange === "7d" && styles.quickSelectTextActive,
-                    ]}
-                  >
-                    7 Days
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.quickSelectButton,
-                    selectedRange === "30d" && styles.quickSelectButtonActive,
-                  ]}
-                  onPress={() => handleRangeSelection("30d")}
-                >
-                  <Text
-                    style={[
-                      styles.quickSelectText,
-                      selectedRange === "30d" && styles.quickSelectTextActive,
-                    ]}
-                  >
-                    30 Days
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                </View>
 
-              {/* Custom Date Selection */}
-              <View style={styles.customDateContainer}>
-                <View style={styles.dateField}>
-                  <Text style={styles.dateFieldLabel}>From</Text>
+                {/* Quick Selection Buttons */}
+                <View style={styles.quickSelectContainer}>
                   <TouchableOpacity
-                    style={styles.dateInput}
-                    onPress={() => setShowStartDatePicker(true)}
+                    style={[
+                      styles.quickSelectButton,
+                      selectedRange === "today" &&
+                        styles.quickSelectButtonActive,
+                    ]}
+                    onPress={() => handleRangeSelection("today")}
                   >
-                    <Text style={styles.dateInputText}>
-                      {formatDate(startDate)}
+                    <Text
+                      style={[
+                        styles.quickSelectText,
+                        selectedRange === "today" &&
+                          styles.quickSelectTextActive,
+                      ]}
+                    >
+                      Today
                     </Text>
-                    <Ionicons name="calendar" size={18} color="#666" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickSelectButton,
+                      selectedRange === "7d" && styles.quickSelectButtonActive,
+                    ]}
+                    onPress={() => handleRangeSelection("7d")}
+                  >
+                    <Text
+                      style={[
+                        styles.quickSelectText,
+                        selectedRange === "7d" && styles.quickSelectTextActive,
+                      ]}
+                    >
+                      7 Days
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.quickSelectButton,
+                      selectedRange === "30d" && styles.quickSelectButtonActive,
+                    ]}
+                    onPress={() => handleRangeSelection("30d")}
+                  >
+                    <Text
+                      style={[
+                        styles.quickSelectText,
+                        selectedRange === "30d" && styles.quickSelectTextActive,
+                      ]}
+                    >
+                      30 Days
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.dateField}>
-                  <Text style={styles.dateFieldLabel}>To</Text>
-                  <TouchableOpacity
-                    style={styles.dateInput}
-                    onPress={() => setShowEndDatePicker(true)}
-                  >
-                    <Text style={styles.dateInputText}>
-                      {formatDate(endDate)}
-                    </Text>
-                    <Ionicons name="calendar" size={18} color="#666" />
-                  </TouchableOpacity>
+                {/* Custom Date Selection */}
+                <View style={styles.customDateContainer}>
+                  <View style={styles.dateField}>
+                    <Text style={styles.dateFieldLabel}>From</Text>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => setShowStartDatePicker(true)}
+                    >
+                      <Text style={styles.dateInputText}>
+                        {formatDate(startDate)}
+                      </Text>
+                      <Ionicons name="calendar" size={18} color="#666" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.dateField}>
+                    <Text style={styles.dateFieldLabel}>To</Text>
+                    <TouchableOpacity
+                      style={styles.dateInput}
+                      onPress={() => setShowEndDatePicker(true)}
+                    >
+                      <Text style={styles.dateInputText}>
+                        {formatDate(endDate)}
+                      </Text>
+                      <Ionicons name="calendar" size={18} color="#666" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            {/* Health Stats */}
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Ionicons
-                  name="stats-chart"
-                  size={24}
-                  color="#2A7DE1"
-                  style={styles.statIcon}
-                />
-                <Text
-                  style={[
-                    styles.statValue,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {filteredEntries.length > 0 ? `${healthScore}/10` : "N/A"}
-                </Text>
-                <Text
-                  style={[
-                    styles.statLabel,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Health Score
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <Ionicons
-                  name="document-text"
-                  size={24}
-                  color="#2A7DE1"
-                  style={styles.statIcon}
-                />
-                <Text
-                  style={[
-                    styles.statValue,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {filteredEntries.length}
-                </Text>
-                <Text
-                  style={[
-                    styles.statLabel,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Total Entries
-                </Text>
-              </View>
-            </View>
-
-            {/* Entries List */}
-            <View style={styles.entriesList}>
-              <Text style={styles.entriesTitle}>
-                Recent Entries ({filteredEntries.length})
-              </Text>
-
-              {filteredEntries.length > 0 ? (
-                filteredEntries.map((entry) => (
-                  <TouchableOpacity
-                    key={entry._id}
-                    style={styles.entryItem}
-                    onPress={() => handleViewEntryDetails(entry._id)}
+              {/* Health Stats */}
+              <View style={styles.statsContainer}>
+                <View style={styles.statItem}>
+                  <Ionicons
+                    name="stats-chart"
+                    size={24}
+                    color="#2A7DE1"
+                    style={styles.statIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.statValue,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
                   >
-                    <Ionicons
-                      name={
-                        entry.type === "ai_assessment" ? "robot" : "document"
-                      }
-                      size={20}
-                      color="#2A7DE1"
-                      style={styles.entryIcon}
-                    />
-                    <View style={styles.entryContent}>
-                      <View style={styles.entryHeader}>
-                        <Text
-                          style={[
-                            styles.entryDate,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          {formatDate(new Date(entry.timestamp))}{" "}
-                          {formatTime(new Date(entry.timestamp))}
-                        </Text>
-                        <View
-                          style={[
-                            styles.severityBadge,
-                            entry.severity <= 3 && {
-                              backgroundColor: "#E8F5E8",
-                            },
-                            entry.severity > 3 &&
-                              entry.severity <= 7 && {
-                                backgroundColor: "#FFF3CD",
-                              },
-                            entry.severity > 7 && {
-                              backgroundColor: "#F8D7DA",
-                            },
-                          ]}
-                        >
-                          <Ionicons
-                            name="alert-circle"
-                            size={14}
-                            color={
-                              entry.severity <= 3
-                                ? "#28A745"
-                                : entry.severity <= 7
-                                  ? "#FFC107"
-                                  : "#DC3545"
-                            }
-                          />
+                    {filteredEntries.length > 0 ? `${healthScore}/10` : "N/A"}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Health Score
+                  </Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Ionicons
+                    name="document-text"
+                    size={24}
+                    color="#2A7DE1"
+                    style={styles.statIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.statValue,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {filteredEntries.length}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.statLabel,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Total Entries
+                  </Text>
+                </View>
+              </View>
+
+              {/* Entries List */}
+              <View style={styles.entriesList}>
+                <Text style={styles.entriesTitle}>
+                  Recent Entries ({filteredEntries.length})
+                </Text>
+
+                {filteredEntries.length > 0 ? (
+                  filteredEntries.map((entry) => (
+                    <TouchableOpacity
+                      key={entry._id}
+                      style={styles.entryItem}
+                      onPress={() => handleViewEntryDetails(entry._id)}
+                    >
+                      <Ionicons
+                        name={
+                          entry.type === "ai_assessment"
+                            ? "hardware-chip-outline"
+                            : "document-text"
+                        }
+                        size={20}
+                        color="#2A7DE1"
+                        style={styles.entryIcon}
+                      />
+                      <View style={styles.entryContent}>
+                        <View style={styles.entryHeader}>
                           <Text
                             style={[
-                              styles.entrySeverity,
+                              styles.entryDate,
                               { fontFamily: FONTS.BarlowSemiCondensed },
-                              entry.severity <= 3 && { color: "#28A745" },
+                            ]}
+                          >
+                            {formatDate(new Date(entry.timestamp))}{" "}
+                            {formatTime(new Date(entry.timestamp))}
+                          </Text>
+                          <View
+                            style={[
+                              styles.severityBadge,
+                              entry.severity <= 3 && {
+                                backgroundColor: "#E8F5E8",
+                              },
                               entry.severity > 3 &&
                                 entry.severity <= 7 && {
-                                  color: "#856404",
+                                  backgroundColor: "#FFF3CD",
                                 },
                               entry.severity > 7 && {
-                                color: "#721C24",
+                                backgroundColor: "#F8D7DA",
                               },
                             ]}
                           >
-                            {entry.severity <= 3
-                              ? "Mild"
-                              : entry.severity <= 7
-                                ? "Moderate"
-                                : "Severe"}
-                          </Text>
+                            <Ionicons
+                              name="alert-circle"
+                              size={14}
+                              color={
+                                entry.severity <= 3
+                                  ? "#28A745"
+                                  : entry.severity <= 7
+                                    ? "#FFC107"
+                                    : "#DC3545"
+                              }
+                            />
+                            <Text
+                              style={[
+                                styles.entrySeverity,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                                entry.severity <= 3 && { color: "#28A745" },
+                                entry.severity > 3 &&
+                                  entry.severity <= 7 && {
+                                    color: "#856404",
+                                  },
+                                entry.severity > 7 && {
+                                  color: "#721C24",
+                                },
+                              ]}
+                            >
+                              {entry.severity <= 3
+                                ? "Mild"
+                                : entry.severity <= 7
+                                  ? "Moderate"
+                                  : "Severe"}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                      <Text
-                        style={[
-                          styles.entryDescription,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        {entry.symptoms}
-                      </Text>
-                      <View style={styles.entryFooter}>
                         <Text
                           style={[
-                            styles.entryType,
+                            styles.entryDescription,
                             { fontFamily: FONTS.BarlowSemiCondensed },
                           ]}
                         >
-                          {entry.type === "ai_assessment"
-                            ? "AI Assessment"
-                            : "Manual Entry"}{" "}
-                          • {entry.createdBy}
+                          {entry.symptoms}
                         </Text>
+                        <View style={styles.entryFooter}>
+                          <Text
+                            style={[
+                              styles.entryType,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            {entry.type === "ai_assessment"
+                              ? "AI Assessment"
+                              : "Manual Entry"}{" "}
+                            • {entry.createdBy}
+                          </Text>
+                        </View>
+                        {/* View Details Indicator */}
+                        <View style={styles.viewDetailsIndicator}>
+                          <Text style={styles.viewDetailsText}>
+                            Tap to view details
+                          </Text>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={16}
+                            color="#666"
+                          />
+                        </View>
                       </View>
-                      {/* View Details Indicator */}
-                      <View style={styles.viewDetailsIndicator}>
-                        <Text style={styles.viewDetailsText}>
-                          Tap to view details
-                        </Text>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={16}
-                          color="#666"
-                        />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <View style={styles.noEntries}>
-                  <Ionicons name="document" size={40} color="#CCC" />
-                  <Text style={styles.noEntriesText}>
-                    No entries found for selected date range
-                  </Text>
-                </View>
-              )}
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.noEntries}>
+                    <Ionicons name="document" size={40} color="#CCC" />
+                    <Text style={styles.noEntriesText}>
+                      No entries found for selected date range
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
 
         {/* Date Pickers */}
         {showStartDatePicker && (
@@ -499,9 +513,8 @@ export default function History() {
             maximumDate={new Date()}
           />
         )}
-
-        <BottomNavigation />
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -510,6 +523,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "transparent",
+  },
+  contentArea: {
+    flex: 1,
   },
   contentContainer: {
     flexGrow: 1,
