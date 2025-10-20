@@ -8,8 +8,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -21,6 +22,7 @@ import { FONTS } from "../../constants/constants";
 
 export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Set dates without time components for proper filtering
   const getDateWithoutTime = (date: Date) => {
@@ -139,14 +141,26 @@ export default function History() {
       return entryDate >= startDate && entryDate <= endDate;
     }) || [];
 
+  // Apply search filter (case-insensitive)
+  const searchFilteredEntries = filteredEntries.filter((entry) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      entry.symptoms.toLowerCase().includes(query) ||
+      entry.category?.toLowerCase().includes(query) ||
+      entry.notes?.toLowerCase().includes(query) ||
+      entry.createdBy.toLowerCase().includes(query)
+    );
+  });
+
   // Calculate health score
   const healthScore =
-    filteredEntries.length > 0
+    searchFilteredEntries.length > 0
       ? (
-          filteredEntries.reduce(
+          searchFilteredEntries.reduce(
             (sum, entry) => sum + (10 - entry.severity),
             0
-          ) / filteredEntries.length
+          ) / searchFilteredEntries.length
         ).toFixed(1)
       : "0.0";
 
@@ -156,6 +170,7 @@ export default function History() {
     endDate: endDate.toISOString(),
     totalEntries: allEntries?.length,
     filteredEntries: filteredEntries.length,
+    searchFilteredEntries: searchFilteredEntries.length,
     selectedRange,
   });
 
@@ -170,6 +185,30 @@ export default function History() {
           screenType="signin"
           bottomSpacing={0}
         />
+
+        {/* Fixed Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search-outline" size={20} color="#666" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search history..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <Ionicons name="close-circle" size={20} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
         {/* Scrollable content area below header */}
         <View style={styles.contentArea}>
@@ -365,11 +404,11 @@ export default function History() {
               {/* Entries List */}
               <View style={styles.entriesList}>
                 <Text style={styles.entriesTitle}>
-                  Recent Entries ({filteredEntries.length})
+                  Recent Entries ({searchFilteredEntries.length})
                 </Text>
 
-                {filteredEntries.length > 0 ? (
-                  filteredEntries.map((entry) => (
+                {searchFilteredEntries.length > 0 ? (
+                  searchFilteredEntries.map((entry) => (
                     <TouchableOpacity
                       key={entry._id}
                       style={styles.entryItem}
@@ -483,7 +522,9 @@ export default function History() {
                   <View style={styles.noEntries}>
                     <Ionicons name="document" size={40} color="#CCC" />
                     <Text style={styles.noEntriesText}>
-                      No entries found for selected date range
+                      {searchQuery.trim() 
+                        ? "No entries match your search" 
+                        : "No entries found for selected date range"}
                     </Text>
                   </View>
                 )}
@@ -534,6 +575,33 @@ const styles = StyleSheet.create({
   contentSection: {
     padding: 24,
     paddingTop: 40,
+  },
+  searchContainer: {
+    backgroundColor: "white",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  searchInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    color: "#1A1A1A",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  clearButton: {
+    padding: 4,
   },
   disclaimerContainer: {
     backgroundColor: "#FFF3CD",

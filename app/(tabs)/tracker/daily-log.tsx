@@ -1,15 +1,17 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
+import { useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -150,26 +152,67 @@ const styles = StyleSheet.create({
     color: "#333",
     textAlign: "center" as const,
   },
+  searchContainer: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "transparent",
+  },
+  searchInputWrapper: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    color: "#1A1A1A",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  clearButton: {
+    padding: 4,
+  },
 });
 
 export default function DailyLog() {
-  const insets = useSafeAreaInsets();
   const currentUser = useQuery(api.users.getCurrentUser);
-  
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Get today's date in local timezone - computed fresh on each render
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   const todayLocalDate = `${year}-${month}-${day}`;
-  
+
   const todaysEntries = useQuery(
     api.healthEntries.getTodaysEntries,
-    currentUser?._id ? { 
-      userId: currentUser._id,
-      localDate: todayLocalDate
-    } : "skip"
+    currentUser?._id
+      ? {
+          userId: currentUser._id,
+          localDate: todayLocalDate,
+        }
+      : "skip"
   );
+
+  // Filter entries based on search query (case-insensitive)
+  const filteredEntries = todaysEntries?.filter((entry) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      entry.symptoms.toLowerCase().includes(query) ||
+      entry.category?.toLowerCase().includes(query) ||
+      entry.notes?.toLowerCase().includes(query) ||
+      entry.createdBy.toLowerCase().includes(query)
+    );
+  });
 
   const handleAddLogEntry = () => {
     router.push("/tracker/add-health-entry");
@@ -214,44 +257,113 @@ export default function DailyLog() {
           screenType="signin"
           bottomSpacing={0}
         />
+
+        <View style={styles.contentSection}>
+          <View
+            style={{ marginBottom: 10, marginTop: -20, alignItems: "center" }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 24,
+                  lineHeight: 28,
+                  fontWeight: "600",
+                  color: "#1A1A1A",
+                  fontFamily: FONTS.BarlowSemiCondensed,
+                }}
+              >
+                Daily Log
+              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginLeft: 10,
+                }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={22}
+                  color="#2A7DE1"
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 24,
+                    lineHeight: 28,
+                    fontWeight: "600",
+                    color: "#2A7DE1",
+                    fontFamily: FONTS.BarlowSemiCondensed,
+                  }}
+                >
+                  {new Date().toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={{
+                fontSize: 16,
+                lineHeight: 20,
+                color: "#666",
+                fontFamily: FONTS.BarlowSemiCondensed,
+                textAlign: "center",
+              }}
+            >
+              Your daily health entries for today
+            </Text>
+          </View>
+        </View>
+
+        {/* Fixed Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search-outline" size={20} color="#666" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search entries..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <Ionicons name="close-circle" size={20} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         <View style={styles.contentArea}>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.contentSection}>
-              <View style={{ marginBottom: 10, marginTop: -20, alignItems: "center" }}>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                  <Text
-                    style={{
-                      fontSize: 24,
-                      lineHeight: 28,
-                      fontWeight: "600",
-                      color: "#1A1A1A",
-                      fontFamily: FONTS.BarlowSemiCondensed,
-                    }}
-                  >
-                    Daily Log
-                  </Text>
-                  <View style={{ flexDirection: "row", alignItems: "center", marginLeft: 10 }}>
-                    <Ionicons name="calendar-outline" size={22} color="#2A7DE1" style={{ marginRight: 6 }} />
-                    <Text style={{ fontSize: 24, lineHeight: 28, fontWeight: "600", color: "#2A7DE1", fontFamily: FONTS.BarlowSemiCondensed }}>
-                      {new Date().toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={{ fontSize: 16, lineHeight: 20, color: "#666", fontFamily: FONTS.BarlowSemiCondensed, textAlign: "center" }}>
-                  Your daily health entries for today
-                </Text>
-              </View>
-            </View>
-            <View style={styles.contentSection}>
               <View style={styles.entriesContainer}>
                 {todaysEntries === undefined ? (
-                  <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Loading...</Text>
-                ) : todaysEntries && todaysEntries.length > 0 ? (
+                  <Text
+                    style={[
+                      styles.entriesText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Loading...
+                  </Text>
+                ) : filteredEntries && filteredEntries.length > 0 ? (
                   <View>
-                    {todaysEntries.map((entry) => (
+                    {filteredEntries.map((entry) => (
                       <TouchableOpacity
                         key={entry._id}
                         style={styles.entryItem}
@@ -259,43 +371,125 @@ export default function DailyLog() {
                       >
                         <View style={styles.entryHeader}>
                           <View style={styles.entryTime}>
-                            <Ionicons name="time-outline" size={16} color="#666" />
-                            <Text style={[styles.timeText, { fontFamily: FONTS.BarlowSemiCondensed }]}> {formatTime(entry.timestamp)} </Text>
+                            <Ionicons
+                              name="time-outline"
+                              size={16}
+                              color="#666"
+                            />
+                            <Text
+                              style={[
+                                styles.timeText,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                              ]}
+                            >
+                              {" "}
+                              {formatTime(entry.timestamp)}{" "}
+                            </Text>
                           </View>
-                          <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(entry.severity) }]}> 
-                            <Text style={[styles.severityText, { fontFamily: FONTS.BarlowSemiCondensed }]}> {getSeverityText(entry.severity)} ({entry.severity}/10) </Text>
+                          <View
+                            style={[
+                              styles.severityBadge,
+                              {
+                                backgroundColor: getSeverityColor(
+                                  entry.severity
+                                ),
+                              },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.severityText,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                              ]}
+                            >
+                              {" "}
+                              {getSeverityText(entry.severity)} (
+                              {entry.severity}/10){" "}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={[styles.symptomsText, { fontFamily: FONTS.BarlowSemiCondensed }]}> {entry.symptoms} </Text>
+                        <Text
+                          style={[
+                            styles.symptomsText,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          {" "}
+                          {entry.symptoms}{" "}
+                        </Text>
                         {entry.category ? (
                           <View style={styles.categoryContainer}>
-                            <Ionicons name="pricetag-outline" size={14} color="#2A7DE1" />
-                            <Text style={[styles.categoryText, { fontFamily: FONTS.BarlowSemiCondensed }]}> {entry.category} </Text>
+                            <Ionicons
+                              name="pricetag-outline"
+                              size={14}
+                              color="#2A7DE1"
+                            />
+                            <Text
+                              style={[
+                                styles.categoryText,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                              ]}
+                            >
+                              {" "}
+                              {entry.category}{" "}
+                            </Text>
                           </View>
                         ) : null}
                         <View style={styles.createdByContainer}>
-                          <Ionicons name={entry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"} size={12} color="#666" />
-                          <Text style={[styles.createdByText, { fontFamily: FONTS.BarlowSemiCondensed }]}> {entry.createdBy} </Text>
+                          <Ionicons
+                            name={
+                              entry.type === "ai_assessment"
+                                ? "hardware-chip-outline"
+                                : "person-outline"
+                            }
+                            size={12}
+                            color="#666"
+                          />
+                          <Text
+                            style={[
+                              styles.createdByText,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            {" "}
+                            {entry.createdBy}{" "}
+                          </Text>
                         </View>
                         {/* View Details Button */}
-                        <TouchableOpacity style={styles.viewDetailsButton} onPress={() => handleViewEntryDetails(entry._id)}>
-                          <Text style={styles.viewDetailsText}>View Details</Text>
-                          <Ionicons name="chevron-forward" size={16} color="#2A7DE1" />
+                        <TouchableOpacity
+                          style={styles.viewDetailsButton}
+                          onPress={() => handleViewEntryDetails(entry._id)}
+                        >
+                          <Text style={styles.viewDetailsText}>
+                            View Details
+                          </Text>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={16}
+                            color="#2A7DE1"
+                          />
                         </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
                   </View>
                 ) : (
-                  <Text style={[styles.entriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>No entries for today</Text>
+                  <Text
+                    style={[
+                      styles.entriesText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    {searchQuery.trim()
+                      ? "No entries match your search"
+                      : "No entries for today"}
+                  </Text>
                 )}
               </View>
             </View>
           </ScrollView>
         </View>
       </CurvedBackground>
-              <BottomNavigation />
-
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
-
