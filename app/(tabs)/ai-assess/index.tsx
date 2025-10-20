@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -69,13 +70,6 @@ async function convertImageToBase64(uri: string): Promise<string> {
   }
 }
 
-/**
- * Converts multiple image URIs to base64 strings
- */
-async function convertImagesToBase64(uris: string[]): Promise<string[]> {
-  const conversionPromises = uris.map((uri) => convertImageToBase64(uri));
-  return await Promise.all(conversionPromises);
-}
 
 export default function SymptomAssessment() {
   const router = useRouter();

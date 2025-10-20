@@ -2,6 +2,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAction, useMutation, useQuery } from "convex/react";
+import * as FileSystem from 'expo-file-system';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -21,6 +22,28 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
+/**
+ * Converts an image URI to base64 string using Expo SDK 54+ File API
+ */
+async function convertImageToBase64(uri: string): Promise<string> {
+  try {
+    const file = new FileSystem.File(uri);
+    const base64 = await file.base64();
+    return base64;
+  } catch (error) {
+    console.error("Error converting image to base64:", error);
+    throw error;
+  }
+}
+
+/**
+ * Converts multiple image URIs to base64 strings
+ */
+async function convertImagesToBase64(uris: string[]): Promise<string[]> {
+  const conversionPromises = uris.map(uri => convertImageToBase64(uri));
+  return await Promise.all(conversionPromises);
+}
+
 // Helper functions
 const getDurationDisplay = (duration: string): string => {
   const durationMap: Record<string, string> = {
@@ -37,6 +60,198 @@ const getDurationDisplay = (duration: string): string => {
 const cleanGeminiResponse = (text: string): string => {
   return text.replace(/\*\*/g, "");
 };
+
+// Render assessment as separate cards: Summary, Severity, Recommendations, Red Flags, Next Steps
+function renderAssessmentCards(text: string | null) {
+  if (!text) return null;
+  
+  console.log("=== Parsing Medical Triage Assessment ===");
+  console.log("Raw text length:", text.length);
+  
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  
+  // Add debug logging to see actual content
+  console.log('=== Raw Assessment Text Sample (first 500 chars) ===');
+  console.log(text.substring(0, 500));
+  console.log('=== Lines with ** markers (potential headers) ===');
+  lines.forEach((line, idx) => {
+    if (line.includes('**') || line.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)*:$/)) {
+      console.log(`Line ${idx}: "${line}"`);
+    }
+  });
+  
+  type SectionKey = 
+    | 'CLINICAL ASSESSMENT'
+    | 'VISUAL FINDINGS'
+    | 'CLINICAL INTERPRETATION'
+    | 'BURN/WOUND GRADING'
+    | 'INFECTION RISK'
+    | 'EMERGENCY RED FLAGS'
+    | 'RURAL GUIDANCE'
+    | 'URGENCY ASSESSMENT'
+    | 'RECOMMENDATIONS'
+    | 'NEXT STEPS'
+    | 'OTHER';
+    
+  const wantedOrder: SectionKey[] = [
+    'CLINICAL ASSESSMENT',
+    'VISUAL FINDINGS',
+    'CLINICAL INTERPRETATION',
+    'BURN/WOUND GRADING',
+    'INFECTION RISK',
+    'EMERGENCY RED FLAGS',
+    'RURAL GUIDANCE',
+    'URGENCY ASSESSMENT',
+    'RECOMMENDATIONS',
+    'NEXT STEPS'
+  ];
+  
+  const sections: Record<SectionKey, string[]> = {
+    'CLINICAL ASSESSMENT': [],
+    'VISUAL FINDINGS': [],
+    'CLINICAL INTERPRETATION': [],
+    'BURN/WOUND GRADING': [],
+    'INFECTION RISK': [],
+    'EMERGENCY RED FLAGS': [],
+    'RURAL GUIDANCE': [],
+    'URGENCY ASSESSMENT': [],
+    'RECOMMENDATIONS': [],
+    'NEXT STEPS': [],
+    'OTHER': [],
+  };
+  let current: SectionKey = 'CLINICAL ASSESSMENT';
+
+  const isHeader = (l: string): SectionKey | null => {
+    const lower = l.toLowerCase().trim();
+    // Remove markdown bold markers and numbered prefixes (e.g., "1. ", "2. ")
+    const cleaned = lower.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').trim();
+    
+    // Clinical Assessment (also matches variations like "Patient Assessment", "Initial Assessment")
+    if (/^(clinical|patient|initial)\s+assessment\s*:?/i.test(cleaned)) return 'CLINICAL ASSESSMENT';
+    
+    // Visual Findings from Medical Images
+    if (/^visual\s+findings?\s*(from\s+(medical\s+)?images?)?\s*:?/i.test(cleaned)) return 'VISUAL FINDINGS';
+    if (/^image\s+analysis\s*:?/i.test(cleaned)) return 'VISUAL FINDINGS';
+    
+    // Clinical Interpretation and Differential Considerations
+    if (/^clinical\s+interpretation\s*(and\s+differential\s+considerations?)?\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
+    if (/^differential\s+(diagnosis|considerations?)\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
+    if (/^interpretation\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
+    
+    // Burn/Wound/Injury Grading
+    if (/^(burn|wound|injury)\s*[\/,]?\s*(wound|injury)?\s*[\/,]?\s*(injury)?\s*(grading|classification|severity)\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
+    if (/^severity\s+(grading|classification|level)\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
+    if (/^grading\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
+    
+    // Infection Risk Assessment
+    if (/^infection\s+risk\s*(assessment)?\s*:?/i.test(cleaned)) return 'INFECTION RISK';
+    if (/^risk\s+of\s+infection\s*:?/i.test(cleaned)) return 'INFECTION RISK';
+    
+    // Specific Emergency Red Flags
+    if (/^(specific\s+)?emergency\s+red\s+flags?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
+    if (/^red\s+flags?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
+    if (/^warning\s+signs?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
+    
+    // Rural Specific Resource Guidance
+  if (/^rural[-\s]?specific\s+resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural[-\s]?specific\s+resource\s+guideline\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural\s+(specific\s+)?(resource\s+)?guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural\s+(considerations?|resources?)\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural\s+resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+  if (/^rural\s+resources?\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
+    
+    // Urgency Assessment
+    if (/^urgency\s+(assessment|level)\s*:?/i.test(cleaned)) return 'URGENCY ASSESSMENT';
+    if (/^urgency\s*:?/i.test(cleaned)) return 'URGENCY ASSESSMENT';
+    
+    // Recommendations
+  if (/^recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
+  if (/^treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
+  if (/^time[-\s]?sensitive\s+treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
+    
+    // Next Steps
+    if (/^next\s+steps?\s*:?/i.test(cleaned)) return 'NEXT STEPS';
+    if (/^action\s+plan\s*:?/i.test(cleaned)) return 'NEXT STEPS';
+    
+    return null;
+  };
+
+  for (const l of lines) {
+    if (!l) continue;
+    const hdr = isHeader(l);
+    if (hdr) { 
+      console.log(`✅ Found header: "${l}" → ${hdr}`);
+      current = hdr;
+      continue; 
+    }
+    const content = l.replace(/^[-•*]\s+/, '').replace(/^\d+\.\s+/, '');
+    if (content) {
+      sections[current].push(content);
+    }
+  }
+  
+  console.log("=== Parsed Medical Sections ===");
+  Object.keys(sections).forEach(key => {
+    console.log(`${key}: ${sections[key as SectionKey].length} items`);
+  });
+
+  const Card = ({ title, items, icon, iconColor = "#2A7DE1" }: { 
+    title: string; 
+    items: string[]; 
+    icon: React.ReactNode;
+    iconColor?: string;
+  }) => (
+    <View style={styles.assessmentCard}>
+      <View style={styles.cardHeader}>
+        {icon}
+        <Text style={[styles.cardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+      </View>
+      {items.map((it, idx) => (
+        <View key={idx} style={styles.cardItem}>
+          <Text style={styles.bulletPoint}>•</Text>
+          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            {it}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
+    'CLINICAL ASSESSMENT': { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
+    'VISUAL FINDINGS': { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
+    'CLINICAL INTERPRETATION': { icon: <Ionicons name="clipboard" size={20} color="#3498DB" />, color: "#3498DB" },
+    'BURN/WOUND GRADING': { icon: <Ionicons name="fitness" size={20} color="#E67E22" />, color: "#E67E22" },
+    'INFECTION RISK': { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" />, color: "#E74C3C" },
+    'EMERGENCY RED FLAGS': { icon: <Ionicons name="warning" size={20} color="#DC3545" />, color: "#DC3545" },
+    'RURAL GUIDANCE': { icon: <Ionicons name="location" size={20} color="#16A085" />, color: "#16A085" },
+    'URGENCY ASSESSMENT': { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" />, color: "#FF6B35" },
+    'RECOMMENDATIONS': { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" />, color: "#28A745" },
+    'NEXT STEPS': { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
+    'OTHER': { icon: <Ionicons name="information-circle" size={20} color="#6C757D" />, color: "#6C757D" },
+  };
+
+  return (
+    <View>
+      {wantedOrder.map((key) => (
+        sections[key] && sections[key].length > 0 ? (
+          <Card 
+            key={key} 
+            title={key} 
+            items={sections[key]} 
+            icon={icons[key].icon}
+            iconColor={icons[key].color}
+          />
+        ) : null
+      ))}
+      {sections['OTHER'] && sections['OTHER'].length > 0 && (
+        <Card title="OTHER" items={sections['OTHER']} icon={icons['OTHER'].icon} />
+      )}
+    </View>
+  );
+}
 
 export default function AssessmentResults() {
   const router = useRouter();
@@ -63,6 +278,169 @@ export default function AssessmentResults() {
   const aiContext = params.aiContext
     ? JSON.parse(params.aiContext as string)
     : null;
+
+  // Define fetchAIAssessment first so it is in scope and can be called after images are processed
+  const fetchAIAssessment = async (imagesArg: string[] = []) => {
+    // Prevent multiple simultaneous requests and re-fetches
+    if (isFetchingRef.current || hasAttemptedFetch) {
+      return;
+    }
+
+    try {
+      isFetchingRef.current = true;
+      setHasAttemptedFetch(true);
+      setIsLoading(true);
+      setAssessmentError(false);
+
+      // Extract parameters with proper fallbacks
+      const description = Array.isArray(params.description)
+        ? params.description[0]
+        : (params.description as string) || "";
+
+      const severity = parseInt(
+        Array.isArray(params.severity)
+          ? params.severity[0]
+          : (params.severity as string) || "5"
+      );
+
+      const duration = Array.isArray(params.duration)
+        ? params.duration[0]
+        : (params.duration as string) || "";
+
+      const category =
+        aiContext?.category ||
+        (Array.isArray(params.category)
+          ? params.category[0]
+          : (params.category as string)) ||
+        "General Symptoms";
+
+      // Use imagesArg if provided; otherwise fallback to any already-processed photos in aiContext
+      const imagesToSend = imagesArg && imagesArg.length > 0
+        ? imagesArg
+        : (aiContext?.uploadedPhotos || []);
+
+      console.log("🚀 Calling Gemini with:", {
+        description: description.substring(0, 50),
+        severity,
+        duration,
+        category,
+        symptomsCount: aiContext?.symptoms?.length || 0,
+        imageCount: imagesToSend.length,
+        hasImages: imagesToSend.length > 0,
+      });
+
+      const res = await generateContext({
+        description,
+        severity,
+        duration,
+        environmentalFactors: aiContext?.environmentalFactors || [],
+        category,
+        symptoms: aiContext?.symptoms || [],
+        images: imagesToSend,
+      });
+
+      const cleanedContext = cleanGeminiResponse(res.context);
+      setSymptomContext(cleanedContext);
+
+      // Automatically log the AI assessment
+      if (currentUser?._id && !isLogged) {
+        try {
+          const today = new Date();
+          const dateString = today.toISOString().split("T")[0];
+          const timestamp = today.getTime();
+
+          await logAIAssessment({
+            userId: currentUser._id,
+            date: dateString,
+            timestamp,
+            symptoms: description,
+            severity: severity,
+            category: category,
+            duration: duration,
+            aiContext: cleanedContext,
+            photos: displayPhotos,
+            notes: `AI Assessment - ${category}`,
+          });
+
+          console.log(
+            "✅ AI assessment automatically logged to health entries"
+          );
+          setIsLogged(true);
+        } catch (logError) {
+          console.error("❌ Failed to log AI assessment:", logError);
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ AI assessment error:", error);
+
+      const description = Array.isArray(params.description)
+        ? params.description[0]
+        : (params.description as string) || "";
+      const severity = parseInt(
+        Array.isArray(params.severity)
+          ? params.severity[0]
+          : (params.severity as string) || "5"
+      );
+      const duration = Array.isArray(params.duration)
+        ? params.duration[0]
+        : (params.duration as string) || "";
+      const category =
+        aiContext?.category ||
+        (Array.isArray(params.category)
+          ? params.category[0]
+          : (params.category as string)) ||
+        "General Symptoms";
+
+      // Check if it's a rate limit error
+      if ((error as any)?.code === 429 || (error as any)?.status === "RESOURCE_EXHAUSTED") {
+        console.log("⏳ Rate limit hit, using fallback assessment");
+        setAssessmentError(true);
+        const fallback = getDetailedFallbackAssessment(
+          category,
+          severity,
+          duration,
+          aiContext?.symptoms || []
+        );
+        setSymptomContext(fallback.context);
+        return;
+      }
+
+      // For other errors, use fallback but don't retry
+      setAssessmentError(true);
+      const fallback = getDetailedFallbackAssessment(
+        category,
+        severity,
+        duration,
+        aiContext?.symptoms || []
+      );
+      setSymptomContext(fallback.context);
+    } finally {
+      setIsLoading(false);
+      isFetchingRef.current = false;
+    }
+  };
+
+  // Process images on mount (deferred from previous screens)
+  useEffect(() => {
+    const processImagesAndFetchAssessment = async () => {
+      let base64Images: string[] = [];
+      if (displayPhotos.length > 0 && aiContext) {
+        console.log(`📸 Processing ${displayPhotos.length} images in background...`);
+        try {
+          base64Images = await convertImagesToBase64(displayPhotos);
+          console.log(`✅ Successfully converted ${base64Images.length} images to base64`);
+          aiContext.uploadedPhotos = base64Images;
+        } catch (error) {
+          console.error("❌ Error converting images:", error);
+          aiContext.uploadedPhotos = [];
+        }
+      }
+      // Trigger Gemini request after images are ready (or immediately if no images)
+      fetchAIAssessment(base64Images);
+    };
+
+    processImagesAndFetchAssessment();
+  }, []); // Run once on mount
 
   useEffect(() => {
     console.log("📋 ALL RECEIVED PARAMS:", {
@@ -91,159 +469,6 @@ export default function AssessmentResults() {
     params.description,
     params.duration,
     params.severity,
-  ]);
-
-  useEffect(() => {
-    const fetchAIAssessment = async () => {
-      // Prevent multiple simultaneous requests and re-fetches
-      if (isFetchingRef.current || hasAttemptedFetch) {
-        return;
-      }
-
-      try {
-        isFetchingRef.current = true;
-        setHasAttemptedFetch(true);
-        setIsLoading(true);
-        setAssessmentError(false);
-
-        // Extract parameters with proper fallbacks
-        const description = Array.isArray(params.description)
-          ? params.description[0]
-          : params.description || "";
-
-        const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
-            : params.severity || "5"
-        );
-
-        const duration = Array.isArray(params.duration)
-          ? params.duration[0]
-          : params.duration || "";
-
-        const category =
-          aiContext?.category ||
-          (Array.isArray(params.category)
-            ? params.category[0]
-            : params.category) ||
-          "General Symptoms";
-
-        console.log("🚀 Calling Gemini with:", {
-          description: description.substring(0, 50),
-          severity,
-          duration,
-          category,
-          symptomsCount: aiContext?.symptoms?.length || 0,
-          imageCount: aiContext?.uploadedPhotos?.length || 0,
-        });
-
-        const res = await generateContext({
-          description,
-          severity,
-          duration,
-          environmentalFactors: aiContext?.environmentalFactors || [],
-          category,
-          symptoms: aiContext?.symptoms || [],
-          images: aiContext?.uploadedPhotos || [],
-        });
-
-        const cleanedContext = cleanGeminiResponse(res.context);
-        setSymptomContext(cleanedContext);
-
-        // Automatically log the AI assessment
-        if (currentUser?._id && !isLogged) {
-          try {
-            const today = new Date();
-            const dateString = today.toISOString().split("T")[0];
-            const timestamp = today.getTime();
-
-            await logAIAssessment({
-              userId: currentUser._id,
-              date: dateString,
-              timestamp,
-              symptoms: description,
-              severity: severity,
-              category: category,
-              duration: duration,
-              aiContext: cleanedContext,
-              photos: displayPhotos,
-              notes: `AI Assessment - ${category}`,
-            });
-
-            console.log(
-              "✅ AI assessment automatically logged to health entries"
-            );
-            setIsLogged(true);
-          } catch (logError) {
-            console.error("❌ Failed to log AI assessment:", logError);
-          }
-        }
-      } catch (error: any) {
-        console.error("❌ AI assessment error:", error);
-
-        const description = Array.isArray(params.description)
-          ? params.description[0]
-          : params.description || "";
-        const severity = parseInt(
-          Array.isArray(params.severity)
-            ? params.severity[0]
-            : params.severity || "5"
-        );
-        const duration = Array.isArray(params.duration)
-          ? params.duration[0]
-          : params.duration || "";
-        const category =
-          aiContext?.category ||
-          (Array.isArray(params.category)
-            ? params.category[0]
-            : params.category) ||
-          "General Symptoms";
-
-        // Check if it's a rate limit error
-        if (error?.code === 429 || error?.status === "RESOURCE_EXHAUSTED") {
-          console.log("⏳ Rate limit hit, using fallback assessment");
-          setAssessmentError(true);
-          const fallback = getDetailedFallbackAssessment(
-            category,
-            severity,
-            duration,
-            aiContext?.symptoms || []
-          );
-          setSymptomContext(fallback.context);
-          return;
-        }
-
-        // For other errors, use fallback but don't retry
-        setAssessmentError(true);
-        const fallback = getDetailedFallbackAssessment(
-          category,
-          severity,
-          duration,
-          aiContext?.symptoms || []
-        );
-        setSymptomContext(fallback.context);
-      } finally {
-        setIsLoading(false);
-        isFetchingRef.current = false;
-      }
-    };
-
-    fetchAIAssessment();
-  }, [
-    currentUser?._id,
-    isLogged,
-    aiContext?.category,
-    aiContext?.environmentalFactors,
-    aiContext?.symptoms,
-    aiContext?.uploadedPhotos,
-    displayPhotos,
-    generateContext,
-    logAIAssessment,
-    params.category,
-    params.description,
-    params.duration,
-    params.severity,
-    hasAttemptedFetch, // Add this to dependencies
   ]);
 
   // Simplified fallback for client-side errors
@@ -378,53 +603,51 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                 </View>
               </View>
 
-              <ResultCard title="Medical Triage Assessment" icon="medical">
-                {isLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#2A7DE1" />
-                    <Text
-                      style={[
-                        styles.loadingText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Analyzing your symptoms with AI assessment...
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                    <Text
-                      style={[
-                        styles.cardText,
-                        {
-                          fontFamily: FONTS.BarlowSemiCondensed,
-                          lineHeight: 22,
-                        },
-                      ]}
-                    >
-                      {symptomContext}
-                    </Text>
-                    {assessmentError && (
-                      <View style={styles.errorNote}>
-                        <Ionicons
-                          name="information-circle"
-                          size={16}
-                          color="#FF6B35"
-                        />
-                        <Text
-                          style={[
-                            styles.errorNoteText,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Note: Unable to complete full AI analysis. For medical
-                          guidance, contact Health Link Alberta at 811.
-                        </Text>
-                      </View>
-                    )}
-                  </>
-                )}
-              </ResultCard>
+              {/* Medical Triage Assessment - Separated into Cards */}
+              <Text
+                style={[
+                  styles.sectionSubtitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 16, marginTop: 8 },
+                ]}
+              >
+                Medical Triage Assessment
+              </Text>
+              
+              {isLoading ? (
+                <View style={styles.loadingCard}>
+                  <ActivityIndicator size="large" color="#2A7DE1" />
+                  <Text
+                    style={[
+                      styles.loadingText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Analyzing your symptoms with AI assessment...
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {renderAssessmentCards(symptomContext)}
+                  {assessmentError && (
+                    <View style={styles.errorNote}>
+                      <Ionicons
+                        name="information-circle"
+                        size={16}
+                        color="#FF6B35"
+                      />
+                      <Text
+                        style={[
+                          styles.errorNoteText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        Note: Unable to complete full AI analysis. For medical
+                        guidance, contact Health Link Alberta at 811.
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
 
               {/* Rest of your JSX remains the same */}
               {aiContext && (
@@ -593,11 +816,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                 </View>
               </ResultCard>
 
-              {actualSeverity >= 6 && (
-                <ResultCard
-                  title="🚨 Immediate Action Recommended"
-                  icon="alert-circle"
-                >
+              <ResultCard title="Emergency Red Flags" icon="warning">
                   <View style={styles.emergencyList}>
                     <EmergencyItem text="Severe difficulty breathing or chest pain" />
                     <EmergencyItem text="Signs of stroke (face drooping, arm weakness, speech difficulty)" />
@@ -620,8 +839,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                       Call 911 Now
                     </Text>
                   </TouchableOpacity>
-                </ResultCard>
-              )}
+              </ResultCard>
 
               <View style={styles.actionButtons}>
                 <TouchableOpacity
@@ -636,6 +854,21 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     ]}
                   >
                     New Assessment
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.trackerButton}
+                  onPress={() => router.push("/(tabs)/tracker")}
+                >
+                  <Ionicons name="fitness" size={20} color="white" />
+                  <Text
+                    style={[
+                      styles.trackerButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Go to Health Tracker
                   </Text>
                 </TouchableOpacity>
 
@@ -663,7 +896,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
   );
 }
 
-// Your styles remain the same...
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -884,6 +1116,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 8,
   },
+  trackerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#28A745",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  trackerButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
   homeButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -899,5 +1146,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 8,
+  },
+  // Assessment Card Styles (like vision-test)
+  assessmentCard: {
+    backgroundColor: "#F0F8FF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardItem: {
+    flexDirection: "row",
+    marginBottom: 8,
+    paddingLeft: 4,
+  },
+  bulletPoint: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    marginRight: 8,
+    marginTop: 2,
+  },
+  cardItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1A1A1A",
+    lineHeight: 22,
+  },
+  sectionSubtitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    textAlign: "left",
+  },
+  loadingCard: {
+    backgroundColor: "white",
+    padding: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
   },
 });
