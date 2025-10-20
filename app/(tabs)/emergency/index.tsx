@@ -17,7 +17,8 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
-import OfflineMap from "../../components/OfflineMap";
+import MapboxOfflineMap from "../../components/MapboxOfflineMap";
+import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { FONTS } from "../../constants/constants";
 
 // Define types for our component
@@ -64,6 +65,7 @@ export default function Emergency() {
   const [realTimeClinics, setRealTimeClinics] = useState<RealTimeClinicData[]>(
     []
   );
+  const [showOfflineDownloader, setShowOfflineDownloader] = useState(false);
 
   // Get location services status and emergency details
   const locationStatus = useQuery(
@@ -438,41 +440,62 @@ export default function Emergency() {
           </View>
         </View>
 
-        {/* Offline Map Section - TEMPORARILY DISABLED */}
-        {/* TODO: Rebuild app with device/emulator: npx expo run:android */}
-        {/* Maps require native module rebuild - uncomment after building new dev client */}
-        {false && locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
+        {/* Offline Map Section with Mapbox */}
+        {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
+            <View style={styles.mapHeaderContainer}>
+              <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
+              <TouchableOpacity
+                style={styles.downloadMapsButton}
+                onPress={() => setShowOfflineDownloader(true)}
+              >
+                <Icon name="cloud-download" size={20} color="#2A7DE1" />
+                <Text style={styles.downloadMapsText}>Offline Maps</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.card}>
               <View style={styles.cardContent}>
                 <Text style={styles.mapDescription}>
-                  Interactive map showing nearby clinics. Works offline once loaded.
+                  Interactive map showing nearby clinics. Download maps for offline use.
                 </Text>
-                <OfflineMap
-                  clinics={realTimeClinics}
-                  onMarkerPress={(clinicId) => {
-                    const clinic = realTimeClinics.find((c) => c.id === clinicId);
-                    if (clinic) {
-                      Alert.alert(
-                        clinic.name,
-                        `${clinic.address}\n\nDistance: ${clinic.distanceText}`,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: "Call",
-                            onPress: () =>
-                              clinic.phone && handleEmergencyCall(clinic.phone),
-                          },
-                          {
-                            text: "Directions",
-                            onPress: () => openInMaps(clinic),
-                          },
-                        ]
-                      );
-                    }
+                <MapboxOfflineMap
+                  clinics={realTimeClinics.map(clinic => ({
+                    id: clinic.id,
+                    name: clinic.name,
+                    address: clinic.address,
+                    latitude: clinic.coordinates.latitude,
+                    longitude: clinic.coordinates.longitude,
+                    distance: clinic.distance,
+                    phone: clinic.phone || undefined,
+                  }))}
+                  userLocation={locationStatus.location ? (() => {
+                    const [lat, lng] = locationStatus.location.split(',').map(parseFloat);
+                    return { latitude: lat, longitude: lng };
+                  })() : null}
+                  onClinicPress={(clinic) => {
+                    Alert.alert(
+                      clinic.name,
+                      `${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Call",
+                          onPress: () =>
+                            clinic.phone && handleEmergencyCall(clinic.phone),
+                        },
+                        {
+                          text: "Directions",
+                          onPress: () => openInMaps({
+                            name: clinic.name,
+                            coordinates: {
+                              latitude: clinic.latitude,
+                              longitude: clinic.longitude,
+                            },
+                          } as any),
+                        },
+                      ]
+                    );
                   }}
-                  height={350}
                 />
               </View>
             </View>
@@ -545,6 +568,11 @@ export default function Emergency() {
         </View>
       </CurvedBackground>
       <BottomNavigation />
+      
+      <OfflineMapDownloader 
+        visible={showOfflineDownloader} 
+        onClose={() => setShowOfflineDownloader(false)} 
+      />
     </SafeAreaView>
   );
 }
@@ -843,5 +871,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
     flex: 1,
+  },
+  mapHeaderContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  downloadMapsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(42, 125, 225, 0.1)",
+  },
+  downloadMapsText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+    color: "#2A7DE1",
+    marginLeft: 6,
   },
 });
