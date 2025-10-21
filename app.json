@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "rahc-app",
+    "name": "Rural Alberta Health Connect",
     "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,9 +15,6 @@
         "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone.",
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "config": {
-        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
       }
     },
     "android": {
@@ -35,12 +32,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
-        }
-      }
+      ]
     },
     "web": {
       "output": "static",
