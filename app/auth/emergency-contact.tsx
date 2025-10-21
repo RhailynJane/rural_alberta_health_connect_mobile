@@ -3,16 +3,16 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -97,6 +97,8 @@ export default function EmergencyContact() {
         const digits = value.replace(/\D/g, '');
         if (digits.length < 10) {
           error = 'Phone number must be at least 10 digits';
+        } else if (digits.length > 10) {
+          error = 'Phone number must be exactly 10 digits';
         }
         break;
       }
@@ -116,11 +118,24 @@ export default function EmergencyContact() {
   const handleInputChange = (field: string, value: string) => {
     if (field === 'contactName') {
       setContactName(value);
+      validateField(field, value);
     } else if (field === 'contactPhone') {
+      // Check BEFORE formatting if input exceeds 10 digits
+      const inputDigits = value.replace(/\D/g, '');
+      const exceeded = inputDigits.length > 10;
+      
+      // Format (this will slice to 10 digits)
       const formatted = formatPhoneNumber(value);
       setContactPhone(formatted);
+      
+      // If user tried to type more than 10 digits, show error immediately
+      if (exceeded) {
+        setErrors((prev) => ({ ...prev, [field]: 'Phone number must be exactly 10 digits' }));
+      } else {
+        // Otherwise validate normally
+        validateField(field, formatted);
+      }
     }
-    validateField(field, value);
   };
 
   const handleContinue = async () => {
@@ -397,6 +412,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 16,
     fontSize: 15,
+    color: "#1A1A1A",
     marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -451,8 +467,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   inputError: {
+    backgroundColor: "white",
     borderColor: "red",
     borderWidth: 1.5,
+    color: "#1A1A1A",
   },
   errorText: {
     color: "red",

@@ -39,6 +39,10 @@ export default function AddHealthEntry() {
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Error modal state
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState("");
 
   // State for picker visibility
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -75,14 +79,19 @@ export default function AddHealthEntry() {
   // Handle image picker
   const pickImage = async () => {
     try {
+      // Check photo limit
+      if (photos.length >= 3) {
+        setErrorModalMessage("You can only add up to 3 photos per health entry.");
+        setErrorModalVisible(true);
+        return;
+      }
+
       // Request permissions
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission required",
-          "Sorry, we need camera roll permissions to upload photos."
-        );
+        setErrorModalMessage("Sorry, we need camera roll permissions to upload photos.");
+        setErrorModalVisible(true);
         return;
       }
 
@@ -99,20 +108,26 @@ export default function AddHealthEntry() {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image. Please try again.");
+      setErrorModalMessage("Failed to pick image. Please try again.");
+      setErrorModalVisible(true);
     }
   };
 
   // Take photo with camera
   const takePhoto = async () => {
     try {
+      // Check photo limit
+      if (photos.length >= 3) {
+        setErrorModalMessage("You can only add up to 3 photos per health entry.");
+        setErrorModalVisible(true);
+        return;
+      }
+
       // Request permissions
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission required",
-          "Sorry, we need camera permissions to take photos."
-        );
+        setErrorModalMessage("Sorry, we need camera permissions to take photos.");
+        setErrorModalVisible(true);
         return;
       }
 
@@ -128,13 +143,21 @@ export default function AddHealthEntry() {
       }
     } catch (error) {
       console.error("Error taking photo:", error);
-      Alert.alert("Error", "Failed to take photo. Please try again.");
+      setErrorModalMessage("Failed to take photo. Please try again.");
+      setErrorModalVisible(true);
     }
   };
 
   // Upload image to Convex storage
   const uploadImage = async (imageUri: string) => {
     if (uploading) return;
+
+    // Double-check photo limit before starting upload
+    if (photos.length >= 3) {
+      setErrorModalMessage("You can only add up to 3 photos per health entry.");
+      setErrorModalVisible(true);
+      return;
+    }
 
     setUploading(true);
     try {
@@ -161,13 +184,21 @@ export default function AddHealthEntry() {
       // Store the photo reference
       const photoUrl = await storeUploadedPhoto({ storageId });
 
-      // Add to local state
-      setPhotos((prev) => [...prev, photoUrl]);
+      // Final check before adding to state (in case of race conditions)
+      setPhotos((prev) => {
+        if (prev.length >= 3) {
+          setErrorModalMessage("You can only add up to 3 photos per health entry.");
+          setErrorModalVisible(true);
+          return prev; // Don't add if limit reached
+        }
+        return [...prev, photoUrl];
+      });
 
       console.log("✅ Photo uploaded successfully:", photoUrl);
     } catch (error) {
       console.error("❌ Error uploading image:", error);
-      Alert.alert("Upload Error", "Failed to upload photo. Please try again.");
+      setErrorModalMessage("Failed to upload photo. Please try again.");
+      setErrorModalVisible(true);
     } finally {
       setUploading(false);
     }
@@ -366,37 +397,55 @@ export default function AddHealthEntry() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Add Photos ({photos.length}/5)
+                    Add Photos ({photos.length}/3)
                   </Text>
 
                   {/* Photo Upload Buttons */}
                   <View style={styles.photoButtonsContainer}>
                     <TouchableOpacity
-                      style={styles.photoButton}
+                      style={[
+                        styles.photoButton,
+                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                      ]}
                       onPress={pickImage}
-                      disabled={uploading || photos.length >= 5}
+                      disabled={uploading || photos.length >= 3}
                     >
                       <Ionicons
                         name="image-outline"
                         size={20}
-                        color="#2A7DE1"
+                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
                       />
-                      <Text style={styles.photoButtonText}>
+                      <Text 
+                        style={[
+                          styles.photoButtonText,
+                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                        ]}
+                      >
                         Choose from Library
                       </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.photoButton}
+                      style={[
+                        styles.photoButton,
+                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                      ]}
                       onPress={takePhoto}
-                      disabled={uploading || photos.length >= 5}
+                      disabled={uploading || photos.length >= 3}
                     >
                       <Ionicons
                         name="camera-outline"
                         size={20}
-                        color="#2A7DE1"
+                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
                       />
-                      <Text style={styles.photoButtonText}>Take Photo</Text>
+                      <Text 
+                        style={[
+                          styles.photoButtonText,
+                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                        ]}
+                      >
+                        Take Photo
+                      </Text>
                     </TouchableOpacity>
                   </View>
 
@@ -642,6 +691,40 @@ export default function AddHealthEntry() {
           </View>
         </Modal>
 
+        {/* Error Modal */}
+        <Modal
+          visible={errorModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setErrorModalVisible(false)}
+        >
+          <View style={styles.errorModalOverlay}>
+            <View style={styles.errorModalContainer}>
+              <Text
+                style={[
+                  styles.errorModalMessage,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                {errorModalMessage}
+              </Text>
+              <TouchableOpacity
+                style={styles.errorModalButton}
+                onPress={() => setErrorModalVisible(false)}
+              >
+                <Text
+                  style={[
+                    styles.errorModalButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {/* Bottom navigation */}
       </CurvedBackground>
       <BottomNavigation />
@@ -731,6 +814,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+  },
+  photoButtonDisabled: {
+    backgroundColor: "#F8F9FA",
+    borderColor: "#E9ECEF",
+  },
+  photoButtonTextDisabled: {
+    color: "#999",
   },
   uploadingContainer: {
     backgroundColor: "#FFF3E0",
@@ -886,6 +976,46 @@ const styles = StyleSheet.create({
     backgroundColor: "#6C757D",
   },
   successButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorModalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalMessage: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorModalButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  errorModalButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
