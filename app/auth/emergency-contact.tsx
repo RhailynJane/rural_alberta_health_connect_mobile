@@ -3,16 +3,16 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -97,6 +97,8 @@ export default function EmergencyContact() {
         const digits = value.replace(/\D/g, '');
         if (digits.length < 10) {
           error = 'Phone number must be at least 10 digits';
+        } else if (digits.length > 10) {
+          error = 'Phone number must be exactly 10 digits';
         }
         break;
       }
@@ -116,11 +118,12 @@ export default function EmergencyContact() {
   const handleInputChange = (field: string, value: string) => {
     if (field === 'contactName') {
       setContactName(value);
+      validateField(field, value);
     } else if (field === 'contactPhone') {
       const formatted = formatPhoneNumber(value);
       setContactPhone(formatted);
+      validateField(field, formatted);
     }
-    validateField(field, value);
   };
 
   const handleContinue = async () => {

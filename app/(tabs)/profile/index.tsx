@@ -5,14 +5,14 @@ import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -325,6 +325,7 @@ export default function Profile() {
         const digits = value.replace(/\D/g, '');
         // Limit to 10 digits
         if (digits.length > 10) {
+          error = 'Phone number must be exactly 10 digits';
           const limited = digits.slice(0, 10);
           const formatted = `(${limited.slice(0,3)}) ${limited.slice(3,6)}-${limited.slice(6,10)}`;
           setUserData((prev) => ({ ...prev, emergencyContactPhone: formatted }));
