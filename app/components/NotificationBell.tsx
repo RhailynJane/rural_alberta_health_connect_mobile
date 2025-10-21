@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
-import { checkAndUpdateReminderDue, getAllScheduledNotifications, getSymptomReminderDetails, isBellUnread, markBellRead, ReminderSettings } from '../_utils/notifications';
+import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread, markBellRead, ReminderSettings } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface NotificationBellProps {
@@ -18,34 +18,25 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
     frequency?: string;
     time?: string;
     dayOfWeek?: string;
-    allNotifications: any[];
+    allNotifications: any[]; // deprecated view removed but keep shape
     isDue: boolean;
   } | null>(null);
   const [unread, setUnread] = useState(false);
+  // Local state just for showing due info; management moved to Profile page
 
   const loadReminderDetails = async () => {
     try {
-      const details = await getSymptomReminderDetails();
-      const allNotifs = await getAllScheduledNotifications();
-      const isDue = await checkAndUpdateReminderDue(reminderSettings);
-      
+  const list = await getReminders();
+  const isDue = await checkAndUpdateAnyReminderDue(list);
       setReminderInfo({
-        scheduled: details?.scheduled || false,
-        enabled: reminderEnabled,
-        allNotifications: allNotifs,
+        scheduled: list.length > 0,
+        enabled: true,
+        allNotifications: [],
         isDue,
-        time: reminderSettings?.time,
-        frequency: reminderSettings?.frequency,
-        dayOfWeek: reminderSettings?.dayOfWeek,
       });
     } catch (e) {
       console.error('Error loading reminder details:', e);
-      setReminderInfo({
-        scheduled: false,
-        enabled: reminderEnabled,
-        allNotifications: [],
-        isDue: false,
-      });
+      setReminderInfo({ scheduled: false, enabled: false, allNotifications: [], isDue: false });
     }
   };
 
@@ -59,19 +50,11 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
   };
 
   useEffect(() => {
-    // Check if reminder is due and update unread flag
+    // Check if any reminder is due and update unread flag
     const checkReminder = async () => {
-      // If no reminder settings or not enabled, clear unread
-      if (!reminderSettings || !reminderEnabled) {
-        console.log('[NotificationBell] No reminder settings or not enabled, clearing unread');
-        setUnread(false);
-        await markBellRead();
-        return;
-      }
-
-      console.log('[NotificationBell] Checking reminder due status...', reminderSettings);
-      // Check if it's time for the reminder (updates unread flag if due)
-      await checkAndUpdateReminderDue(reminderSettings);
+      // Load reminders from storage and compute due
+  const list = await getReminders();
+  await checkAndUpdateAnyReminderDue(list);
       
       // Get the current unread status
       const currentUnread = await isBellUnread();
@@ -96,6 +79,8 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
       off();
     };
   }, [reminderEnabled, reminderSettings]);
+
+  // Management UI removed from bell
 
   return (
     <>
@@ -127,93 +112,29 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
             </View>
             
             <ScrollView style={styles.scrollView}>
-              {reminderInfo?.enabled ? (
-                <>
-                  <View style={styles.enabledBanner}>
-                    <Icon name="check-circle" size={20} color={COLORS.success} />
-                    <Text style={styles.enabledText}>Reminders are enabled</Text>
+              {reminderInfo?.isDue ? (
+                <View style={styles.pendingNotificationCard}>
+                  <View style={styles.notificationHeader}>
+                    <Icon name="notification-important" size={18} color={COLORS.error} />
+                    <Text style={styles.pendingNotificationTitle}>Time to take Symptom Assessment</Text>
                   </View>
-                  
-                  {/* Show pending notification if due */}
-                  {reminderInfo.isDue && (
-                    <View style={styles.pendingNotificationCard}>
-                      <View style={styles.notificationHeader}>
-                        <Icon name="notification-important" size={18} color={COLORS.error} />
-                        <Text style={styles.pendingNotificationTitle}>
-                          Time to take Symptom Assessment
-                        </Text>
-                      </View>
-                      <Text style={styles.notificationBody}>
-                        Complete your {reminderInfo.frequency === 'daily' ? 'daily' : 'weekly'} symptoms check now.
-                      </Text>
-                      <View style={styles.notificationTimeInfo}>
-                        <Icon name="access-time" size={14} color={COLORS.primary} />
-                        <Text style={styles.notificationTimeText}>
-                          Scheduled for {reminderInfo.time || ''}
-                        </Text>
-                        <View style={styles.unreadBadge}>
-                          <Text style={styles.unreadBadgeText}>Unread</Text>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                  
-                  {reminderInfo.allNotifications.length > 0 ? (
-                    <>
-                      <Text style={styles.sectionTitle}>
-                        Scheduled Notifications ({reminderInfo.allNotifications.length})
-                      </Text>
-                      {reminderInfo.allNotifications.map((notif: any, idx: number) => (
-                        <View key={idx} style={styles.notificationCard}>
-                          <View style={styles.notificationHeader}>
-                            <Icon name="notification-important" size={18} color={COLORS.primary} />
-                            <Text style={styles.notificationTitle}>
-                              {notif.content?.title || 'Notification'}
-                            </Text>
-                          </View>
-                          {notif.content?.body && (
-                            <Text style={styles.notificationBody}>
-                              {notif.content.body}
-                            </Text>
-                          )}
-                          {notif.trigger && (
-                            <View style={styles.triggerInfo}>
-                              <Text style={styles.triggerText}>
-                                {notif.trigger.type === 'calendar' && notif.trigger.repeats ? 
-                                  `Repeats ${notif.trigger.weekday ? 'weekly' : 'daily'} at ${String(notif.trigger.hour).padStart(2, '0')}:${String(notif.trigger.minute).padStart(2, '0')}` :
-                                  'One-time notification'
-                                }
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      ))}
-                    </>
-                  ) : (
-                    <View style={styles.infoState}>
-                      <Icon name="info-outline" size={40} color={COLORS.primary} />
-                      <Text style={styles.infoText}>Reminder is enabled</Text>
-                      <Text style={styles.infoSubtext}>
-                        Notifications may require a development build to work properly. Expo Go has limited notification support.
-                      </Text>
-                    </View>
-                  )}
-                </>
+                  <Text style={styles.notificationBody}>Complete your symptoms check now.</Text>
+                  <View style={styles.notificationTimeInfo}>
+                    <Icon name="access-time" size={14} color={COLORS.primary} />
+                    <Text style={styles.notificationTimeText}>Due now</Text>
+                    <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>Unread</Text></View>
+                  </View>
+                </View>
               ) : (
-                <View style={styles.emptyState}>
-                  <Icon name="notifications-off" size={48} color={COLORS.lightGray} />
-                  <Text style={styles.emptyStateText}>No reminders enabled</Text>
-                  <Text style={styles.emptyStateSubtext}>
-                    Enable reminders in your Profile settings to get started
-                  </Text>
+                <View style={styles.infoState}>
+                  <Icon name="check-circle" size={32} color={COLORS.success} />
+                  <Text style={styles.infoText}>You’re all caught up</Text>
+                  <Text style={styles.infoSubtext}>We’ll notify you here when your next reminder is due.</Text>
                 </View>
               )}
             </ScrollView>
 
-            <TouchableOpacity
-              onPress={() => setShowModal(false)}
-              style={styles.closeButton}
-            >
+            <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -315,6 +236,73 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.darkGray,
     marginBottom: 6,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  addButtonText: {
+    color: COLORS.white,
+    marginLeft: 4,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+  },
+  smallActionBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+    padding: 6,
+  },
+  addForm: {
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  chip: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  chipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 13,
+  },
+  chipTextActive: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+  },
+  inputLabel: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 13,
+    color: COLORS.darkGray,
+    marginBottom: 6,
+  },
+  inputBox: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  inputValue: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
   },
   notificationTimeInfo: {
     flexDirection: 'row',

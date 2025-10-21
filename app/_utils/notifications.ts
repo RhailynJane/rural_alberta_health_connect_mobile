@@ -4,6 +4,7 @@ import { NativeModules, Platform } from "react-native";
 const STORAGE_KEY = "symptomReminderNotificationId";
 const BELL_UNREAD_KEY = "notificationBellUnread";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
+const REMINDERS_KEY = "symptomRemindersList";
 let handlerInitialized = false;
 
 export type ReminderFrequency = "daily" | "weekly";
@@ -14,6 +15,69 @@ export type ReminderSettings = {
   time: string; // HH:mm 24h
   dayOfWeek?: string; // Mon..Sun if weekly
 };
+
+// Multiple reminders support
+export type MultiReminderFrequency = "hourly" | "daily" | "weekly";
+
+export type ReminderItem = {
+  id: string; // unique id
+  enabled: boolean;
+  frequency: MultiReminderFrequency;
+  time?: string; // HH:mm for daily/weekly
+  dayOfWeek?: string; // Mon..Sun for weekly
+  createdAt: string;
+  updatedAt: string;
+};
+
+function genId(): string {
+  return `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+}
+
+export async function getReminders(): Promise<ReminderItem[]> {
+  try {
+    const raw = await AsyncStorage.getItem(REMINDERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as ReminderItem[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveReminders(list: ReminderItem[]): Promise<void> {
+  try { await AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(list)); } catch {}
+}
+
+export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"updatedAt">): Promise<ReminderItem[]> {
+  const list = await getReminders();
+  const now = new Date().toISOString();
+  const newItem: ReminderItem = { id: genId(), createdAt: now, updatedAt: now, ...item };
+  const updated = [...list, newItem];
+  await saveReminders(updated);
+  // Optionally schedule
+  try { await scheduleReminderItem(newItem); } catch {}
+  return updated;
+}
+
+export async function updateReminder(id: string, patch: Partial<ReminderItem>): Promise<ReminderItem[]> {
+  const list = await getReminders();
+  const now = new Date().toISOString();
+  const updated = list.map(r => r.id === id ? { ...r, ...patch, updatedAt: now } : r);
+  await saveReminders(updated);
+  // Re-schedule this reminder
+  try { const r = updated.find(x => x.id === id); if (r) await scheduleReminderItem(r); } catch {}
+  return updated;
+}
+
+export async function deleteReminder(id: string): Promise<ReminderItem[]> {
+  const list = await getReminders();
+  const remaining = list.filter(r => r.id !== id);
+  await saveReminders(remaining);
+  // We don't track per-reminder scheduled id here; best-effort: cancel all and re-schedule
+  try { await cancelSymptomReminder(); await scheduleAllReminderItems(remaining); } catch {}
+  return remaining;
+}
 
 async function getNotificationsModule() {
   // Minimal stub to prevent crashes in environments without native support
@@ -249,31 +313,8 @@ export async function markBellRead(): Promise<void> {
   try { await AsyncStorage.setItem(LAST_READ_DATE_KEY, now); } catch {}
 }
 
-/**
- * Check if user has already read today's notification
- */
-async function hasReadTodaysNotification(reminderTime: string): Promise<boolean> {
-  try {
-    const lastReadStr = await AsyncStorage.getItem(LAST_READ_DATE_KEY);
-    if (!lastReadStr) return false;
-    
-    const lastRead = new Date(lastReadStr);
-    const { hour, minute } = parseTimeToHourMinute(reminderTime);
-    
-    // Get today's reminder time
-    const todaysReminder = new Date();
-    todaysReminder.setHours(hour, minute, 0, 0);
-    
-    // If last read was after today's reminder time, user has already read it
-    if (lastRead >= todaysReminder) {
-      return true;
-    }
-    
-    return false;
-  } catch {
-    return false;
-  }
-}
+// Legacy helper no longer used; kept for reference
+// function hasReadTodaysNotification(reminderTime: string): Promise<boolean> { return Promise.resolve(false); }
 
 /**
  * Check if the current time has passed the reminder time today/this week.
@@ -281,62 +322,118 @@ async function hasReadTodaysNotification(reminderTime: string): Promise<boolean>
  * The unread flag stays until manually cleared (by clicking the bell).
  */
 export async function checkAndUpdateReminderDue(settings: ReminderSettings | null): Promise<boolean> {
-  if (!settings || !settings.enabled) {
-    // Clear unread if reminders are disabled
+  // Back-compat for legacy single reminder API. Convert to list and delegate.
+  if (!settings) {
     await setBellUnread(false);
-    console.log('[checkAndUpdateReminderDue] Reminders disabled, clearing unread');
+    return false;
+  }
+  const item: ReminderItem = {
+    id: 'legacy',
+    enabled: settings.enabled,
+    frequency: settings.frequency as any,
+    time: settings.time,
+    dayOfWeek: settings.dayOfWeek,
+    createdAt: '',
+    updatedAt: '',
+  };
+  return checkAndUpdateAnyReminderDue([item]);
+}
+
+export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promise<boolean> {
+  const reminders = (list ?? (await getReminders())).filter(r => r.enabled);
+  if (reminders.length === 0) {
+    await setBellUnread(false);
     return false;
   }
 
+  // If user already read after the most recent due window start, keep cleared until next occurrence
+  // We use LAST_READ_DATE_KEY as a global read marker.
+  const lastReadStr = await AsyncStorage.getItem(LAST_READ_DATE_KEY);
+  const lastRead = lastReadStr ? new Date(lastReadStr) : undefined;
+
   const now = new Date();
-  const { hour, minute } = parseTimeToHourMinute(settings.time);
-  
-  // Check if user has already read today's notification
-  const hasRead = await hasReadTodaysNotification(settings.time);
-  console.log('[checkAndUpdateReminderDue] User has read today?', hasRead);
-  if (hasRead) {
-    // User already dismissed this notification, don't show it again
-    await setBellUnread(false);
-    console.log('[checkAndUpdateReminderDue] Already read, clearing unread');
-    return false;
-  }
-  
-  if (settings.frequency === "daily") {
-    // For daily: check if current time >= reminder time today
-    const reminderTimeToday = new Date();
-    reminderTimeToday.setHours(hour, minute, 0, 0);
-    
-    console.log('[checkAndUpdateReminderDue] Daily - Current time:', now.toLocaleTimeString(), 'Reminder time:', reminderTimeToday.toLocaleTimeString());
-    
-    if (now >= reminderTimeToday) {
-      // It's past the reminder time today - mark as unread
-      await setBellUnread(true);
-      console.log('[checkAndUpdateReminderDue] Past reminder time, marking as unread');
-      return true;
+
+  // Helper: for a reminder, compute the latest occurrence time (Date) that should trigger unread
+  const latestOccurrence = (r: ReminderItem): Date | null => {
+    if (r.frequency === 'hourly') {
+      const d = new Date();
+      d.setMinutes(0, 0, 0); // top of current hour
+      return d;
     }
-  } else if (settings.frequency === "weekly") {
-    // For weekly: check if today is the reminder day and time has passed
-    const reminderDay = weekdayStringToNumber(settings.dayOfWeek);
-    const todayDay = now.getDay() + 1; // JS: 0=Sun...6=Sat -> 1=Sun...7=Sat
-    
-    console.log('[checkAndUpdateReminderDue] Weekly - Today:', todayDay, 'Reminder day:', reminderDay);
-    
-    if (todayDay === reminderDay) {
-      const reminderTimeToday = new Date();
-      reminderTimeToday.setHours(hour, minute, 0, 0);
-      
-      console.log('[checkAndUpdateReminderDue] Correct day - Current time:', now.toLocaleTimeString(), 'Reminder time:', reminderTimeToday.toLocaleTimeString());
-      
-      if (now >= reminderTimeToday) {
-        await setBellUnread(true);
-        console.log('[checkAndUpdateReminderDue] Past reminder time, marking as unread');
-        return true;
+    if (r.frequency === 'daily') {
+      if (!r.time) return null;
+      const { hour, minute } = parseTimeToHourMinute(r.time);
+      const d = new Date();
+      d.setHours(hour, minute, 0, 0);
+      return d;
+    }
+    // weekly
+    if (!r.time) return null;
+    const { hour, minute } = parseTimeToHourMinute(r.time);
+    const targetWeekday = weekdayStringToNumber(r.dayOfWeek);
+    // Compute this week's day (1..7)
+    const today = now.getDay() + 1;
+    const d = new Date();
+    d.setHours(hour, minute, 0, 0);
+    // Adjust date to the target weekday within current week
+    const diff = targetWeekday - today; // can be negative
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  let anyDue = false;
+  for (const r of reminders) {
+    const occ = latestOccurrence(r);
+    if (!occ) continue;
+    if (now >= occ) {
+      // If never read or last read is before this occurrence -> due
+      if (!lastRead || lastRead < occ) {
+        anyDue = true;
+        break;
       }
     }
   }
-  
-  // Not yet time for reminder
-  await setBellUnread(false);
-  console.log('[checkAndUpdateReminderDue] Not yet time, clearing unread');
-  return false;
+
+  await setBellUnread(anyDue);
+  return anyDue;
+}
+
+// Schedule a single reminder item (best-effort; no-op if not supported)
+export async function scheduleReminderItem(item: ReminderItem) {
+  if (!item.enabled) return;
+  await initializeNotificationsOnce();
+  const Notifications = await getNotificationsModule();
+  if (typeof (Notifications as any).scheduleNotificationAsync !== 'function') return;
+
+  try {
+    if (item.frequency === "hourly") {
+      // Use time interval trigger every 3600 seconds
+      await (Notifications as any).scheduleNotificationAsync({
+        content: { title: "Symptom assessment reminder", body: "Hourly reminder.", sound: undefined },
+        trigger: { seconds: 3600, repeats: true } as any,
+      });
+      return;
+    }
+
+    const { hour, minute } = parseTimeToHourMinute(item.time || "09:00");
+    let trigger: any;
+    if (item.frequency === "daily") {
+      trigger = { type: "calendar", hour, minute, repeats: true } as any;
+    } else {
+      trigger = { type: "calendar", weekday: weekdayStringToNumber(item.dayOfWeek), hour, minute, repeats: true } as any;
+    }
+    await (Notifications as any).scheduleNotificationAsync({
+      content: { title: "Symptom assessment reminder", body: "It's time to complete your symptoms check.", sound: undefined },
+      trigger,
+    });
+  } catch {}
+}
+
+export async function scheduleAllReminderItems(list?: ReminderItem[]) {
+  const reminders = list ?? (await getReminders());
+  // Best-effort: cancel previous single reminder id and schedule all; in real app track ids per item
+  try { await cancelSymptomReminder(); } catch {}
+  for (const r of reminders) {
+    try { await scheduleReminderItem(r); } catch {}
+  }
 }

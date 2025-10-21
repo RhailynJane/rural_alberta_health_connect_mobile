@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
-import DateTimePicker from "@react-native-community/datetimepicker";
+// DateTimePicker removed; using quick chips for times
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { router } from "expo-router";
@@ -19,7 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
-import { cancelSymptomReminder, getAllScheduledNotifications, getSymptomReminderDetails, scheduleSymptomReminder } from "../../_utils/notifications";
+import { ReminderItem, addReminder, deleteReminder, getReminders, updateReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -183,7 +184,12 @@ export default function Profile() {
   // Update state when userProfile loads
   useEffect(() => {
     if (userProfile) {
-      console.log("📥 Loading user profile data:", userProfile);
+      console.log("📥 Loaded user profile", {
+        id: String((userProfile as any)._id || ''),
+        age: (userProfile as any).age,
+        city: (userProfile as any).city,
+        province: (userProfile as any).province,
+      });
       setUserData((prev) => ({
         ...prev,
         age: userProfile.age || "",
@@ -243,22 +249,34 @@ export default function Profile() {
     appSettings: false,
   });
 
-  // Time picker state
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState<string>("");
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
   
-  // Custom picker modals
-  const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
-  const [showDayPicker, setShowDayPicker] = useState(false);
-  const [showReminderDetails, setShowReminderDetails] = useState(false);
-  const [reminderInfo, setReminderInfo] = useState<{
-    scheduled: boolean;
-    nextTriggerDate?: Date;
-    allNotifications: any[];
-  } | null>(null);
+  // Reminders manager (local)
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [addingReminder, setAddingReminder] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const [reminderForm, setReminderForm] = useState<{ frequency: 'hourly'|'daily'|'weekly'; time?: string; dayOfWeek?: string }>({ frequency: 'daily', time: '09:00' });
+  const [customTime, setCustomTime] = useState<string>("");
+  const [timeError, setTimeError] = useState<string>("");
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [timePickerValue, setTimePickerValue] = useState<Date>(() => {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    return now;
+  });
+
+  const normalizeTimeInput = (s: string): string | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim());
+    if (!m) return null;
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    if (Number.isNaN(h) || Number.isNaN(mm) || h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
 
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
@@ -471,18 +489,24 @@ export default function Profile() {
     }
   };
 
-  const handleTimeChange = (_: any, selectedDate?: Date) => {
-    setShowTimePicker(false);
-    if (selectedDate) {
-      const hours = selectedDate.getHours();
-      const minutes = selectedDate.getMinutes();
-      const isPM = hours >= 12;
-      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-      const formattedMinutes = String(minutes).padStart(2, '0');
-      const ampm = isPM ? 'PM' : 'AM';
-      setUserData((prev) => ({ ...prev, reminderTime: `${displayHours}:${formattedMinutes} ${ampm}` }));
+  // Load reminders when enabled
+  const refreshReminders = async () => {
+    try {
+      const list = await getReminders();
+      setReminders(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn('Failed to load reminders', e);
+      setReminders([]);
     }
   };
+
+  useEffect(() => {
+    if (userData.reminderEnabled) {
+      refreshReminders();
+    } else {
+      setReminders([]);
+    }
+  }, [userData.reminderEnabled]);
 
   const handleSaveReminderSettings = async () => {
     try {
@@ -508,22 +532,9 @@ export default function Profile() {
         time: time24h,
         dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
       });
-      if (userData.reminderEnabled) {
-        await scheduleSymptomReminder({
-          enabled: true,
-          frequency: userData.reminderFrequency,
-          time: time24h,
-          dayOfWeek: userData.reminderDayOfWeek,
-        });
-      } else {
-        await cancelSymptomReminder();
-      }
       setModalTitle("Success");
       setModalMessage("Reminder settings saved.");
       setModalVisible(true);
-      
-      // Load reminder details to show user
-      await loadReminderDetails();
     } catch (e) {
       console.error(e);
       setModalTitle("Error");
@@ -532,26 +543,55 @@ export default function Profile() {
     }
   };
 
-  const loadReminderDetails = async () => {
+  const handleSaveSingleReminder = async () => {
     try {
-      const details = await getSymptomReminderDetails();
-      const allNotifs = await getAllScheduledNotifications();
-      
-      if (details) {
-        setReminderInfo({
-          scheduled: details.scheduled,
-          nextTriggerDate: details.nextTriggerDate,
-          allNotifications: allNotifs,
-        });
+      if (reminderForm.frequency === 'weekly' && !reminderForm.dayOfWeek) {
+        setModalTitle('Missing Day');
+        setModalMessage('Please choose a day of the week for the weekly reminder.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
       }
+      if (reminderForm.frequency !== 'hourly' && !reminderForm.time) {
+        setModalTitle('Missing Time');
+        setModalMessage('Please choose a time for the reminder.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+      // Final time normalization check for safety
+      let payload = { ...reminderForm } as typeof reminderForm;
+      if (reminderForm.frequency !== 'hourly' && reminderForm.time) {
+        const norm = normalizeTimeInput(reminderForm.time);
+        if (!norm) {
+          setModalTitle('Invalid Time');
+          setModalMessage('Time must be in HH:mm (00-23:00-59).');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        }
+        payload = { ...reminderForm, time: norm };
+      }
+      if (editingReminderId) {
+        await updateReminder(editingReminderId, { ...payload });
+      } else {
+        await addReminder(payload as any);
+      }
+      await refreshReminders();
+      setAddingReminder(false);
+      setEditingReminderId(null);
+      setReminderForm({ frequency: 'daily', time: '09:00' });
+      setModalTitle('Saved');
+      setModalMessage('Reminder saved successfully.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } catch (e) {
-      console.error('Error loading reminder details:', e);
+      console.error('Failed saving reminder', e);
+      setModalTitle('Error');
+      setModalMessage('Failed to save reminder.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     }
-  };
-
-  const handleViewReminders = async () => {
-    await loadReminderDetails();
-    setShowReminderDetails(true);
   };
 
   // Validation rules
@@ -1175,78 +1215,178 @@ export default function Profile() {
 
             {userData.reminderEnabled && (
               <>
-                <Text style={[styles.sectionTitle, styles.centerText]}>Frequency</Text>
-                <TouchableOpacity
-                  style={styles.customPickerButton}
-                  onPress={() => setShowFrequencyPicker(true)}
-                >
-                  <Text style={styles.customPickerButtonText}>
-                    {userData.reminderFrequency === 'daily' ? 'Daily' : userData.reminderFrequency === 'weekly' ? 'Weekly' : 'Select frequency'}
-                  </Text>
-                  <Icon name="arrow-drop-down" size={24} color={COLORS.darkText} />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <Text style={styles.sectionTitle}>Reminders</Text>
+                  <TouchableOpacity onPress={() => { setAddingReminder(true); setEditingReminderId(null); setReminderForm({ frequency: 'daily', time: '09:00' }); }} style={styles.addButton}>
+                    <Icon name="add" size={20} color={COLORS.white} />
+                    <Text style={styles.addButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
 
-                {userData.reminderFrequency === 'weekly' && (
-                  <>
-                    <Text style={[styles.sectionTitle, styles.centerText]}>Day of Week</Text>
-                    <TouchableOpacity
-                      style={styles.customPickerButton}
-                      onPress={() => setShowDayPicker(true)}
-                    >
-                      <Text style={styles.customPickerButtonText}>
-                        {userData.reminderDayOfWeek}
-                      </Text>
-                      <Icon name="arrow-drop-down" size={24} color={COLORS.darkText} />
-                    </TouchableOpacity>
-                  </>
+                {addingReminder && (
+                  <View style={styles.reminderCard}>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, color: COLORS.darkText, marginBottom: 8 }}>
+                      {editingReminderId ? 'Edit Reminder' : 'New Reminder'}
+                    </Text>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Frequency</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['hourly','daily','weekly'] as const).map((f) => (
+                        <TouchableOpacity
+                          key={f}
+                          onPress={() => setReminderForm((prev) => ({ ...prev, frequency: f }))}
+                          style={{
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 16,
+                            backgroundColor: reminderForm.frequency === f ? COLORS.primary : '#f1f1f1',
+                          }}
+                        >
+                          <Text style={{ color: reminderForm.frequency === f ? COLORS.white : COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>
+                            {f[0].toUpperCase() + f.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {reminderForm.frequency === 'weekly' && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Day of week</Text>
+                        <View style={styles.dayGridRow}>
+                          {['Mon','Tue','Wed','Thu'].map((d) => (
+                            <TouchableOpacity key={d} onPress={() => setReminderForm((p) => ({ ...p, dayOfWeek: d }))} style={[styles.dayChip, reminderForm.dayOfWeek === d && styles.dayChipActive]}>
+                              <Text style={[styles.dayChipText, reminderForm.dayOfWeek === d && styles.dayChipTextActive]}>{d}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View style={styles.dayGridRow}>
+                          {['Fri','Sat','Sun'].map((d) => (
+                            <TouchableOpacity key={d} onPress={() => setReminderForm((p) => ({ ...p, dayOfWeek: d }))} style={[styles.dayChip, reminderForm.dayOfWeek === d && styles.dayChipActive]}>
+                              <Text style={[styles.dayChipText, reminderForm.dayOfWeek === d && styles.dayChipTextActive]}>{d}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {reminderForm.frequency !== 'hourly' && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Time</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                          {['08:00','09:00','12:00','18:00','20:00'].map((t) => (
+                            <TouchableOpacity key={t} onPress={() => setReminderForm((p) => ({ ...p, time: t }))} style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: reminderForm.time === t ? COLORS.primary : '#f1f1f1' }}>
+                              <Text style={{ color: reminderForm.time === t ? COLORS.white : COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensed }}>{t}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => {
+                            // Initialize picker value based on current form time
+                            const base = new Date();
+                            base.setSeconds(0, 0);
+                            const t = reminderForm.time && /^\d{1,2}:\d{2}$/.test(reminderForm.time)
+                              ? reminderForm.time
+                              : '09:00';
+                            const [hh, mm] = t.split(':').map((x) => parseInt(x, 10));
+                            base.setHours(isNaN(hh) ? 9 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+                            setTimePickerValue(base);
+                            setShowTimePicker(true);
+                          }}
+                          style={styles.timeButton}
+                        >
+                          <Text style={styles.timeButtonText}>Pick time</Text>
+                        </TouchableOpacity>
+                        {showTimePicker && (
+                          <View style={styles.pickerContainer}>
+                            <DateTimePicker
+                              value={timePickerValue}
+                              mode="time"
+                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                              is24Hour
+                              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                                if (Platform.OS === 'android') {
+                                  setShowTimePicker(false);
+                                }
+                                if (event.type === 'dismissed') return;
+                                const d = date || timePickerValue;
+                                setTimePickerValue(d);
+                                const hh = String(d.getHours()).padStart(2, '0');
+                                const mm = String(d.getMinutes()).padStart(2, '0');
+                                setReminderForm((p) => ({ ...p, time: `${hh}:${mm}` }));
+                                setTimeError('');
+                              }}
+                              style={{ alignSelf: 'center' }}
+                            />
+                            {Platform.OS === 'ios' && (
+                              <TouchableOpacity onPress={() => setShowTimePicker(false)} style={[styles.timeButton, { marginTop: 8 }]}> 
+                                <Text style={styles.timeButtonText}>Done</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                        <View style={styles.customTimeRow}>
+                          <TextInput
+                            value={customTime}
+                            onChangeText={(txt) => { setCustomTime(txt); setTimeError(''); }}
+                            placeholder="HH:mm"
+                            keyboardType="numeric"
+                            maxLength={5}
+                            style={styles.customTimeInput}
+                          />
+                          <TouchableOpacity
+                            onPress={() => {
+                              const norm = normalizeTimeInput(customTime);
+                              if (!norm) {
+                                setTimeError('Enter time as HH:mm (00-23:00-59)');
+                                return;
+                              }
+                              setReminderForm((p) => ({ ...p, time: norm }));
+                              setTimeError('');
+                            }}
+                            style={styles.smallActionBtn}
+                          >
+                            <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Set</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {!!timeError && <Text style={[styles.errorText, { marginTop: 6 }]}>{timeError}</Text>}
+                      </View>
+                    )}
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+                      <TouchableOpacity onPress={() => { setAddingReminder(false); setEditingReminderId(null); setReminderForm({ frequency: 'daily', time: '09:00' }); }} style={[styles.smallActionBtn, { backgroundColor: COLORS.lightGray }]}>
+                        <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleSaveSingleReminder} style={[styles.smallActionBtn, { marginLeft: 8 }]}>
+                        <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Save</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 )}
 
-                <Text style={[styles.sectionTitle, styles.centerText]}>Time</Text>
-                <TouchableOpacity style={styles.timeButton} onPress={() => setShowTimePicker(true)}>
-                  <Text style={styles.timeButtonText}>{userData.reminderTime}</Text>
-                </TouchableOpacity>
-                {showTimePicker && (() => {
-                  // Parse 12-hour time to create Date object
-                  const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-                  let hours = 9;
-                  let minutes = 0;
-                  if (timeMatch) {
-                    hours = parseInt(timeMatch[1], 10);
-                    minutes = parseInt(timeMatch[2], 10);
-                    const ampm = timeMatch[3].toUpperCase();
-                    if (ampm === 'PM' && hours !== 12) {
-                      hours += 12;
-                    } else if (ampm === 'AM' && hours === 12) {
-                      hours = 0;
-                    }
-                  }
-                  const dateValue = new Date();
-                  dateValue.setHours(hours);
-                  dateValue.setMinutes(minutes);
-                  dateValue.setSeconds(0);
-                  
-                  return (
-                    <DateTimePicker
-                      value={dateValue}
-                      mode="time"
-                      is24Hour={false}
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={handleTimeChange}
-                    />
-                  );
-                })()}
-
-                <TouchableOpacity style={styles.saveButton} onPress={handleSaveReminderSettings}>
-                  <Text style={styles.saveButtonText}>Save Reminder Settings</Text>
-                </TouchableOpacity>
-
-                {userData.reminderEnabled && (
-                  <TouchableOpacity 
-                    style={[styles.saveButton, { backgroundColor: COLORS.lightGray, marginTop: 8 }]} 
-                    onPress={handleViewReminders}
-                  >
-                    <Text style={[styles.saveButtonText, { color: COLORS.darkText }]}>View Scheduled Reminders</Text>
-                  </TouchableOpacity>
+                {reminders.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray }}>No reminders yet</Text>
+                  </View>
+                ) : (
+                  reminders.map(r => (
+                    <View key={r.id} style={styles.reminderCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Icon name="alarm" size={18} color={COLORS.primary} />
+                          <Text style={[styles.reminderTitle, { marginLeft: 8 }]}>
+                            {r.frequency === 'hourly' ? 'Hourly' : r.frequency === 'daily' ? `Daily ${r.time}` : `Weekly ${r.dayOfWeek} ${r.time}`}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row' }}>
+                          <TouchableOpacity onPress={() => { setEditingReminderId(r.id); setReminderForm({ frequency: r.frequency as any, time: r.time, dayOfWeek: r.dayOfWeek }); setAddingReminder(true); }} style={styles.smallActionBtn}>
+                            <Icon name="edit" size={18} color={COLORS.white} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={async () => { await deleteReminder(r.id); await refreshReminders(); }} style={[styles.smallActionBtn, { backgroundColor: COLORS.error, marginLeft: 8 }]}>
+                            <Icon name="delete" size={18} color={COLORS.white} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))
                 )}
               </>
             )}
@@ -1335,194 +1475,7 @@ export default function Profile() {
         </View>
       </Modal>
 
-      {/* Frequency Picker Modal */}
-      <Modal
-        visible={showFrequencyPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowFrequencyPicker(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 16 }}>Select Frequency</Text>
-            {[
-              { label: 'Daily', value: 'daily' },
-              { label: 'Weekly', value: 'weekly' },
-            ].map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                onPress={() => {
-                  handleInputChange('reminderFrequency', option.value);
-                  setShowFrequencyPicker(false);
-                }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  borderBottomWidth: 1,
-                  borderBottomColor: COLORS.lightGray,
-                  backgroundColor: userData.reminderFrequency === option.value ? COLORS.primary + '15' : 'transparent',
-                }}
-              >
-                <Text style={{
-                  fontFamily: userData.reminderFrequency === option.value ? FONTS.BarlowSemiCondensedBold : FONTS.BarlowSemiCondensed,
-                  fontSize: 16,
-                  color: userData.reminderFrequency === option.value ? COLORS.primary : COLORS.darkText,
-                }}>{option.label}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              onPress={() => setShowFrequencyPicker(false)}
-              style={{ backgroundColor: COLORS.lightGray, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 16 }}
-            >
-              <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Day of Week Picker Modal */}
-      <Modal
-        visible={showDayPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDayPicker(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 16 }}>Select Day</Text>
-            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day) => (
-              <TouchableOpacity
-                key={day}
-                onPress={() => {
-                  handleInputChange('reminderDayOfWeek', day);
-                  setShowDayPicker(false);
-                }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 16,
-                  borderBottomWidth: 1,
-                  borderBottomColor: COLORS.lightGray,
-                  backgroundColor: userData.reminderDayOfWeek === day ? COLORS.primary + '15' : 'transparent',
-                }}
-              >
-                <Text style={{
-                  fontFamily: userData.reminderDayOfWeek === day ? FONTS.BarlowSemiCondensedBold : FONTS.BarlowSemiCondensed,
-                  fontSize: 16,
-                  color: userData.reminderDayOfWeek === day ? COLORS.primary : COLORS.darkText,
-                }}>{day}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              onPress={() => setShowDayPicker(false)}
-              style={{ backgroundColor: COLORS.lightGray, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 16 }}
-            >
-              <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Reminder Details Modal */}
-      <Modal
-        visible={showReminderDetails}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowReminderDetails(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '85%', maxHeight: '70%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 16 }}>
-              Scheduled Reminders
-            </Text>
-            
-            <ScrollView style={{ maxHeight: 400 }}>
-              {userData.reminderEnabled ? (
-                <View style={{ backgroundColor: COLORS.primary + '10', padding: 12, borderRadius: 8, marginBottom: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                    <Icon name="notifications-active" size={20} color={COLORS.primary} />
-                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16, color: COLORS.primary, marginLeft: 8 }}>
-                      Symptom Assessment Reminder
-                    </Text>
-                  </View>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText, marginBottom: 4 }}>
-                    <Text style={{ fontWeight: 'bold' }}>Frequency:</Text> {userData.reminderFrequency === 'daily' ? 'Daily' : `Weekly (${userData.reminderDayOfWeek})`}
-                  </Text>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText, marginBottom: 4 }}>
-                    <Text style={{ fontWeight: 'bold' }}>Time:</Text> {userData.reminderTime}
-                  </Text>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText }}>
-                    <Text style={{ fontWeight: 'bold' }}>Status:</Text> ✓ Active {reminderInfo?.scheduled && '(Scheduled)'}
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ backgroundColor: COLORS.lightGray, padding: 12, borderRadius: 8, marginBottom: 12 }}>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, textAlign: 'center' }}>
-                    No reminders enabled
-                  </Text>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.lightGray, textAlign: 'center', marginTop: 4 }}>
-                    Enable reminders in App Settings to get started
-                  </Text>
-                </View>
-              )}
-
-              {reminderInfo && reminderInfo.allNotifications.length > 0 && (
-                <>
-                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 14, color: COLORS.darkGray, marginTop: 8, marginBottom: 8 }}>
-                    All Scheduled Notifications ({reminderInfo.allNotifications.length})
-                  </Text>
-                  {reminderInfo.allNotifications.map((notif: any, idx: number) => (
-                    <View key={idx} style={{ 
-                      backgroundColor: COLORS.white, 
-                      padding: 10, 
-                      borderRadius: 6, 
-                      marginBottom: 8,
-                      borderWidth: 1,
-                      borderColor: COLORS.lightGray
-                    }}>
-                      <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkText }}>
-                        {notif.content?.title || 'Notification'}
-                      </Text>
-                      {notif.content?.body && (
-                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray, marginTop: 2 }}>
-                          {notif.content.body}
-                        </Text>
-                      )}
-                      <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 11, color: COLORS.darkGray, marginTop: 4, fontStyle: 'italic' }}>
-                        ID: {notif.identifier}
-                      </Text>
-                    </View>
-                  ))}
-                </>
-              )}
-            </ScrollView>
-
-            <TouchableOpacity
-              onPress={() => setShowReminderDetails(false)}
-              style={{ backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 16 }}
-            >
-              <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Legacy reminder modals removed in favor of inline manager */}
     </SafeAreaView>
   );
 }
@@ -1775,5 +1728,82 @@ const styles = StyleSheet.create({
   },
   signOutIcon: {
     marginRight: 8,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  reminderCard: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+  },
+  reminderTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 14,
+  },
+  smallActionBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  dayChip: {
+    flexGrow: 1,
+    flexBasis: 0,
+    marginHorizontal: 4,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#f1f1f1',
+    alignItems: 'center',
+  },
+  dayChipActive: {
+    backgroundColor: COLORS.primary,
+  },
+  dayChipText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+  },
+  dayChipTextActive: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+  },
+  customTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  customTimeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensed,
   },
 });
