@@ -85,7 +85,7 @@ export default function VisionCameraScreen() {
   });
 
   const model = useTensorflowModel(
-    // eslint-disable-next-line
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require("../../../assets/models/coco_ssd_mobilenet_v1.tflite")
   );
 
@@ -101,6 +101,16 @@ export default function VisionCameraScreen() {
       setSessionFrameDimensions(frameDimensions);
     }
   }, [frameDimensions, setSessionFrameDimensions]);
+
+  // Cleanup: Deactivate camera on unmount to prevent memory leaks
+  useEffect(() => {
+    setIsCameraActive(true);
+    return () => {
+      setIsCameraActive(false);
+      setLatestDetections([]);
+      lastNonEmptyDetectionsRef.current = [];
+    };
+  }, []);
 
   // Frame processor - using useMemo to create the processor object manually
   // This approach works without useFrameProcessor hook
@@ -126,12 +136,9 @@ export default function VisionCameraScreen() {
         saveFrameDimensions(frame.width, frame.height);
       }
 
-      // Log once to confirm frames are arriving (no recurring scheduler)
+      // Mark first frame received (silent)
       if (!didLogFirstFrame) {
         didLogFirstFrame = true;
-        try {
-          logFrameError("First frame received by worklet");
-        } catch {}
       }
 
       if (tfliteModel) {
