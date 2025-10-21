@@ -1,17 +1,17 @@
 import { api } from "@/convex/_generated/api";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Linking,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -64,6 +64,7 @@ interface RealTimeClinicResponse {
 }
 
 export default function Emergency() {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [realTimeClinics, setRealTimeClinics] = useState<RealTimeClinicData[]>(
     []
@@ -77,6 +78,12 @@ export default function Emergency() {
   );
   const emergencyDetails = useQuery(
     api.locationServices.getEmergencyLocationDetails
+  );
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !authLoading ? {} : "skip"
   );
 
   // Mutation to toggle location services
@@ -294,6 +301,9 @@ export default function Emergency() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderSettings?.enabled || false}
+          reminderSettings={reminderSettings || null}
         />
 
         {/* Scrollable content area below header */}

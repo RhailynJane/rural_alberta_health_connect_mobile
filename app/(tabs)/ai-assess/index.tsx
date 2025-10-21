@@ -1,21 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useConvexAuth, useQuery } from "convex/react";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -74,6 +76,7 @@ async function convertImageToBase64(uri: string): Promise<string> {
 
 export default function SymptomAssessment() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const [selectedCategory, setSelectedCategory] =
     useState<SymptomCategory | null>(null);
   const [symptomDescription, setSymptomDescription] = useState("");
@@ -89,6 +92,12 @@ export default function SymptomAssessment() {
   const [aiContext, setAiContext] = useState<Partial<AIImageContext>>({
     timestamp: new Date().toISOString(),
   });
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !authLoading ? {} : "skip"
+  );
 
   const handleCategorySelect = (category: SymptomCategory) => {
     setSelectedCategory(category);
@@ -361,6 +370,9 @@ export default function SymptomAssessment() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderSettings?.enabled || false}
+          reminderSettings={reminderSettings || null}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}

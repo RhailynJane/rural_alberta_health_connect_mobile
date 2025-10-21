@@ -19,7 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
-import { cancelSymptomReminder, scheduleSymptomReminder } from "../../_utils/notifications";
+import { cancelSymptomReminder, getAllScheduledNotifications, getSymptomReminderDetails, scheduleSymptomReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -39,10 +39,10 @@ export default function Profile() {
     (api as any)["profile/reminders"].updateReminderSettings
   );
   const updateEmergencyContactMutation = useMutation(
-    (api as any)["emergencyContactOnboarding/update"].updateEmergencyContactOnboarding
+    (api as any)["emergencyContactOnboarding/update"].withNameAndPhone
   );
   const updateMedicalHistoryMutation = useMutation(
-    (api as any)["medicalHistoryOnboarding/update"].updateMedicalHistoryOnboarding
+    (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
 
   // Skip queries if not authenticated
@@ -159,7 +159,7 @@ export default function Profile() {
     medicalConditions: "",
     reminderEnabled: false,
     reminderFrequency: "daily" as "daily" | "weekly",
-    reminderTime: "09:00",
+    reminderTime: "09:00 AM",
     reminderDayOfWeek: "Mon",
     dataEncryption: true,
     locationServices: true,
@@ -215,11 +215,21 @@ export default function Profile() {
   // Load reminder settings
   useEffect(() => {
     if (reminderSettings) {
+      // Convert 24-hour time to 12-hour with AM/PM for display
+      let displayTime = reminderSettings.time || "09:00 AM";
+      if (reminderSettings.time && reminderSettings.time.includes(':') && !reminderSettings.time.includes('AM') && !reminderSettings.time.includes('PM')) {
+        // Convert from 24-hour to 12-hour format
+        const [hours24, minutes] = reminderSettings.time.split(':');
+        const h24 = parseInt(hours24, 10);
+        const isPM = h24 >= 12;
+        const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+        displayTime = `${h12}:${minutes} ${isPM ? 'PM' : 'AM'}`;
+      }
       setUserData((prev) => ({
         ...prev,
         reminderEnabled: !!reminderSettings.enabled,
         reminderFrequency: (reminderSettings.frequency === "weekly" ? "weekly" : "daily"),
-        reminderTime: reminderSettings.time || "09:00",
+        reminderTime: displayTime,
         reminderDayOfWeek: reminderSettings.dayOfWeek || "Mon",
       }));
     }
@@ -243,6 +253,12 @@ export default function Profile() {
   // Custom picker modals
   const [showFrequencyPicker, setShowFrequencyPicker] = useState(false);
   const [showDayPicker, setShowDayPicker] = useState(false);
+  const [showReminderDetails, setShowReminderDetails] = useState(false);
+  const [reminderInfo, setReminderInfo] = useState<{
+    scheduled: boolean;
+    nextTriggerDate?: Date;
+    allNotifications: any[];
+  } | null>(null);
 
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
@@ -458,25 +474,45 @@ export default function Profile() {
   const handleTimeChange = (_: any, selectedDate?: Date) => {
     setShowTimePicker(false);
     if (selectedDate) {
-      const h = String(selectedDate.getHours()).padStart(2, '0');
-      const m = String(selectedDate.getMinutes()).padStart(2, '0');
-      setUserData((prev) => ({ ...prev, reminderTime: `${h}:${m}` }));
+      const hours = selectedDate.getHours();
+      const minutes = selectedDate.getMinutes();
+      const isPM = hours >= 12;
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      const formattedMinutes = String(minutes).padStart(2, '0');
+      const ampm = isPM ? 'PM' : 'AM';
+      setUserData((prev) => ({ ...prev, reminderTime: `${displayHours}:${formattedMinutes} ${ampm}` }));
     }
   };
 
   const handleSaveReminderSettings = async () => {
     try {
+      // Convert 12-hour time back to 24-hour format for backend storage
+      const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      let time24h = userData.reminderTime;
+      if (timeMatch) {
+        let hours = parseInt(timeMatch[1], 10);
+        const minutes = timeMatch[2];
+        const ampm = timeMatch[3].toUpperCase();
+        
+        if (ampm === 'PM' && hours !== 12) {
+          hours += 12;
+        } else if (ampm === 'AM' && hours === 12) {
+          hours = 0;
+        }
+        time24h = `${String(hours).padStart(2, '0')}:${minutes}`;
+      }
+      
       await updateReminderSettings({
         enabled: userData.reminderEnabled,
         frequency: userData.reminderFrequency,
-        time: userData.reminderTime,
+        time: time24h,
         dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
       });
       if (userData.reminderEnabled) {
         await scheduleSymptomReminder({
           enabled: true,
           frequency: userData.reminderFrequency,
-          time: userData.reminderTime,
+          time: time24h,
           dayOfWeek: userData.reminderDayOfWeek,
         });
       } else {
@@ -485,12 +521,37 @@ export default function Profile() {
       setModalTitle("Success");
       setModalMessage("Reminder settings saved.");
       setModalVisible(true);
+      
+      // Load reminder details to show user
+      await loadReminderDetails();
     } catch (e) {
       console.error(e);
       setModalTitle("Error");
       setModalMessage("Failed to save reminder settings.");
       setModalVisible(true);
     }
+  };
+
+  const loadReminderDetails = async () => {
+    try {
+      const details = await getSymptomReminderDetails();
+      const allNotifs = await getAllScheduledNotifications();
+      
+      if (details) {
+        setReminderInfo({
+          scheduled: details.scheduled,
+          nextTriggerDate: details.nextTriggerDate,
+          allNotifications: allNotifs,
+        });
+      }
+    } catch (e) {
+      console.error('Error loading reminder details:', e);
+    }
+  };
+
+  const handleViewReminders = async () => {
+    await loadReminderDetails();
+    setShowReminderDetails(true);
   };
 
   // Validation rules
@@ -806,6 +867,24 @@ export default function Profile() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={userData.reminderEnabled}
+          reminderSettings={{
+            enabled: userData.reminderEnabled,
+            frequency: userData.reminderFrequency,
+            time: (() => {
+              // Convert 12-hour format back to 24-hour
+              const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+              if (!timeMatch) return userData.reminderTime;
+              let hours = parseInt(timeMatch[1], 10);
+              const minutes = timeMatch[2];
+              const ampm = timeMatch[3].toUpperCase();
+              if (ampm === 'PM' && hours !== 12) hours += 12;
+              else if (ampm === 'AM' && hours === 12) hours = 0;
+              return `${String(hours).padStart(2, '0')}:${minutes}`;
+            })(),
+            dayOfWeek: userData.reminderDayOfWeek,
+          }}
         />
         <ScrollView style={styles.container}>
           {/* Privacy Notice */}
@@ -1126,19 +1205,49 @@ export default function Profile() {
                 <TouchableOpacity style={styles.timeButton} onPress={() => setShowTimePicker(true)}>
                   <Text style={styles.timeButtonText}>{userData.reminderTime}</Text>
                 </TouchableOpacity>
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={new Date(0,0,0, parseInt(userData.reminderTime.slice(0,2),10), parseInt(userData.reminderTime.slice(3),10))}
-                    mode="time"
-                    is24Hour={true}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={handleTimeChange}
-                  />
-                )}
+                {showTimePicker && (() => {
+                  // Parse 12-hour time to create Date object
+                  const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+                  let hours = 9;
+                  let minutes = 0;
+                  if (timeMatch) {
+                    hours = parseInt(timeMatch[1], 10);
+                    minutes = parseInt(timeMatch[2], 10);
+                    const ampm = timeMatch[3].toUpperCase();
+                    if (ampm === 'PM' && hours !== 12) {
+                      hours += 12;
+                    } else if (ampm === 'AM' && hours === 12) {
+                      hours = 0;
+                    }
+                  }
+                  const dateValue = new Date();
+                  dateValue.setHours(hours);
+                  dateValue.setMinutes(minutes);
+                  dateValue.setSeconds(0);
+                  
+                  return (
+                    <DateTimePicker
+                      value={dateValue}
+                      mode="time"
+                      is24Hour={false}
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={handleTimeChange}
+                    />
+                  );
+                })()}
 
                 <TouchableOpacity style={styles.saveButton} onPress={handleSaveReminderSettings}>
                   <Text style={styles.saveButtonText}>Save Reminder Settings</Text>
                 </TouchableOpacity>
+
+                {userData.reminderEnabled && (
+                  <TouchableOpacity 
+                    style={[styles.saveButton, { backgroundColor: COLORS.lightGray, marginTop: 8 }]} 
+                    onPress={handleViewReminders}
+                  >
+                    <Text style={[styles.saveButtonText, { color: COLORS.darkText }]}>View Scheduled Reminders</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
 
@@ -1320,6 +1429,96 @@ export default function Profile() {
               style={{ backgroundColor: COLORS.lightGray, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 16 }}
             >
               <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reminder Details Modal */}
+      <Modal
+        visible={showReminderDetails}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReminderDetails(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '85%', maxHeight: '70%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 16 }}>
+              Scheduled Reminders
+            </Text>
+            
+            <ScrollView style={{ maxHeight: 400 }}>
+              {userData.reminderEnabled ? (
+                <View style={{ backgroundColor: COLORS.primary + '10', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <Icon name="notifications-active" size={20} color={COLORS.primary} />
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16, color: COLORS.primary, marginLeft: 8 }}>
+                      Symptom Assessment Reminder
+                    </Text>
+                  </View>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText, marginBottom: 4 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Frequency:</Text> {userData.reminderFrequency === 'daily' ? 'Daily' : `Weekly (${userData.reminderDayOfWeek})`}
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText, marginBottom: 4 }}>
+                    <Text style={{ fontWeight: 'bold' }}>Time:</Text> {userData.reminderTime}
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkText }}>
+                    <Text style={{ fontWeight: 'bold' }}>Status:</Text> ✓ Active {reminderInfo?.scheduled && '(Scheduled)'}
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ backgroundColor: COLORS.lightGray, padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, textAlign: 'center' }}>
+                    No reminders enabled
+                  </Text>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.lightGray, textAlign: 'center', marginTop: 4 }}>
+                    Enable reminders in App Settings to get started
+                  </Text>
+                </View>
+              )}
+
+              {reminderInfo && reminderInfo.allNotifications.length > 0 && (
+                <>
+                  <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 14, color: COLORS.darkGray, marginTop: 8, marginBottom: 8 }}>
+                    All Scheduled Notifications ({reminderInfo.allNotifications.length})
+                  </Text>
+                  {reminderInfo.allNotifications.map((notif: any, idx: number) => (
+                    <View key={idx} style={{ 
+                      backgroundColor: COLORS.white, 
+                      padding: 10, 
+                      borderRadius: 6, 
+                      marginBottom: 8,
+                      borderWidth: 1,
+                      borderColor: COLORS.lightGray
+                    }}>
+                      <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkText }}>
+                        {notif.content?.title || 'Notification'}
+                      </Text>
+                      {notif.content?.body && (
+                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray, marginTop: 2 }}>
+                          {notif.content.body}
+                        </Text>
+                      )}
+                      <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 11, color: COLORS.darkGray, marginTop: 4, fontStyle: 'italic' }}>
+                        ID: {notif.identifier}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={() => setShowReminderDetails(false)}
+              style={{ backgroundColor: COLORS.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginTop: 16 }}
+            >
+              <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>

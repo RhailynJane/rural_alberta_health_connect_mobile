@@ -3,14 +3,14 @@ import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  Alert,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -184,6 +184,7 @@ export default function History() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
         />
 
         {/* Fixed Search Bar */}

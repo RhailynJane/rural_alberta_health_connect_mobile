@@ -2,11 +2,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -80,6 +80,7 @@ export default function SymptomDuration() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}

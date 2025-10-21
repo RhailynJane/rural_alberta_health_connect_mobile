@@ -4,14 +4,14 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -29,6 +29,12 @@ export default function Dashboard() {
 
   // Get current user data
   const user = useQuery(api.users.getCurrentUser, queryArgs);
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !isLoading ? {} : "skip"
+  );
 
   // Get entries for the last 7 days to calculate health score
   const getLast7DaysDateRange = () => {
@@ -206,6 +212,9 @@ export default function Dashboard() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderSettings?.enabled || false}
+          reminderSettings={reminderSettings || null}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
