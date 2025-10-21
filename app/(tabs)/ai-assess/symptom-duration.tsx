@@ -1,14 +1,14 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -29,24 +29,31 @@ export default function SymptomDuration() {
   ];
 
   const handleContinue = () => {
-  if (!selectedDuration) return;
+    if (!selectedDuration) return;
 
-  console.log("Selected duration:", selectedDuration);
-  
-  router.push({
-    pathname: "/(tabs)/ai-assess/assessment-results",
-    params: {
-      ...params,
-      duration: selectedDuration,
-    },
-  });
-};
+    // Navigate immediately - image processing will happen in assessment-results
+    console.log("Proceeding to assessment with duration:", selectedDuration);
 
-  const DurationOption = ({ label, value }: { label: string; value: string }) => (
+    router.push({
+      pathname: "/(tabs)/ai-assess/assessment-results",
+      params: {
+        ...params,
+        duration: selectedDuration,
+      },
+    });
+  };
+
+  const DurationOption = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value: string;
+  }) => (
     <TouchableOpacity
       style={[
         styles.optionButton,
-        selectedDuration === value && styles.optionButtonSelected
+        selectedDuration === value && styles.optionButtonSelected,
       ]}
       onPress={() => setSelectedDuration(value)}
     >
@@ -55,7 +62,9 @@ export default function SymptomDuration() {
           <View style={styles.optionRadioSelected} />
         )}
       </View>
-      <Text style={[styles.optionLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+      <Text
+        style={[styles.optionLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}
+      >
         {label}
       </Text>
     </TouchableOpacity>
@@ -63,55 +72,75 @@ export default function SymptomDuration() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header with logo */}
-          <CurvedHeader
-            title="Symptom Assessment"
-            height={120}
-            showLogo={true}
-          />
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Symptom Assessment"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-          <View style={styles.contentSection}>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Duration & Timeline
-            </Text>
-            <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              When did your symptoms start?
-            </Text>
-
-            <View style={styles.optionsContainer}>
-              {durationOptions.map((option) => (
-                <DurationOption
-                  key={option.value}
-                  label={option.label}
-                  value={option.value}
-                />
-              ))}
-            </View>
-
-            <TouchableOpacity 
-              style={[
-                styles.continueButton,
-                !selectedDuration && styles.continueButtonDisabled
-              ]} 
-              onPress={handleContinue}
-              disabled={!selectedDuration}
-            >
-              <Text style={[styles.continueButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Get Assessment
+        {/* Content Area - Takes all available space minus header and bottom nav */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.contentSection}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Duration & Timeline
               </Text>
-              <Ionicons name="analytics-outline" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+              <Text
+                style={[
+                  styles.sectionSubtitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                When did your symptoms start?
+              </Text>
+
+              <View style={styles.optionsContainer}>
+                {durationOptions.map((option) => (
+                  <DurationOption
+                    key={option.value}
+                    label={option.label}
+                    value={option.value}
+                  />
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.continueButton,
+                  !selectedDuration && styles.continueButtonDisabled,
+                ]}
+                onPress={handleContinue}
+                disabled={!selectedDuration}
+              >
+                <Text
+                  style={[
+                    styles.continueButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Get Assessment
+                </Text>
+                <Ionicons name="analytics-outline" size={20} color="white" />
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
 
         {/* Bottom Navigation */}
-        <BottomNavigation />
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -121,13 +150,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "transparent",
   },
+  contentArea: {
+    flex: 1,
+  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 60,
+    paddingBottom: 80,
   },
   contentSection: {
     padding: 24,
-    paddingTop: 0,
+    paddingTop: 24,
   },
   sectionTitle: {
     fontSize: 24,

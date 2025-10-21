@@ -17,6 +17,7 @@ interface ClinicFacility {
   type: string;
   address: string;
   phone: string | null;
+  hours?: string | null;
   coordinates: Coordinates;
   distance: number;
   distanceText: string;
@@ -166,42 +167,61 @@ export const updateUserLocation = mutation({
 // ============================================
 
 export const getRealTimeClinicData = action({
-  args: { location: v.string() }, // Accept location as parameter instead of querying DB
+  args: { 
+    location: v.string(),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number())
+  },
   handler: async (ctx, args): Promise<ClinicDataResponse | null> => {
     console.log("📍 User location:", args.location);
-
-    try {
-      console.log("🔄 Trying Foursquare API...");
-      const foursquareData = await fetchFromNewFoursquareAPI(
-        args.location,
-        10000
-      );
-      if (foursquareData && foursquareData.length > 0) {
-        const filteredData = filterMedicalFacilities(foursquareData);
-        console.log(`✅ Found ${filteredData.length} clinics via Foursquare`);
-        if (filteredData.length > 0) {
-          return { source: "Foursquare", facilities: filteredData };
-        }
+    
+    // If coordinates provided, use them directly; otherwise geocode the location string
+    let lat: number;
+    let lon: number;
+    
+    if (args.latitude !== undefined && args.longitude !== undefined) {
+      console.log(`📍 Using provided coordinates: ${args.latitude}, ${args.longitude}`);
+      lat = args.latitude;
+      lon = args.longitude;
+    } else {
+      console.log(`🗺️ Geocoding location string: ${args.location}`);
+      const geocoded = await geocodeWithMapbox(args.location);
+      if (!geocoded) {
+        console.log("❌ Could not determine coordinates");
+        return null;
       }
-    } catch (error) {
-      console.log("Foursquare API failed:", error);
+      lat = geocoded.lat;
+      lon = geocoded.lon;
+      console.log(`📍 Geocoded to: ${lat}, ${lon}`);
     }
 
     try {
-      console.log("🔄 Trying OpenStreetMap API...");
-      const osmData = await fetchFromOpenStreetMap(args.location, 10000);
-      if (osmData && osmData.length > 0) {
-        const filteredData = filterMedicalFacilities(osmData);
-        console.log(`✅ Found ${filteredData.length} clinics via OSM`);
+      console.log("🔍 Attempting to fetch from Mapbox Places...");
+      const mapboxFacilities = await fetchFromMapboxPlaces(lat, lon, 10000);
+      console.log(`📊 Mapbox returned ${mapboxFacilities?.length || 0} facilities`);
+      
+      if (mapboxFacilities && mapboxFacilities.length > 0) {
+        console.log("🔎 Filtering medical facilities...");
+        const filteredData = filterMedicalFacilities(mapboxFacilities);
+        console.log(`✅ Filtered to ${filteredData.length} medical facilities`);
+        
         if (filteredData.length > 0) {
-          return { source: "OpenStreetMap", facilities: filteredData };
+          console.log(`✨ Returning ${filteredData.slice(0, 10).length} clinics from Mapbox`);
+          return {
+            source: "Mapbox",
+            facilities: filteredData.slice(0, 10),
+          };
+        } else {
+          console.log("⚠️ All facilities were filtered out (none matched medical criteria)");
         }
+      } else {
+        console.log("⚠️ Mapbox returned no facilities or null");
       }
     } catch (error) {
-      console.log("OpenStreetMap API failed:", error);
+      console.log("❌ Mapbox Places failed with error:", error);
     }
 
-    console.log("Using fallback Alberta clinic data");
+    console.log("⚠️ Using fallback Alberta clinic data");
     return getEnhancedAlbertaClinicsWithMoreOptions(args.location);
   },
 });
@@ -276,29 +296,39 @@ function getLocationBasedData(location: string | undefined) {
   };
 }
 
-async function geocodeWithNominatim(
-  location: string
-): Promise<GeocodeResult | null> {
+async function geocodeWithMapbox(location: string): Promise<GeocodeResult | null> {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location + ", Alberta, Canada")}&limit=1`;
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "MedicalFacilityFinder/1.0",
-      },
-    });
-    const data = await response.json();
+    // Support raw "lat,lng" input first
+    const parts = location.split(",").map((p) => p.trim());
+    if (parts.length === 2) {
+      const lat = parseFloat(parts[0]);
+      const lon = parseFloat(parts[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) {
+        return { lat, lon, displayName: location };
+      }
+    }
 
-    if (!data || data.length === 0) {
+    const MAPBOX_TOKEN =
+      (process.env.MAPBOX_ACCESS_TOKEN as string | undefined) ||
+      (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN as string | undefined);
+    if (!MAPBOX_TOKEN) {
+      console.warn("Mapbox token not set in environment");
       return null;
     }
 
-    return {
-      lat: parseFloat(data[0].lat),
-      lon: parseFloat(data[0].lon),
-      displayName: data[0].display_name,
-    };
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+      location + ", Alberta, Canada"
+    )}.json?limit=1&access_token=${MAPBOX_TOKEN}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const feature = data?.features?.[0];
+    if (!feature || !Array.isArray(feature.center)) return null;
+    const [lon, lat] = feature.center;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat, lon, displayName: feature.place_name };
   } catch (error) {
-    console.error("Geocoding error:", error);
+    console.error("Mapbox geocoding error:", error);
     return null;
   }
 }
@@ -326,245 +356,444 @@ function toRad(degrees: number): number {
   return degrees * (Math.PI / 180);
 }
 
+async function fetchFromOverpass(lat: number, lon: number, radiusMeters: number): Promise<ClinicFacility[] | null> {
+  try {
+    // Overpass API query for hospitals, clinics, and doctors
+    const query = `
+      [out:json][timeout:25];
+      (
+        node["amenity"="hospital"](around:${radiusMeters},${lat},${lon});
+        node["amenity"="clinic"](around:${radiusMeters},${lat},${lon});
+        node["amenity"="doctors"](around:${radiusMeters},${lat},${lon});
+        node["healthcare"](around:${radiusMeters},${lat},${lon});
+        way["amenity"="hospital"](around:${radiusMeters},${lat},${lon});
+        way["amenity"="clinic"](around:${radiusMeters},${lat},${lon});
+        way["amenity"="doctors"](around:${radiusMeters},${lat},${lon});
+        way["healthcare"](around:${radiusMeters},${lat},${lon});
+      );
+      out center;
+    `;
+
+    const url = "https://overpass-api.de/api/interpreter";
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `data=${encodeURIComponent(query)}`,
+    });
+
+    if (!response.ok) {
+      console.log(`❌ Overpass API error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const elements = data?.elements || [];
+    console.log(`📍 Overpass returned ${elements.length} raw elements`);
+
+    if (elements.length === 0) return null;
+
+    const facilities: ClinicFacility[] = [];
+    for (const element of elements) {
+      const elementLat = element.lat || element.center?.lat;
+      const elementLon = element.lon || element.center?.lon;
+      
+      if (!Number.isFinite(elementLat) || !Number.isFinite(elementLon)) continue;
+
+      const name = element.tags?.name || element.tags?.["name:en"] || "Medical Facility";
+      const amenity = element.tags?.amenity || element.tags?.healthcare || "clinic";
+      const address = [
+        element.tags?.["addr:housenumber"],
+        element.tags?.["addr:street"],
+        element.tags?.["addr:city"] || "Calgary",
+        element.tags?.["addr:province"] || "AB"
+      ].filter(Boolean).join(" ");
+
+  const phone = element.tags?.phone || element.tags?.["contact:phone"] || null;
+  const hours = element.tags?.opening_hours || null;
+      const distance = calculateDistance(lat, lon, elementLat, elementLon);
+
+      facilities.push({
+        id: `osm-${element.type}-${element.id}`,
+        name,
+        type: amenity,
+        address: address || "Address not available",
+        phone,
+        hours,
+        coordinates: { latitude: elementLat, longitude: elementLon },
+        distance,
+        distanceText: distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(1)} km`,
+        source: "OpenStreetMap",
+      });
+    }
+
+    return facilities.sort((a, b) => a.distance - b.distance);
+  } catch (error) {
+    console.error("❌ Overpass API error:", error);
+    return null;
+  }
+}
+
 function filterMedicalFacilities(
   facilities: ClinicFacility[]
 ): ClinicFacility[] {
-  const medicalKeywords = [
+  // Strict medical keywords that MUST be present
+  const strictMedicalKeywords = [
     "hospital",
     "clinic",
+    "medical center",
+    "medical centre",
+    "health center",
+    "health centre",
+    "urgent care",
+    "emergency",
+    "surgery center",
+    "surgery centre",
+    "family medicine",
+    "walk-in clinic",
+    "healthcare",
+  ];
+
+  // Additional medical indicators (less strict)
+  const additionalMedicalKeywords = [
     "medical",
     "health",
     "surgery",
-    "care",
-    "urgent",
-    "emergency",
+    "care center",
+    "care centre",
+    "physician",
+    "doctor",
   ];
 
+  // Comprehensive exclusion list
   const excludeKeywords = [
+    // Mental Health / Psychiatric (EXCLUDE - not emergency medical)
+    "mental health",
+    "mental",
+    "psychiatric",
+    "psychiatry",
+    "psychiatrist",
+    "psychology",
+    "psychologist",
+    "psychotherapy",
+    "counseling",
+    "counselling",
+    "therapy",
+    "adhd",
+    "add",
+    "autism",
+    "behavioral",
+    "behavioural",
+    "cognitive",
+    // Commercial
     "restaurant",
     "cafe",
+    "coffee",
     "shop",
     "store",
     "mall",
     "plaza",
+    "market",
+    "grocery",
+    "supermarket",
+    "shopping",
+    // Entertainment
     "museum",
     "gallery",
     "theatre",
+    "theater",
     "cinema",
+    "movie",
     "hotel",
+    "motel",
+    "resort",
+    // Beauty/Wellness (non-medical)
     "spa",
     "salon",
+    "barber",
+    "massage",
+    "nail",
+    "beauty",
+    "cosmetic",
+    // Pharmacies (separate from clinics)
     "pharmacy",
+    "drugstore",
+    "drug store",
+    "shoppers",
+    "rexall",
+    "london drugs",
+    // Labs (separate from clinics)
     "laboratory",
-    "lab",
+    "lab corp",
+    "dynacare",
+    "lifelabs",
+    "diagnostic",
+    // Veterinary
     "vet",
     "veterinary",
+    "animal",
+    "pet",
+    // Specialized services (non-emergency)
     "passport",
     "lasik",
     "optical",
     "optometrist",
+    "optician",
+    "eyewear",
+    "vision center",
+    "hearing",
+    "audiology",
+    "dental",
+    "dentist",
+    "orthodont",
+    "chiropract",
+    "physiotherapy",
+    "physio",
+    "acupuncture",
+    "massage therapy",
+    "counseling",
+    "counselling",
+    "psycholog",
+    "psychiatr",
+    // Educational/Administrative
+    "university",
+    "college",
+    "school",
+    "education",
+    "office building",
+    "administration",
+    "corporate",
+    // Other
+    "parking",
+    "atm",
+    "bank",
+    "insurance",
   ];
 
   return facilities.filter((facility) => {
     const name = facility.name.toLowerCase();
     const type = facility.type.toLowerCase();
-    const address = facility.address.toLowerCase();
+    const combinedText = `${name} ${type}`;
 
-    const isMedical = medicalKeywords.some(
-      (keyword) =>
-        name.includes(keyword) ||
-        type.includes(keyword) ||
-        address.includes(keyword)
-    );
+    // First, check exclusions (highest priority)
+    const isExcluded = excludeKeywords.some((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return (
+        name.includes(keywordLower) ||
+        type.includes(keywordLower) ||
+        combinedText.includes(keywordLower)
+      );
+    });
 
-    const isExcluded = excludeKeywords.some(
-      (keyword) => name.includes(keyword) || type.includes(keyword)
-    );
+    if (isExcluded) {
+      console.log(`❌ Excluded: ${facility.name} (matched exclusion keyword)`);
+      return false;
+    }
 
-    return isMedical && !isExcluded;
+    // Check for strict medical keywords (highest priority for inclusion)
+    const hasStrictMedicalKeyword = strictMedicalKeywords.some((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return name.includes(keywordLower) || type.includes(keywordLower);
+    });
+
+    if (hasStrictMedicalKeyword) {
+      console.log(`✅ Included: ${facility.name} (matched strict medical keyword)`);
+      return true;
+    }
+
+    // For additional keywords, require at least 2 matches or specific patterns
+    const additionalMatches = additionalMedicalKeywords.filter((keyword) => {
+      const keywordLower = keyword.toLowerCase();
+      return (
+        name.includes(keywordLower) ||
+        type.includes(keywordLower) ||
+        combinedText.includes(keywordLower)
+      );
+    });
+
+    // Also check if it's from a trusted source with medical type
+    const isTrustedMedicalType =
+      type === "hospital" ||
+      type === "clinic" ||
+      type === "medical" ||
+      type === "healthcare" ||
+      type === "urgent care" ||
+      type === "emergency";
+
+    if (additionalMatches.length >= 2 || isTrustedMedicalType) {
+      console.log(`✅ Included: ${facility.name} (matched medical criteria)`);
+      return true;
+    }
+
+    console.log(`❌ Excluded: ${facility.name} (insufficient medical indicators)`);
+    return false;
   });
 }
 
-async function fetchFromNewFoursquareAPI(
-  location: string,
-  radius: number
-): Promise<ClinicFacility[] | null> {
-  const FOURSQUARE_SERVICE_KEY = process.env.FOURSQUARE_SERVICE_KEY;
-
-  if (!FOURSQUARE_SERVICE_KEY) {
-    return null;
-  }
-
+async function fetchFromMapboxPlaces(lat: number, lon: number, radiusMeters: number): Promise<ClinicFacility[] | null> {
   try {
-    const coords = await geocodeWithNominatim(location);
-    if (!coords) {
+    console.log(`📍 Using coordinates: ${lat}, ${lon}`);
+
+    const MAPBOX_TOKEN =
+      (process.env.MAPBOX_ACCESS_TOKEN as string | undefined) ||
+      (process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN as string | undefined);
+    if (!MAPBOX_TOKEN) {
+      console.log("❌ No Mapbox token found in environment");
+      return null;
+    }
+    console.log(`🔑 Mapbox token found (length: ${MAPBOX_TOKEN.length})`);
+
+    // Use Mapbox Search Box API for POI search
+    console.log("🏥 Querying Mapbox Search Box API for medical facilities...");
+    const allResults: any[] = [];
+    const radiusInDegrees = radiusMeters / 111000;
+    const bbox = [
+      lon - radiusInDegrees,
+      lat - radiusInDegrees,
+      lon + radiusInDegrees,
+      lat + radiusInDegrees
+    ].join(',');
+    
+    // Search using the Search Box API /forward endpoint (no session_token required)
+    // This API is designed for one-off POI searches and returns proper medical facility data
+    const searchTerms = [
+      "hospital",
+      "clinic",
+      "medical center",
+      "urgent care",
+      "health center",
+      "walk-in clinic"
+    ];
+    
+    for (const searchTerm of searchTerms) {
+      // Use Search Box API /forward endpoint for POI searches
+      // Note: Using poi_category with specific medical categories for better filtering
+      const url = `https://api.mapbox.com/search/searchbox/v1/forward?` +
+        `q=${encodeURIComponent(searchTerm)}` +
+        `&proximity=${lon},${lat}` +
+        `&bbox=${bbox}` +
+        `&country=ca` +
+        `&types=poi` +
+        `&poi_category=medical_clinic,hospital,emergency_room,doctors_office,health_services` +
+        `&language=en` +
+        `&limit=10` +
+        `&access_token=${MAPBOX_TOKEN}`;
+      
+      console.log(`🔍 Searching Mapbox Search Box API for: "${searchTerm}"`);
+      const res = await fetch(url);
+      console.log(`📡 Response status: ${res.status}`);
+      
+      if (!res.ok) {
+        console.log(`❌ API error: ${res.status} ${res.statusText}`);
+        continue;
+      }
+      
+      const data = await res.json();
+      const features = data?.features || [];
+      console.log(`✅ Found ${features.length} results for "${searchTerm}"`);
+      
+      if (features.length > 0) {
+        allResults.push(...features);
+      }
+    }
+
+    console.log(`📊 Total Mapbox Search Box results before deduplication: ${allResults.length}`);
+    
+    // Try OpenStreetMap as fallback if Mapbox returns no results
+    if (allResults.length === 0) {
+      console.log("⚠️ Mapbox Search Box returned no results, trying OpenStreetMap...");
+      const overpassResults = await fetchFromOverpass(lat, lon, radiusMeters);
+      
+      if (overpassResults && overpassResults.length > 0) {
+        console.log(`✅ Found ${overpassResults.length} facilities from OpenStreetMap`);
+        return overpassResults;
+      }
+      
+      console.log("❌ No results found from either Mapbox or OpenStreetMap");
       return null;
     }
 
-    const categories = "15014,15015,15017";
-    const searchUrl = `https://places-api.foursquare.com/places/search?ll=${coords.lat},${coords.lon}&radius=${radius}&categories=${categories}&limit=20&sort=DISTANCE`;
+    // Deduplicate by mapbox_id and map to ClinicFacility
+    const seen = new Set<string>();
+    const facilities: ClinicFacility[] = [];
+    
+    for (const feature of allResults) {
+      const id: string = feature.properties?.mapbox_id || feature.id;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
 
-    const response = await fetch(searchUrl, {
-      headers: {
-        Authorization: `Bearer ${FOURSQUARE_SERVICE_KEY}`,
-        Accept: "application/json",
-        "X-Places-Api-Version": "2025-06-17",
-      },
-    });
+      // Get coordinates from geometry
+      const coords_arr = feature.geometry?.coordinates;
+      if (!Array.isArray(coords_arr) || coords_arr.length < 2) continue;
+      const [feature_lon, feature_lat] = coords_arr;
+      if (!Number.isFinite(feature_lat) || !Number.isFinite(feature_lon)) continue;
 
-    if (!response.ok) {
-      return null;
-    }
+      const distance = calculateDistance(lat, lon, feature_lat, feature_lon);
+      const props = feature.properties || {};
+      const name: string = props.name || props.full_address || "Medical Facility";
+      const address: string = props.full_address || props.address || "Address not available";
+      const poiCategories = props.poi_category || [];
+      const category = Array.isArray(poiCategories) && poiCategories.length > 0 
+        ? poiCategories[0] 
+        : "medical";
 
-    const data = await response.json();
+      // Try to get phone number and hours from metadata or external sources
+      let phone: string | null = null;
+      let hours: string | null = null;
+      
+      // Check if metadata contains phone information
+      const metadata = props.metadata || {};
+      if (metadata.phone) {
+        phone = metadata.phone;
+      }
 
-    if (!data.results || data.results.length === 0) {
-      return null;
-    }
-
-    const facilities: ClinicFacility[] = data.results
-      .map((place: any) => {
-        const placeId = place.fsq_place_id || place.fsq_id;
-        const latitude = place.latitude || place.geocodes?.main?.latitude;
-        const longitude = place.longitude || place.geocodes?.main?.longitude;
-
-        if (!latitude || !longitude) {
-          return null;
+      // If no phone and we have a Foursquare ID, try to fetch it
+      const foursquareId = props.external_ids?.foursquare;
+      if (!phone && foursquareId) {
+        const FOURSQUARE_KEY = process.env.FOURSQUARE_SERVICE_KEY as string | undefined;
+        if (FOURSQUARE_KEY) {
+          try {
+            const fsUrl = `https://api.foursquare.com/v3/places/${foursquareId}`;
+            const fsRes = await fetch(fsUrl, {
+              headers: { 'Authorization': FOURSQUARE_KEY }
+            });
+            if (fsRes.ok) {
+              const fsData = await fsRes.json();
+              phone = fsData.tel || null;
+              // Try common hours fields from Foursquare response
+              hours = (fsData.hours && (fsData.hours.display || fsData.hours.status)) ||
+                      (fsData.popular && fsData.popular.status) ||
+                      null;
+              if (phone) {
+                console.log(`📞 Got phone for ${name} from Foursquare: ${phone}`);
+              }
+              if (hours) {
+                console.log(`🕒 Got hours for ${name} from Foursquare: ${hours}`);
+              }
+            }
+          } catch {
+            // Silently fail - phone is nice to have but not critical
+          }
         }
+      }
 
-        const distance = calculateDistance(
-          coords.lat,
-          coords.lon,
-          latitude,
-          longitude
-        );
-
-        const locationInfo = place.location || {};
-        const address =
-          locationInfo.formatted_address ||
-          [
-            locationInfo.address,
-            locationInfo.locality,
-            locationInfo.region,
-            locationInfo.postcode,
-          ]
-            .filter(Boolean)
-            .join(", ") ||
-          "Address not available";
-
-        return {
-          id: `foursquare-${placeId}`,
-          name: place.name || "Medical Facility",
-          type: place.categories?.[0]?.name || "medical",
-          address: address,
-          phone: place.tel || place.phone || place.contact?.phone || null,
-          coordinates: {
-            latitude: latitude,
-            longitude: longitude,
-          },
-          distance: distance,
-          distanceText:
-            distance < 1
-              ? `${(distance * 1000).toFixed(0)} meters`
-              : `${distance.toFixed(1)} km`,
-          source: "Foursquare",
-        };
-      })
-      .filter(Boolean) as ClinicFacility[];
-
-    return facilities.sort((a, b) => a.distance - b.distance);
-  } catch (error) {
-    console.error("Foursquare API error:", error);
-    return null;
-  }
-}
-
-async function fetchFromOpenStreetMap(
-  location: string,
-  radius: number
-): Promise<ClinicFacility[] | null> {
-  try {
-    const coords = await geocodeWithNominatim(location);
-    if (!coords) {
-      return null;
+      facilities.push({
+        id: `mapbox-searchbox-${id}`,
+        name,
+        type: category.toLowerCase(),
+        address,
+        phone,
+        hours,
+        coordinates: { latitude: feature_lat, longitude: feature_lon },
+        distance,
+        distanceText: distance < 1 ? `${(distance * 1000).toFixed(0)} meters` : `${distance.toFixed(1)} km`,
+        source: "Mapbox Search Box API",
+      });
     }
 
-    const overpassQuery = `
-      [out:json][timeout:25];
-      (
-        node["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
-        node["amenity"="clinic"](around:${radius},${coords.lat},${coords.lon});
-        node["healthcare"="hospital"](around:${radius},${coords.lat},${coords.lon});
-        node["healthcare"="clinic"](around:${radius},${coords.lat},${coords.lon});
-        way["amenity"="hospital"](around:${radius},${coords.lat},${coords.lon});
-        way["amenity"="clinic"](around:${radius},${coords.lat},${coords.lon});
-      );
-      out body;
-    `;
-
-    const response = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      body: overpassQuery,
-    });
-
-    const data = await response.json();
-
-    if (!data.elements || data.elements.length === 0) {
-      return null;
-    }
-
-    const facilities: ClinicFacility[] = data.elements
-      .map((element: any) => {
-        const tags = element.tags || {};
-        const distance = calculateDistance(
-          coords.lat,
-          coords.lon,
-          element.lat,
-          element.lon
-        );
-
-        const addressParts = [
-          tags["addr:housenumber"],
-          tags["addr:street"],
-          tags["addr:city"] || tags["addr:town"] || "Calgary",
-          tags["addr:postcode"],
-          tags["addr:province"] || "AB",
-        ].filter(Boolean);
-
-        const address =
-          addressParts.length > 0
-            ? addressParts.join(", ")
-            : "Address not available";
-
-        const amenity = tags.amenity || "";
-        const healthcare = tags.healthcare || "";
-
-        let facilityType = "medical";
-        if (amenity === "hospital" || healthcare === "hospital")
-          facilityType = "hospital";
-        else if (amenity === "clinic" || healthcare === "clinic")
-          facilityType = "clinic";
-
-        return {
-          id: `osm-${element.id}`,
-          name: tags.name || tags.operator || "Medical Facility",
-          type: facilityType,
-          address: address,
-          phone: tags.phone || tags["contact:phone"] || null,
-          coordinates: {
-            latitude: element.lat,
-            longitude: element.lon,
-          },
-          distance: distance,
-          distanceText: `${distance.toFixed(1)} km`,
-          source: "OpenStreetMap",
-        };
-      })
-      .filter(Boolean) as ClinicFacility[];
-
+    console.log(`✅ Returning ${facilities.length} deduplicated facilities from Mapbox Search Box`);
     return facilities.sort((a, b) => a.distance - b.distance);
   } catch (error) {
-    console.error("OpenStreetMap error:", error);
+    console.error("Mapbox Search Box API error:", error);
     return null;
   }
 }
@@ -657,6 +886,7 @@ function getEnhancedAlbertaClinicsWithMoreOptions(
         type: "clinic",
         address: "10025 Jasper Ave, Edmonton, AB T5J 1S6",
         phone: "(780) 427-1432",
+        hours: "Mon–Fri 8:00–17:00",
         coordinates: { latitude: 53.5354, longitude: -113.506 },
         distance: 0,
         distanceText: "Contact for nearest location",

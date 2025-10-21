@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "rahc-app",
+    "name": "Rural Alberta Health Connect",
     "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rahcapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.amirzhou.rahcapp",
@@ -29,7 +29,9 @@
       "package": "com.amirzhou.rahcapp",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
@@ -52,6 +54,21 @@
       ],
       "expo-secure-store",
       "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "$(PRODUCT_NAME) needs access to your location to show nearby clinics and provide emergency assistance.",
+          "locationWhenInUsePermission": "$(PRODUCT_NAME) needs access to your location to show nearby clinics and provide emergency assistance.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox"
+        }
+      ],
       [
         "react-native-vision-camera",
         {
@@ -118,7 +135,7 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud",
+        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud"
       },
       "android": {
         "buildType": "app-bundle"

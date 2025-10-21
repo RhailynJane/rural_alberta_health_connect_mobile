@@ -1,5 +1,6 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useMutation, useQuery } from "convex/react";
+import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,10 +13,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { cacheClinics, getCachedClinics } from "../../../watermelon/hooks/useCachedClinics";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import MapboxOfflineMap from "../../components/MapboxOfflineMap";
+import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { FONTS } from "../../constants/constants";
 
 // Define types for our component
@@ -43,6 +48,7 @@ interface RealTimeClinicData {
   type: string;
   address: string;
   phone: string | null;
+  hours?: string | null;
   coordinates: {
     latitude: number;
     longitude: number;
@@ -62,6 +68,8 @@ export default function Emergency() {
   const [realTimeClinics, setRealTimeClinics] = useState<RealTimeClinicData[]>(
     []
   );
+  const [showOfflineDownloader, setShowOfflineDownloader] = useState(false);
+  const [mapFocus, setMapFocus] = useState<{ latitude: number; longitude: number; zoom?: number } | null>(null);
 
   // Get location services status and emergency details
   const locationStatus = useQuery(
@@ -87,15 +95,90 @@ export default function Emergency() {
       if (locationStatus?.locationServicesEnabled && locationStatus?.location) {
         try {
           setIsLoading(true);
+          
+          let latitude: number | undefined;
+          let longitude: number | undefined;
+          
+          // First, try to get actual GPS coordinates from device
+          try {
+             const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+             console.log('🔐 Location permission status:', status);
+            if (status === 'granted') {
+              console.log('📍 Getting actual GPS location from device...');
+               const location = await ExpoLocation.getCurrentPositionAsync({
+                 accuracy: ExpoLocation.Accuracy.Balanced,
+              });
+              latitude = location.coords.latitude;
+              longitude = location.coords.longitude;
+              console.log(`✅ Got GPS coordinates: ${latitude}, ${longitude}`);
+            } else {
+              console.log('⚠️ Location permission denied, will try parsing stored location');
+            }
+          } catch (gpsError) {
+             console.log('⚠️ Failed to get GPS location:', gpsError instanceof Error ? gpsError.message : gpsError);
+          }
+          
+          // Fallback: Parse stored location string if GPS failed
+          if (latitude === undefined || longitude === undefined) {
+             console.log('🔄 Attempting to parse stored location:', locationStatus.location);
+            const loc = locationStatus.location;
+            if (typeof loc === 'string' && loc.includes(',')) {
+              const parts = loc.split(',');
+              if (parts.length >= 2) {
+                const lat = parseFloat(parts[0]);
+                const lng = parseFloat(parts[1]);
+                if (isFinite(lat) && isFinite(lng)) {
+                  latitude = lat;
+                  longitude = lng;
+                  console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
+                 } else {
+                   console.log(`⚠️ Invalid stored coordinates: lat=${lat}, lng=${lng}`);
+                }
+              }
+             } else {
+               console.log(`⚠️ Stored location not in lat,lng format: "${loc}"`);
+            }
+          }
+          
+           console.log(`📤 Calling getRealTimeClinicData with location="${locationStatus.location}", latitude=${latitude}, longitude=${longitude}`);
+         
+          // Try fetching from Convex (online)
           const realTimeData: RealTimeClinicResponse | null =
             await getRealTimeClinicData({
               location: locationStatus.location,
+              latitude,
+              longitude,
             });
-          if (realTimeData && realTimeData.facilities) {
+          
+          if (realTimeData && realTimeData.facilities && realTimeData.facilities.length > 0) {
+            // Success: cache for offline use and display
             setRealTimeClinics(realTimeData.facilities);
+            await cacheClinics(realTimeData.facilities, locationStatus.location);
+          } else {
+            // Convex returned empty or failed: try offline cache
+            console.log("⚠️ Convex returned no data, checking offline cache...");
+            const cached = await getCachedClinics(locationStatus.location);
+            if (cached.length > 0) {
+              console.log("📦 Using cached clinic data");
+              setRealTimeClinics(cached as RealTimeClinicData[]);
+            } else {
+              console.log("⚠️ No cached data available");
+              setRealTimeClinics([]);
+            }
           }
         } catch (error) {
-          console.error("Failed to fetch real-time clinic data:", error);
+          console.error("❌ Failed to fetch real-time clinic data:", error);
+          
+          // Network error: fallback to cache
+          console.log("📦 Network error, checking offline cache...");
+          const cached = await getCachedClinics(locationStatus.location);
+          if (cached.length > 0) {
+            console.log("📦 Using cached clinic data (offline mode)");
+            setRealTimeClinics(cached as RealTimeClinicData[]);
+          } else {
+            console.log("⚠️ No cached data available for offline use");
+            setRealTimeClinics([]);
+          }
         } finally {
           setIsLoading(false);
         }
@@ -165,12 +248,28 @@ export default function Emergency() {
     if (locationStatus) {
       try {
         const newEnabledState = !locationStatus.locationServicesEnabled;
-        await toggleLocationServices({ enabled: newEnabledState });
-
-        // Show feedback
+        
+        // If enabling, show permission alert
         if (newEnabledState) {
-          console.log("📍 Location services enabled");
+          Alert.alert(
+            "Enable Location Services",
+            "This app would like to access your location to provide better emergency assistance and find nearby clinics.",
+            [
+              {
+                text: "Cancel",
+                style: "cancel"
+              },
+              {
+                text: "Enable",
+                onPress: async () => {
+                  await toggleLocationServices({ enabled: true });
+                  console.log("📍 Location services enabled");
+                }
+              }
+            ]
+          );
         } else {
+          await toggleLocationServices({ enabled: false });
           console.log("📍 Location services disabled");
           // Clear real-time clinics when disabled
           setRealTimeClinics([]);
@@ -186,10 +285,24 @@ export default function Emergency() {
   const nearestClinic = realTimeClinics[0]; // Get the closest clinic
 
   return (
-    <CurvedBackground>
-      <CurvedHeader title="Emergency" height={120} showLogo={true} />
+    <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header (not scrollable) */}
+        <CurvedHeader
+          title="Emergency"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-      <ScrollView style={styles.container}>
+        {/* Scrollable content area below header */}
+        <View style={styles.contentArea}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
         {/* Emergency Warning Banner */}
         <View style={styles.emergencyBanner}>
           <Icon name="warning" size={24} color="#cb2a2aff" />
@@ -273,6 +386,9 @@ export default function Emergency() {
                 <Text style={styles.distanceText}>
                   {nearestClinic.distanceText} away
                 </Text>
+                {nearestClinic.hours ? (
+                  <Text style={styles.clinicAddress}>Hours: {nearestClinic.hours}</Text>
+                ) : null}
 
                 <View style={styles.clinicActions}>
                   <View style={styles.cardFooter}>
@@ -405,6 +521,82 @@ export default function Emergency() {
             )}
           </View>
         </View>
+
+        {/* Offline Map Section with Mapbox */}
+        {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
+          <>
+            <View style={styles.mapHeaderContainer}>
+              <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
+              <TouchableOpacity
+                style={styles.downloadMapsButton}
+                onPress={() => setShowOfflineDownloader(true)}
+              >
+                <Icon name="cloud-download" size={20} color="#2A7DE1" />
+                <Text style={styles.downloadMapsText}>Offline Maps</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.card}>
+              <View style={styles.cardContent}>
+                <Text style={styles.mapDescription}>
+                  Interactive map showing nearby clinics. Download maps for offline use.
+                </Text>
+                <MapboxOfflineMap
+                  clinics={realTimeClinics
+                    .map((clinic) => ({
+                      id: clinic.id,
+                      name: clinic.name,
+                      address: clinic.address,
+                      hours: clinic.hours || undefined,
+                      latitude: Number((clinic as any)?.coordinates?.latitude),
+                      longitude: Number((clinic as any)?.coordinates?.longitude),
+                      distance: clinic.distance,
+                      phone: clinic.phone || undefined,
+                    }))}
+                  focusCenter={mapFocus}
+                  userLocation={(() => {
+                    try {
+                      const loc = locationStatus?.location;
+                      if (!loc || typeof loc !== 'string') return null;
+                      const parts = loc.split(',');
+                      if (parts.length < 2) return null;
+                      const lat = parseFloat(parts[0]);
+                      const lng = parseFloat(parts[1]);
+                      if (!isFinite(lat) || !isFinite(lng)) return null;
+                      return { latitude: lat, longitude: lng };
+                    } catch {
+                      return null;
+                    }
+                  })()}
+                  onClinicPress={(clinic) => {
+                    Alert.alert(
+                      clinic.name,
+                      `${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`,
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Call",
+                          onPress: () =>
+                            clinic.phone && handleEmergencyCall(clinic.phone),
+                        },
+                        {
+                          text: "Directions",
+                          onPress: () => openInMaps({
+                            name: clinic.name,
+                            coordinates: {
+                              latitude: clinic.latitude,
+                              longitude: clinic.longitude,
+                            },
+                          } as any),
+                        },
+                      ]
+                    );
+                  }}
+                />
+              </View>
+            </View>
+          </>
+        )}
+
         {/* Additional Clinics Section */}
         {realTimeClinics.length > 1 && (
           <>
@@ -420,6 +612,9 @@ export default function Emergency() {
                   <Text style={styles.distanceText}>
                     {clinic.distanceText} away
                   </Text>
+                  {clinic.hours ? (
+                    <Text style={styles.clinicAddress}>Hours: {clinic.hours}</Text>
+                  ) : null}
 
                   <View style={styles.clinicActions}>
                     <View style={styles.cardFooter}>
@@ -467,13 +662,35 @@ export default function Emergency() {
             ))}
           </View>
         </View>
-      </ScrollView>
+          </ScrollView>
+        </View>
+      </CurvedBackground>
       <BottomNavigation />
-    </CurvedBackground>
+      
+      <OfflineMapDownloader 
+        visible={showOfflineDownloader} 
+        onClose={() => setShowOfflineDownloader(false)}
+        onRegionDownloaded={(center) => {
+          setShowOfflineDownloader(false);
+          setMapFocus(center);
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  contentArea: {
+    flex: 1,
+  },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
   container: {
     flex: 1,
     padding: 16,
@@ -552,6 +769,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginBottom: 8,
+  },
+  mapDescription: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 12,
+    lineHeight: 20,
   },
   clinicName: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -687,10 +911,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   enableButton: {
+    flexDirection: "row",
     backgroundColor: "#2D89E1",
     padding: 12,
     borderRadius: 8,
     alignItems: "center",
+    justifyContent: "center",
     marginTop: 16,
   },
   enableButtonText: {
@@ -698,6 +924,7 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 16,
     fontWeight: "600",
+    marginLeft: 8,
   },
   clinicActions: {
     marginTop: 12,
@@ -746,5 +973,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#333",
     flex: 1,
+  },
+  mapHeaderContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  downloadMapsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(42, 125, 225, 0.1)",
+  },
+  downloadMapsText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+    color: "#2A7DE1",
+    marginLeft: 6,
   },
 });

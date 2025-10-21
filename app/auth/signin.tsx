@@ -8,7 +8,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from 'yup';
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -43,9 +43,10 @@ export default function SignIn() {
     setIsLoading(true);
     try {
       await signIn("password", { email: values.email, password: values.password, flow: "signIn" });
-      // AuthWrapper will handle navigation based on auth state and onboarding status
-      // not for now
-      router.push("/(tabs)/dashboard");
+      
+      // Navigate directly to dashboard after successful sign-in
+      console.log("🚀 Navigating to dashboard after sign-in");
+      router.replace("/(tabs)/dashboard");
     } catch (error) {
       console.error("Sign in failed:", error);
       
@@ -73,6 +74,14 @@ export default function SignIn() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Alberta Health Connect"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.container}
@@ -81,13 +90,6 @@ export default function SignIn() {
             contentContainerStyle={styles.contentContainer}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Logo and Header Container */}
-            <CurvedHeader
-              title="Alberta Health Connect"
-              height={120}
-              showLogo={true}
-              screenType="signin"
-            />
 
             <View style={styles.contentSection}>
               <Text style={[styles.welcomeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -132,7 +134,7 @@ export default function SignIn() {
                       <TextInput
                         style={[
                           styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
                           errors.password && touched.password && styles.inputError
                         ]}
                         placeholder="Enter your password"

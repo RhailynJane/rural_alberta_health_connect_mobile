@@ -1,58 +1,325 @@
-import { Picker } from "@react-native-picker/picker";
-import { useMutation } from "convex/react";
+import { useDatabase } from "@nozbe/watermelondb/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import { MAPBOX_ACCESS_TOKEN } from "../config/mapbox.config";
 import { FONTS } from "../constants/constants";
+const LOCATION_OPTIONS = [
+  { label: 'Calgary and Area', value: 'calgary' },
+  { label: 'Edmonton and Area', value: 'edmonton' },
+  { label: 'Red Deer and Central Alberta', value: 'central' },
+  { label: 'Lethbridge and Southern Alberta', value: 'southern' },
+  { label: 'Medicine Hat and Southeast', value: 'southeast' },
+  { label: 'Grande Prairie and Northwest', value: 'northwest' },
+  { label: 'Fort McMurray and Northeast', value: 'northeast' },
+  { label: 'Peace Country Region', value: 'peace' },
+  { label: 'Alberta Rockies Region', value: 'rockies' },
+  { label: 'Rural Northern Alberta', value: 'northern_rural' },
+  { label: 'Rural Central Alberta', value: 'central_rural' },
+  { label: 'Rural Southern Alberta', value: 'southern_rural' },
+];
 
+const LOCATION_LABELS = Object.fromEntries(LOCATION_OPTIONS.map(opt => [opt.value, opt.label]));
 
 export default function PersonalInfo() {
   const router = useRouter();
-  const [ageRange, setAgeRange] = useState("");
+  const database = useDatabase();
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isAuthenticated ? {} : "skip"
+  );
+  const [age, setAge] = useState("");
+  const [address1, setAddress1] = useState("");
+  const [address2, setAddress2] = useState("");
+  const [city, setCity] = useState("");
+  const [province, setProvince] = useState("");
+  const [postalCode, setPostalCode] = useState("");
   const [location, setLocation] = useState("");
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updatePersonalInfo = useMutation(api.personalInfoOnboarding.update.withAgeRangeAndLocation);
+  // Validation state
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Address suggestions state
+  const [addressSuggestions, setAddressSuggestions] = useState<{
+    id: string;
+    label: string;
+    address1: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+  }[]>([]);
+  const [isFetchingAddress, setIsFetchingAddress] = useState(false);
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState('');
+  const latestAddressQueryTsRef = useRef<number>(0);
+
+  const updatePersonalInfo = useMutation(
+    api.personalInfoOnboarding.update.withAgeRangeAndLocation
+  );
+
+  // Validation logic
+  const validateField = (field: string, raw: string): boolean => {
+    const value = (raw || '').trim();
+    let error = '';
+    switch (field) {
+      case 'age': {
+        if (value.length === 0) {
+          error = 'Age is required';
+          break;
+        }
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 0 || n > 120) error = 'Age must be between 0 and 120';
+        break;
+      }
+      case 'address1': {
+        if (value.length === 0) error = 'Address is required';
+        break;
+      }
+      case 'city': {
+        if (value.length === 0) error = 'City is required';
+        break;
+      }
+      case 'province': {
+        if (value.length === 0) {
+          error = 'Province is required';
+        } else {
+          const allowed = ['AB','Alberta'];
+          if (!allowed.includes(value)) {
+            error = 'Use "Alberta" or "AB"';
+          }
+        }
+        break;
+      }
+      case 'postalCode': {
+        if (value.length === 0) { error = 'Postal code is required'; break; }
+        const formatted = value.replace(/\s+/g, '').toUpperCase();
+        if (!/^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z]\d[ABCEGHJ-NPRSTV-Z]\d$/.test(formatted)) {
+          error = 'Enter a valid Canadian postal code (e.g., T2X 0M4)';
+        } else if (value !== formatted.slice(0,3) + ' ' + formatted.slice(3)) {
+          setPostalCode(formatted.slice(0,3) + ' ' + formatted.slice(3));
+        }
+        break;
+      }
+    }
+    setErrors((prev) => ({ ...prev, [field]: error }));
+    return !error;
+  };
+
+  const validateAll = (): boolean => {
+    const results = [
+      validateField('age', age),
+      validateField('address1', address1),
+      validateField('city', city),
+      validateField('province', province),
+      validateField('postalCode', postalCode),
+    ];
+    return results.every(Boolean);
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    switch (field) {
+      case 'age': setAge(value); break;
+      case 'address1': 
+        setAddress1(value); 
+        debouncedFetchAddressSuggestions(value);
+        break;
+      case 'address2': setAddress2(value); break;
+      case 'city': 
+        setCity(value);
+        setLocation([value, province].filter(Boolean).join(', '));
+        break;
+      case 'province': 
+        setProvince(value);
+        setLocation([city, value].filter(Boolean).join(', '));
+        break;
+      case 'postalCode': setPostalCode(value); break;
+    }
+    validateField(field, value);
+  };
+
+  const debouncedFetchAddressSuggestions = (q: string) => {
+    const ts = Date.now();
+    latestAddressQueryTsRef.current = ts;
+    if (!q || q.trim().length < 3) {
+      setAddressSuggestions([]);
+      return;
+    }
+    setIsFetchingAddress(true);
+    setTimeout(async () => {
+      if (latestAddressQueryTsRef.current !== ts) return;
+      try {
+        if (!MAPBOX_ACCESS_TOKEN || MAPBOX_ACCESS_TOKEN === 'YOUR_MAPBOX_PUBLIC_TOKEN') {
+          setIsFetchingAddress(false);
+          return;
+        }
+        const country = 'ca';
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?autocomplete=true&country=${country}&types=address,place,postcode&limit=5&access_token=${MAPBOX_ACCESS_TOKEN}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        const features = Array.isArray(data?.features) ? data.features : [];
+        const suggestions = features.map((f: any) => {
+          const label = f.place_name as string;
+          const context: any[] = f.context || [];
+          const byId = (idStart: string) => context.find((c) => typeof c.id === 'string' && c.id.startsWith(idStart));
+          const cityVal = (byId('place')?.text || byId('locality')?.text) as string | undefined;
+          const region = (byId('region')?.short_code || byId('region')?.text) as string | undefined;
+          const provinceVal = region?.toUpperCase() === 'CA-AB' ? 'AB' : (region === 'Alberta' ? 'AB' : region);
+          const postal = (byId('postcode')?.text || '') as string;
+          
+          // Extract full address with house number
+          // f.place_name format: "11811 Lake Fraser Dr SE, Calgary, Alberta T2J 7G4, Canada"
+          // We want: "11811 Lake Fraser Dr SE"
+          const fullAddress = f.address ? `${f.address} ${f.text}` : (f.place_name.split(',')[0] || f.text);
+          
+          return {
+            id: f.id as string,
+            label,
+            address1: fullAddress,
+            city: cityVal,
+            province: provinceVal,
+            postalCode: postal,
+          };
+        });
+        setAddressSuggestions(suggestions);
+      } catch {
+        setAddressSuggestions([]);
+      } finally {
+        setIsFetchingAddress(false);
+      }
+    }, 300);
+  };
+
+  const handleSelectAddressSuggestion = (s: { id: string; label: string; address1: string; city?: string; province?: string; postalCode?: string; }) => {
+    setAddressSuggestions([]);
+    setAddress1(s.address1 || address1);
+    setCity(s.city || city);
+    setProvince(s.province || province);
+    const pc = s.postalCode ? (s.postalCode.length === 6 ? (s.postalCode.slice(0,3).toUpperCase() + ' ' + s.postalCode.slice(3).toUpperCase()) : s.postalCode.toUpperCase()) : postalCode;
+    setPostalCode(pc);
+    setLocation([s.city, s.province].filter(Boolean).join(', '));
+    if (s.city) validateField('city', s.city);
+    if (s.province) validateField('province', s.province);
+    if (s.postalCode) validateField('postalCode', s.postalCode);
+  };
 
   const handleContinue = async () => {
-    if (!ageRange || !location) {
-      Alert.alert("Required Fields", "Please select both age range and location to continue.");
+    // Validate all fields
+    if (!validateAll()) {
+      setErrorModalMessage("Please fix the errors highlighted in red before continuing.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    if (!location) {
+      setErrorModalMessage("Please select a location region to continue.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    if (!currentUser?._id) {
+      setErrorModalMessage("Please sign in to continue.");
+      setErrorModalVisible(true);
       return;
     }
 
     console.log("🔄 Personal Info - Starting submission");
     setIsSubmitting(true);
-    
+
     try {
-      await updatePersonalInfo({ ageRange, location });
-      console.log("✅ Personal Info - Saved successfully");
-      
+      // Save to WatermelonDB first (offline)
+      await database.write(async () => {
+        const userProfilesCollection = database.get("user_profiles");
+
+        // Check if profile already exists for this user
+        const existingProfiles = await userProfilesCollection.query().fetch();
+
+        const existingProfile = existingProfiles.find(
+          (p: any) => p.userId === currentUser._id
+        );
+
+        if (existingProfile) {
+          // Update existing profile
+          await existingProfile.update((profile: any) => {
+            profile.age = age;
+            profile.address1 = address1;
+            profile.address2 = address2;
+            profile.city = city;
+            profile.province = province;
+            profile.postalCode = postalCode;
+            profile.location = location;
+          });
+          console.log("✅ Personal Info - Updated existing local profile");
+        } else {
+          // Create new profile
+          await userProfilesCollection.create((profile: any) => {
+            profile.userId = currentUser._id;
+            profile.age = age;
+            profile.address1 = address1;
+            profile.address2 = address2;
+            profile.city = city;
+            profile.province = province;
+            profile.postalCode = postalCode;
+            profile.location = location;
+            profile.onboardingCompleted = false;
+          });
+          console.log("✅ Personal Info - Created new local profile");
+        }
+      });
+
+      console.log("✅ Personal Info - Saved to local database");
+
+      // Then sync with Convex (online) - this will work when there's internet
+      try {
+        await updatePersonalInfo({ 
+          age,
+          address1,
+          address2,
+          city,
+          province,
+          postalCode,
+          location, 
+          onboardingCompleted: false 
+        });
+        console.log("✅ Personal Info - Synced with Convex");
+      } catch (syncError) {
+        console.log(
+          "⚠️ Personal Info - Saved locally, will sync when online:",
+          syncError
+        );
+        // Don't show error to user - data is saved locally
+      }
+
       console.log("➡️ Navigating to emergency contact");
       router.push("/auth/emergency-contact");
-      
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
-      Alert.alert("Error", "Failed to save personal information. Please try again.");
+      setErrorModalMessage("Failed to save personal information. Please try again.");
+      setErrorModalVisible(true);
     } finally {
       setIsSubmitting(false);
     }
   };
-
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -68,7 +335,7 @@ export default function PersonalInfo() {
             {/* Header with logo */}
             <CurvedHeader
               title="Alberta Health Connect"
-              height={120}
+              height={150}
               showLogo={true}
             />
 
@@ -112,48 +379,236 @@ export default function PersonalInfo() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Age Range
+                  Age *
                 </Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={ageRange}
-                    onValueChange={setAgeRange}
-                  >
-                    <Picker.Item label="Select your age range" value="" />
-                    <Picker.Item label="Under 18" value="under18" />
-                    <Picker.Item label="18-24" value="18-24" />
-                    <Picker.Item label="25-34" value="25-34" />
-                    <Picker.Item label="35-44" value="35-44" />
-                    <Picker.Item label="45-54" value="45-54" />
-                    <Picker.Item label="55-64" value="55-64" />
-                    <Picker.Item label="65+" value="65plus" />
-                  </Picker>
-                </View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.age ? styles.inputError : null,
+                  ]}
+                  placeholder="Enter your age"
+                  placeholderTextColor="#999"
+                  value={age}
+                  onChangeText={(val) => handleInputChange('age', val)}
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+                {errors.age ? <Text style={styles.errorText}>{errors.age}</Text> : null}
 
                 <Text
                   style={[
                     styles.fieldLabel,
                     { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
                   ]}
                 >
-                  Location
+                  Address Line 1 *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.address1 ? styles.inputError : null,
+                  ]}
+                  placeholder="Enter your street address"
+                  placeholderTextColor="#999"
+                  value={address1}
+                  onChangeText={(val) => handleInputChange('address1', val)}
+                  autoCapitalize="words"
+                />
+                {errors.address1 ? <Text style={styles.errorText}>{errors.address1}</Text> : null}
+                {addressSuggestions.length > 0 && (
+                  <View style={styles.suggestionsBox}>
+                    {addressSuggestions.map((s) => (
+                      <TouchableOpacity
+                        key={s.id}
+                        style={styles.suggestionItem}
+                        onPress={() => handleSelectAddressSuggestion(s)}
+                      >
+                        <Text style={styles.suggestionText}>{s.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {isFetchingAddress && (
+                  <Text style={styles.suggestionLoading}>Loading suggestions...</Text>
+                )}
+
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
+                  ]}
+                >
+                  Address Line 2
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                  placeholder="Apt, Suite, Unit, Building (Optional)"
+                  placeholderTextColor="#999"
+                  value={address2}
+                  onChangeText={(val) => handleInputChange('address2', val)}
+                  autoCapitalize="words"
+                />
+
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
+                  ]}
+                >
+                  City *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.city ? styles.inputError : null,
+                  ]}
+                  placeholder="Enter your city"
+                  placeholderTextColor="#999"
+                  value={city}
+                  onChangeText={(val) => handleInputChange('city', val)}
+                  autoCapitalize="words"
+                />
+                {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
+
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
+                  ]}
+                >
+                  Province *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.province ? styles.inputError : null,
+                  ]}
+                  placeholder="AB or Alberta"
+                  placeholderTextColor="#999"
+                  value={province}
+                  onChangeText={(val) => handleInputChange('province', val)}
+                  autoCapitalize="characters"
+                />
+                {errors.province ? <Text style={styles.errorText}>{errors.province}</Text> : null}
+
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
+                  ]}
+                >
+                  Postal Code *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.postalCode ? styles.inputError : null,
+                  ]}
+                  placeholder="T2X 0M4"
+                  placeholderTextColor="#999"
+                  value={postalCode}
+                  onChangeText={(val) => handleInputChange('postalCode', val)}
+                  autoCapitalize="characters"
+                  maxLength={7}
+                />
+                {errors.postalCode ? <Text style={styles.errorText}>{errors.postalCode}</Text> : null}
+
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    styles.locationLabel,
+                  ]}
+                >
+                  Region
                 </Text>
                 <View style={styles.pickerContainer}>
-                  <Picker
-                    style={styles.picker}
-                    dropdownIconColor="#2A7DE1"
-                    selectedValue={location}
-                    onValueChange={setLocation}
+                  <TouchableOpacity
+                    style={styles.customPickerButton}
+                    onPress={() => setLocationModalVisible(true)}
                   >
-                    <Picker.Item label="Select your location" value="" />
-                    <Picker.Item label="Northern Alberta" value="northern" />
-                    <Picker.Item label="Central Alberta" value="central" />
-                    <Picker.Item label="Edmonton Area" value="edmonton" />
-                    <Picker.Item label="Calgary Area" value="calgary" />
-                    <Picker.Item label="Southern Alberta" value="southern" />
-                  </Picker>
+                    <Text
+                      style={[
+                        styles.customPickerText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        !location && { color: "#999" },
+                      ]}
+                    >
+                      {location ? LOCATION_LABELS[location] : "Enter your location"}
+                    </Text>
+                  </TouchableOpacity>
+                  <Modal
+                    visible={locationModalVisible}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setLocationModalVisible(false)}
+                  >
+                    <View style={styles.modalOverlay}>
+                      <View style={styles.modalContent}>
+                        <Text
+                          style={[
+                            styles.modalTitle,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          Select Location
+                        </Text>
+                        <View style={{ maxHeight: 320 }}>
+                          <FlatList
+                            data={LOCATION_OPTIONS}
+                            keyExtractor={(item) => item.value}
+                            renderItem={({ item, index }) => (
+                              <TouchableOpacity
+                                style={[
+                                  styles.modalItem,
+                                  index === 0 && { borderTopWidth: 0 },
+                                ]}
+                                onPress={() => {
+                                  setLocation(item.value);
+                                  setLocationModalVisible(false);
+                                }}
+                              >
+                                <Text
+                                  style={[
+                                    styles.modalItemText,
+                                    { fontFamily: FONTS.BarlowSemiCondensed },
+                                  ]}
+                                >
+                                  {item.label}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          style={styles.modalCancel}
+                          onPress={() => setLocationModalVisible(false)}
+                        >
+                          <Text
+                            style={[
+                              styles.modalCancelText,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            Cancel
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Modal>
                 </View>
 
                 <Text
@@ -169,10 +624,10 @@ export default function PersonalInfo() {
               <TouchableOpacity
                 style={[
                   styles.continueButton,
-                  (isSubmitting || !ageRange || !location) && styles.continueButtonDisabled
+                  isSubmitting && styles.continueButtonDisabled,
                 ]}
                 onPress={handleContinue}
-                disabled={isSubmitting || !ageRange || !location}
+                disabled={isSubmitting}
               >
                 {isSubmitting ? (
                   <ActivityIndicator color="white" size="small" />
@@ -191,6 +646,33 @@ export default function PersonalInfo() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Error Modal */}
+      <Modal
+        visible={errorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <Text style={[styles.errorModalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Validation Error
+            </Text>
+            <Text style={[styles.errorModalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {errorModalMessage}
+            </Text>
+            <TouchableOpacity
+              style={styles.errorModalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={[styles.errorModalButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                OK
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -223,7 +705,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: "100%",
-    width: "33%", // 1 out of 3 steps completed
+    width: "33%",
     backgroundColor: "#2A7DE1",
     borderRadius: 3,
   },
@@ -254,7 +736,24 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     marginBottom: 8,
+  },
+  locationLabel: {
     marginTop: 16,
+  },
+  input: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 16,
+    fontSize: 15,
+    color: "#1A1A1A",
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   pickerContainer: {
     backgroundColor: "white",
@@ -269,9 +768,63 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  picker: {
+  customPickerButton: {
     width: "100%",
-    height: 50,
+    minHeight: 50,
+    justifyContent: "center",
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+  },
+  customPickerText: {
+    fontSize: 15,
+    color: "#1A1A1A",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "80%",
+    maxWidth: 350,
+    alignItems: "stretch",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  modalItemText: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  modalCancel: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f2f2f2",
+  },
+  modalCancelText: {
+    color: "#2A7DE1",
+    fontSize: 16,
+    textAlign: "center",
+    fontWeight: "600",
   },
   helperText: {
     fontSize: 14,
@@ -296,6 +849,96 @@ const styles = StyleSheet.create({
     backgroundColor: "#CCCCCC",
   },
   continueButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  inputError: {
+    borderColor: "red",
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: "red",
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  suggestionsBox: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    marginTop: -4,
+    marginBottom: 8,
+    maxHeight: 200,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  suggestionItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: "#1A1A1A",
+  },
+  suggestionLoading: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorModalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  errorModalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorModalButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  errorModalButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",

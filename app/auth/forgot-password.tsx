@@ -2,17 +2,17 @@ import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Yup from 'yup';
 import CurvedBackground from '../components/curvedBackground';
 import CurvedHeader from '../components/curvedHeader';
@@ -59,6 +59,7 @@ export default function ForgotPassword() {
       
       setShowCodeField(true);
     } catch (error) {
+      console.error('Failed to send verification code:', error);
       Alert.alert(
         'Error',
         'Failed to send verification code. Please try again.',
@@ -87,6 +88,7 @@ export default function ForgotPassword() {
         ]
       );
     } catch (error) {
+      console.error('Failed to reset password:', error);
       Alert.alert(
         'Error',
         'Failed to reset password. Please check the verification code and try again.',
@@ -110,7 +112,7 @@ export default function ForgotPassword() {
           >
             <CurvedHeader
               title="Alberta Health Connect"
-              height={120}
+              height={150}
               showLogo={true}
             />
 
