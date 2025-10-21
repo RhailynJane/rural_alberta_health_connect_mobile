@@ -3,17 +3,16 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -21,22 +20,6 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { MAPBOX_ACCESS_TOKEN } from "../config/mapbox.config";
 import { FONTS } from "../constants/constants";
-const LOCATION_OPTIONS = [
-  { label: 'Calgary and Area', value: 'calgary' },
-  { label: 'Edmonton and Area', value: 'edmonton' },
-  { label: 'Red Deer and Central Alberta', value: 'central' },
-  { label: 'Lethbridge and Southern Alberta', value: 'southern' },
-  { label: 'Medicine Hat and Southeast', value: 'southeast' },
-  { label: 'Grande Prairie and Northwest', value: 'northwest' },
-  { label: 'Fort McMurray and Northeast', value: 'northeast' },
-  { label: 'Peace Country Region', value: 'peace' },
-  { label: 'Alberta Rockies Region', value: 'rockies' },
-  { label: 'Rural Northern Alberta', value: 'northern_rural' },
-  { label: 'Rural Central Alberta', value: 'central_rural' },
-  { label: 'Rural Southern Alberta', value: 'southern_rural' },
-];
-
-const LOCATION_LABELS = Object.fromEntries(LOCATION_OPTIONS.map(opt => [opt.value, opt.label]));
 
 export default function PersonalInfo() {
   const router = useRouter();
@@ -53,7 +36,6 @@ export default function PersonalInfo() {
   const [province, setProvince] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [location, setLocation] = useState("");
-  const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validation state
@@ -146,10 +128,12 @@ export default function PersonalInfo() {
       case 'address2': setAddress2(value); break;
       case 'city': 
         setCity(value);
+        // Auto-update location from city and province
         setLocation([value, province].filter(Boolean).join(', '));
         break;
       case 'province': 
         setProvince(value);
+        // Auto-update location from city and province
         setLocation([city, value].filter(Boolean).join(', '));
         break;
       case 'postalCode': setPostalCode(value); break;
@@ -217,6 +201,7 @@ export default function PersonalInfo() {
     setProvince(s.province || province);
     const pc = s.postalCode ? (s.postalCode.length === 6 ? (s.postalCode.slice(0,3).toUpperCase() + ' ' + s.postalCode.slice(3).toUpperCase()) : s.postalCode.toUpperCase()) : postalCode;
     setPostalCode(pc);
+    // Auto-set location from city and province
     setLocation([s.city, s.province].filter(Boolean).join(', '));
     if (s.city) validateField('city', s.city);
     if (s.province) validateField('province', s.province);
@@ -494,7 +479,7 @@ export default function PersonalInfo() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                     errors.province ? styles.inputError : null,
                   ]}
-                  placeholder="AB or Alberta"
+                  placeholder="Select region"
                   placeholderTextColor="#999"
                   value={province}
                   onChangeText={(val) => handleInputChange('province', val)}
@@ -525,100 +510,6 @@ export default function PersonalInfo() {
                   maxLength={7}
                 />
                 {errors.postalCode ? <Text style={styles.errorText}>{errors.postalCode}</Text> : null}
-
-                <Text
-                  style={[
-                    styles.fieldLabel,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    styles.locationLabel,
-                  ]}
-                >
-                  Region
-                </Text>
-                <View style={styles.pickerContainer}>
-                  <TouchableOpacity
-                    style={styles.customPickerButton}
-                    onPress={() => setLocationModalVisible(true)}
-                  >
-                    <Text
-                      style={[
-                        styles.customPickerText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        !location && { color: "#999" },
-                      ]}
-                    >
-                      {location ? LOCATION_LABELS[location] : "Enter your location"}
-                    </Text>
-                  </TouchableOpacity>
-                  <Modal
-                    visible={locationModalVisible}
-                    transparent
-                    animationType="fade"
-                    onRequestClose={() => setLocationModalVisible(false)}
-                  >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.modalContent}>
-                        <Text
-                          style={[
-                            styles.modalTitle,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Select Location
-                        </Text>
-                        <View style={{ maxHeight: 320 }}>
-                          <FlatList
-                            data={LOCATION_OPTIONS}
-                            keyExtractor={(item) => item.value}
-                            renderItem={({ item, index }) => (
-                              <TouchableOpacity
-                                style={[
-                                  styles.modalItem,
-                                  index === 0 && { borderTopWidth: 0 },
-                                ]}
-                                onPress={() => {
-                                  setLocation(item.value);
-                                  setLocationModalVisible(false);
-                                }}
-                              >
-                                <Text
-                                  style={[
-                                    styles.modalItemText,
-                                    { fontFamily: FONTS.BarlowSemiCondensed },
-                                  ]}
-                                >
-                                  {item.label}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          />
-                        </View>
-                        <TouchableOpacity
-                          style={styles.modalCancel}
-                          onPress={() => setLocationModalVisible(false)}
-                        >
-                          <Text
-                            style={[
-                              styles.modalCancelText,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            Cancel
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </Modal>
-                </View>
-
-                <Text
-                  style={[
-                    styles.helperText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  This helps us provide location-specific health resources
-                </Text>
               </View>
 
               <TouchableOpacity

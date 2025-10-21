@@ -7,6 +7,7 @@ import { useState } from "react";
 import {
   Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -79,6 +80,10 @@ export default function SymptomAssessment() {
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [selectedBodyParts] = useState<BodyPart[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Error modal state
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState("");
 
   // AI context data
   const [aiContext, setAiContext] = useState<Partial<AIImageContext>>({
@@ -232,6 +237,13 @@ export default function SymptomAssessment() {
 
   const handleTakePhoto = async () => {
     try {
+      // Check photo limit
+      if (uploadedPhotos.length >= 3) {
+        setErrorModalMessage("You can only add up to 3 photos for AI assessment.");
+        setErrorModalVisible(true);
+        return;
+      }
+
       const hasPermission = await requestCameraPermission();
       if (!hasPermission) return;
 
@@ -249,12 +261,20 @@ export default function SymptomAssessment() {
       }
     } catch (error) {
       console.error("Error taking photo:", error);
-      Alert.alert("Error", "Failed to take photo. Please try again.");
+      setErrorModalMessage("Failed to take photo. Please try again.");
+      setErrorModalVisible(true);
     }
   };
 
   const handleUploadPhoto = async () => {
     try {
+      // Check photo limit
+      if (uploadedPhotos.length >= 3) {
+        setErrorModalMessage("You can only add up to 3 photos for AI assessment.");
+        setErrorModalVisible(true);
+        return;
+      }
+
       const hasPermission = await requestGalleryPermission();
       if (!hasPermission) return;
 
@@ -268,12 +288,22 @@ export default function SymptomAssessment() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const newPhotos = result.assets.map((asset) => asset.uri);
-        setUploadedPhotos((prev) => [...prev, ...newPhotos]);
-        console.log(`Uploaded ${newPhotos.length} photos`);
+        const remainingSlots = 3 - uploadedPhotos.length;
+        
+        if (newPhotos.length > remainingSlots) {
+          setErrorModalMessage(`You can only add ${remainingSlots} more photo${remainingSlots !== 1 ? 's' : ''}. Maximum is 3 photos.`);
+          setErrorModalVisible(true);
+          // Only add what fits
+          setUploadedPhotos((prev) => [...prev, ...newPhotos.slice(0, remainingSlots)]);
+        } else {
+          setUploadedPhotos((prev) => [...prev, ...newPhotos]);
+          console.log(`Uploaded ${newPhotos.length} photos`);
+        }
       }
     } catch (error) {
       console.error("Error uploading photos:", error);
-      Alert.alert("Error", "Failed to upload photos. Please try again.");
+      setErrorModalMessage("Failed to upload photos. Please try again.");
+      setErrorModalVisible(true);
     }
   };
 
@@ -625,14 +655,23 @@ export default function SymptomAssessment() {
 
                 <View style={styles.photoButtons}>
                   <TouchableOpacity
-                    style={styles.photoButton}
+                    style={[
+                      styles.photoButton,
+                      uploadedPhotos.length >= 3 && styles.photoButtonDisabled,
+                    ]}
                     onPress={handleTakePhoto}
+                    disabled={uploadedPhotos.length >= 3}
                   >
-                    <Ionicons name="camera" size={20} color="#2A7DE1" />
+                    <Ionicons 
+                      name="camera" 
+                      size={20} 
+                      color={uploadedPhotos.length >= 3 ? "#999" : "#2A7DE1"} 
+                    />
                     <Text
                       style={[
                         styles.photoButtonText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
+                        uploadedPhotos.length >= 3 && styles.photoButtonTextDisabled,
                       ]}
                     >
                       Take Photo
@@ -640,14 +679,23 @@ export default function SymptomAssessment() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.photoButton}
+                    style={[
+                      styles.photoButton,
+                      uploadedPhotos.length >= 3 && styles.photoButtonDisabled,
+                    ]}
                     onPress={handleUploadPhoto}
+                    disabled={uploadedPhotos.length >= 3}
                   >
-                    <Ionicons name="image" size={20} color="#2A7DE1" />
+                    <Ionicons 
+                      name="image" 
+                      size={20} 
+                      color={uploadedPhotos.length >= 3 ? "#999" : "#2A7DE1"} 
+                    />
                     <Text
                       style={[
                         styles.photoButtonText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
+                        uploadedPhotos.length >= 3 && styles.photoButtonTextDisabled,
                       ]}
                     >
                       Upload Photo
@@ -702,6 +750,40 @@ export default function SymptomAssessment() {
             </View>
           </ScrollView>
         </View>
+
+        {/* Error Modal */}
+        <Modal
+          visible={errorModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setErrorModalVisible(false)}
+        >
+          <View style={styles.errorModalOverlay}>
+            <View style={styles.errorModalContainer}>
+              <Text
+                style={[
+                  styles.errorModalMessage,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                {errorModalMessage}
+              </Text>
+              <TouchableOpacity
+                style={styles.errorModalButton}
+                onPress={() => setErrorModalVisible(false)}
+              >
+                <Text
+                  style={[
+                    styles.errorModalButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  OK
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </CurvedBackground>
       <BottomNavigation />
     </SafeAreaView>
@@ -920,5 +1002,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginRight: 8,
+  },
+  photoButtonDisabled: {
+    backgroundColor: "#F8F9FA",
+    borderColor: "#E9ECEF",
+  },
+  photoButtonTextDisabled: {
+    color: "#999",
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  errorModalContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalMessage: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorModalButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  errorModalButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
