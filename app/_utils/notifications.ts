@@ -1,5 +1,7 @@
+import { Q } from '@nozbe/watermelondb';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeModules, Platform } from "react-native";
+import { database } from "../../watermelon/database";
 
 const STORAGE_KEY = "symptomReminderNotificationId";
 const BELL_UNREAD_KEY = "notificationBellUnread";
@@ -53,6 +55,8 @@ export async function getReminders(): Promise<ReminderItem[]> {
 
 async function saveReminders(list: ReminderItem[]): Promise<void> {
   try { await AsyncStorage.setItem(nk(REMINDERS_KEY), JSON.stringify(list)); } catch {}
+  // Mirror to WatermelonDB for offline/local queries
+  try { await syncRemindersToWatermelon(list); } catch {}
 }
 
 export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"updatedAt">): Promise<ReminderItem[]> {
@@ -446,4 +450,31 @@ export async function scheduleAllReminderItems(list?: ReminderItem[]) {
   for (const r of reminders) {
     try { await scheduleReminderItem(r); } catch {}
   }
+}
+
+// Sync the in-memory reminders list to WatermelonDB (per-user namespace)
+async function syncRemindersToWatermelon(list: ReminderItem[]) {
+  if (!USER_NS) return; // need user id to scope rows
+  const userId = USER_NS;
+  await (database as any).write(async () => {
+    const collection = (database as any).get('reminders');
+    // Remove existing rows for this user
+    const existing = await collection.query(Q.where('user_id', userId)).fetch();
+    for (const row of existing) {
+      await row.destroyPermanently();
+    }
+    // Insert current list
+    for (const r of list) {
+      await collection.create((rec: any) => {
+        rec.userId = userId;
+        rec.reminderId = r.id;
+        rec.enabled = !!r.enabled;
+        rec.frequency = r.frequency;
+        rec.time = r.time || null;
+        rec.dayOfWeek = r.dayOfWeek || null;
+        rec.createdAt = new Date(r.createdAt).getTime();
+        rec.updatedAt = new Date(r.updatedAt).getTime();
+      });
+    }
+  });
 }

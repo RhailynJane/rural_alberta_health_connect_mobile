@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
-import { ReminderItem, addReminder, deleteReminder, getReminders, setReminderUserKey, updateReminder } from "../../_utils/notifications";
+import { ReminderItem, addReminder, deleteReminder, getReminders, scheduleAllReminderItems, setReminderUserKey, updateReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -456,7 +456,7 @@ export default function Profile() {
   };
 
   // Handle input changes
-  const handleInputChange = (
+  const handleInputChange = async (
     field: keyof typeof userData,
     value: string | boolean
   ) => {
@@ -522,6 +522,10 @@ export default function Profile() {
           time: time24h,
           dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
         }).catch(() => {});
+        if (value) {
+          // best-effort schedule all current reminders when enabling
+          try { scheduleAllReminderItems().catch(() => {}); } catch {}
+        }
       } catch {}
     }
     // Field-level validation
