@@ -19,9 +19,10 @@ export async function updatePersonalInfoModel(
     onboardingCompleted?: boolean 
   }
 ) {
-  // Validate required fields
-  if (!data.age || !data.city || !data.province) {
-    throw new Error("Age, city, and province are required for personal info");
+  // Validate required fields - only age is strictly required
+  // city and province can be empty strings during initial onboarding
+  if (!data.age) {
+    throw new Error("Age is required for personal info");
   }
 
   // Check if profile already exists
