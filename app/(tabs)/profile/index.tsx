@@ -193,10 +193,10 @@ export default function Profile() {
 
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
-      // Validate before saving
-      const valid = validateAll();
+      // Validate only personal info fields before saving
+      const valid = validatePersonalInfo();
       if (!valid) {
-        Alert.alert("Fix Form Errors", "Please correct the highlighted fields.");
+        Alert.alert("Fix Form Errors", "Please correct the highlighted fields in Personal Information.");
         return false;
       }
       await updatePersonalInfo({
@@ -248,6 +248,39 @@ export default function Profile() {
     field: keyof typeof userData,
     value: string | boolean
   ) => {
+    // Special handling for phone to check BEFORE formatting
+    if (field === 'emergencyContactPhone' && typeof value === 'string') {
+      const inputDigits = value.replace(/\D/g, '');
+      if (inputDigits.length > 10) {
+        // Show error immediately but limit to 10 digits
+        setErrors((prev) => ({ ...prev, [field]: 'Phone number must be exactly 10 digits' }));
+        const limited = inputDigits.slice(0, 10);
+        const formatted = `(${limited.slice(0,3)}) ${limited.slice(3,6)}-${limited.slice(6,10)}`;
+        setUserData((prev) => ({
+          ...prev,
+          [field]: formatted,
+        }));
+        return;
+      } else if (inputDigits.length === 10) {
+        // Clear error when exactly 10 digits
+        setErrors((prev) => ({ ...prev, [field]: '' }));
+        const formatted = `(${inputDigits.slice(0,3)}) ${inputDigits.slice(3,6)}-${inputDigits.slice(6,10)}`;
+        setUserData((prev) => ({
+          ...prev,
+          [field]: formatted,
+        }));
+        return;
+      } else if (inputDigits.length < 10 && inputDigits.length > 0) {
+        // Show "too short" error
+        setErrors((prev) => ({ ...prev, [field]: 'Enter a 10-digit phone number' }));
+        setUserData((prev) => ({
+          ...prev,
+          [field]: value,
+        }));
+        return;
+      }
+    }
+    
     setUserData((prev) => ({
       ...prev,
       [field]: value,
@@ -364,6 +397,33 @@ export default function Profile() {
   const validateAll = (): boolean => {
     const fieldsToCheck: (keyof typeof userData)[] = [
       'age','address1','city','province','postalCode','location','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'
+    ];
+    const results = fieldsToCheck.map((f) => validateField(f, String((userData as any)[f] ?? '')));
+    return results.every(Boolean);
+  };
+
+  // Validate only personal info fields
+  const validatePersonalInfo = (): boolean => {
+    const fieldsToCheck: (keyof typeof userData)[] = [
+      'age','address1','city','province','postalCode','location'
+    ];
+    const results = fieldsToCheck.map((f) => validateField(f, String((userData as any)[f] ?? '')));
+    return results.every(Boolean);
+  };
+
+  // Validate only emergency contact fields
+  const validateEmergencyContact = (): boolean => {
+    const fieldsToCheck: (keyof typeof userData)[] = [
+      'emergencyContactName','emergencyContactPhone'
+    ];
+    const results = fieldsToCheck.map((f) => validateField(f, String((userData as any)[f] ?? '')));
+    return results.every(Boolean);
+  };
+
+  // Validate only medical info fields
+  const validateMedicalInfo = (): boolean => {
+    const fieldsToCheck: (keyof typeof userData)[] = [
+      'allergies','currentMedications','medicalConditions'
     ];
     const results = fieldsToCheck.map((f) => validateField(f, String((userData as any)[f] ?? '')));
     return results.every(Boolean);
