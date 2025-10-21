@@ -1,14 +1,11 @@
 import { api } from "@/convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
-// DateTimePicker removed; using quick chips for times
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -20,7 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
-import { ReminderItem, addReminder, deleteReminder, getReminders, updateReminder } from "../../_utils/notifications";
+import { ReminderItem, addReminder, deleteReminder, getReminders, setReminderUserKey, updateReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -184,12 +181,8 @@ export default function Profile() {
   // Update state when userProfile loads
   useEffect(() => {
     if (userProfile) {
-      console.log("📥 Loaded user profile", {
-        id: String((userProfile as any)._id || ''),
-        age: (userProfile as any).age,
-        city: (userProfile as any).city,
-        province: (userProfile as any).province,
-      });
+      // Log fuller profile details again for debugging clarity
+      console.log("📥 Loaded user profile", userProfile);
       setUserData((prev) => ({
         ...prev,
         age: userProfile.age || "",
@@ -205,6 +198,10 @@ export default function Profile() {
         emergencyContactPhone: userProfile.emergencyContactPhone || "",
         medicalConditions: userProfile.medicalConditions || "",
       }));
+      // Set per-user namespace for reminders and bell state
+      try { setReminderUserKey(String((userProfile as any)._id || '')); } catch {}
+      // Refresh reminders for this user namespace
+      refreshReminders();
     } else if (userProfile === null && isAuthenticated && !isLoading) {
       // Profile is null but user is authenticated - create profile
       console.log("⚠️ Profile not found, creating one...");
@@ -260,14 +257,15 @@ export default function Profile() {
   const [addingReminder, setAddingReminder] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [reminderForm, setReminderForm] = useState<{ frequency: 'hourly'|'daily'|'weekly'; time?: string; dayOfWeek?: string }>({ frequency: 'daily', time: '09:00' });
-  const [customTime, setCustomTime] = useState<string>("");
-  const [timeError, setTimeError] = useState<string>("");
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [timePickerValue, setTimePickerValue] = useState<Date>(() => {
-    const now = new Date();
-    now.setSeconds(0, 0);
-    return now;
-  });
+  const [timeHour, setTimeHour] = useState<string>("09");
+  const [timeMinute, setTimeMinute] = useState<string>("00");
+  const [timeAmPm, setTimeAmPm] = useState<"AM" | "PM">("AM");
+  const [showTimeSelectModal, setShowTimeSelectModal] = useState(false);
+  const [tempHour, setTempHour] = useState<string>("09");
+  const [tempMinute, setTempMinute] = useState<string>("00");
+  const [tempAmPm, setTempAmPm] = useState<"AM"|"PM">("AM");
+  const hours12 = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+  const minutes60 = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
   const normalizeTimeInput = (s: string): string | null => {
     const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim());
@@ -277,6 +275,36 @@ export default function Profile() {
     if (Number.isNaN(h) || Number.isNaN(mm) || h < 0 || h > 23 || mm < 0 || mm > 59) return null;
     return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   };
+
+  // 24h <-> 12h helpers for the pickers
+  const to12h = (time24?: string): { hour: string; minute: string; ampm: 'AM'|'PM' } => {
+    const fallback = { hour: '09', minute: '00', ampm: 'AM' as const };
+    if (!time24 || !/^(\d{2}):(\d{2})$/.test(time24)) return fallback;
+    const [hhStr, mm] = time24.split(':');
+    let hh = parseInt(hhStr, 10);
+    const ampm: 'AM' | 'PM' = hh >= 12 ? 'PM' : 'AM';
+    hh = hh % 12;
+    if (hh === 0) hh = 12;
+    return { hour: String(hh).padStart(2, '0'), minute: mm, ampm };
+  };
+  const from12h = (hour: string, minute: string, ampm: 'AM'|'PM'): string => {
+    let h = parseInt(hour, 10);
+    if (ampm === 'AM') {
+      if (h === 12) h = 0;
+    } else {
+      if (h !== 12) h = h + 12;
+    }
+    return `${String(h).padStart(2, '0')}:${String(parseInt(minute, 10)).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (addingReminder && reminderForm.frequency !== 'hourly') {
+      const { hour, minute, ampm } = to12h(reminderForm.time || '09:00');
+      setTimeHour(hour);
+      setTimeMinute(minute);
+      setTimeAmPm(ampm);
+    }
+  }, [addingReminder, reminderForm.frequency, reminderForm.time]);
 
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
@@ -469,6 +497,33 @@ export default function Profile() {
       ...prev,
       [field]: value,
     }));
+    // Immediately persist reminder toggle to backend to avoid losing state on tab switch
+    if (field === 'reminderEnabled' && typeof value === 'boolean') {
+      try {
+        // Prefer first non-hourly reminder if available to sync with backend time
+        let time24h = userData.reminderTime;
+        const firstNonHourly = reminders.find(r => r.frequency !== 'hourly');
+        if (firstNonHourly?.time) {
+          time24h = firstNonHourly.time; // already HH:mm 24h
+        } else {
+          const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = timeMatch[2];
+            const ampm = timeMatch[3].toUpperCase();
+            if (ampm === 'PM' && hours !== 12) hours += 12;
+            else if (ampm === 'AM' && hours === 12) hours = 0;
+            time24h = `${String(hours).padStart(2, '0')}:${minutes}`;
+          }
+        }
+        updateReminderSettings({
+          enabled: value,
+          frequency: userData.reminderFrequency,
+          time: time24h,
+          dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
+        }).catch(() => {});
+      } catch {}
+    }
     // Field-level validation
     if (typeof value === 'string') {
       validateField(field as string, value);
@@ -577,6 +632,20 @@ export default function Profile() {
       } else {
         await addReminder(payload as any);
       }
+      // Sync backend basic reminder settings for daily/weekly (legacy field used elsewhere)
+      try {
+        if (payload.frequency !== 'hourly') {
+          await updateReminderSettings({
+            enabled: true,
+            frequency: payload.frequency as 'daily'|'weekly',
+            time: payload.time!,
+            dayOfWeek: payload.frequency === 'weekly' ? payload.dayOfWeek : undefined,
+          });
+          // Also reflect in UI userData.reminderTime for consistency
+          const { hour, minute, ampm } = to12h(payload.time!);
+          setUserData((prev) => ({ ...prev, reminderTime: `${parseInt(hour,10)}:${minute} ${ampm}`, reminderFrequency: payload.frequency as any, reminderDayOfWeek: payload.dayOfWeek || prev.reminderDayOfWeek }));
+        }
+      } catch {}
       await refreshReminders();
       setAddingReminder(false);
       setEditingReminderId(null);
@@ -746,15 +815,22 @@ export default function Profile() {
         const suggestions = features.map((f: any) => {
           const label = f.place_name as string;
           const context: any[] = f.context || [];
+          const placeType: string[] = Array.isArray(f.place_type) ? f.place_type : [];
           const byId = (idStart: string) => context.find((c) => typeof c.id === 'string' && c.id.startsWith(idStart));
           const city = (byId('place')?.text || byId('locality')?.text) as string | undefined;
           const region = (byId('region')?.short_code || byId('region')?.text) as string | undefined;
           const province = region?.toUpperCase() === 'CA-AB' ? 'AB' : (region === 'Alberta' ? 'AB' : region);
           const postal = (byId('postcode')?.text || '') as string;
+          // Preserve leading house number when available for address features
+          const number: string | undefined = (f.address || f.properties?.address) as any;
+          const street: string | undefined = f.text as any;
+          const address1 = placeType.includes('address')
+            ? [number, street].filter(Boolean).join(' ')
+            : (street || label);
           return {
             id: f.id as string,
             label,
-            address1: f.text || label,
+            address1,
             city,
             province,
             postalCode: postal,
@@ -802,6 +878,7 @@ export default function Profile() {
           try {
             console.log("🔄 Signing out...");
             await signOut();
+            try { setReminderUserKey(null); } catch {}
             console.log("✅ Signed out successfully");
             router.replace("/auth/signin");
           } catch (error) {
@@ -1271,83 +1348,21 @@ export default function Profile() {
                     {reminderForm.frequency !== 'hourly' && (
                       <View style={{ marginTop: 10 }}>
                         <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Time</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                          {['08:00','09:00','12:00','18:00','20:00'].map((t) => (
-                            <TouchableOpacity key={t} onPress={() => setReminderForm((p) => ({ ...p, time: t }))} style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 12, backgroundColor: reminderForm.time === t ? COLORS.primary : '#f1f1f1' }}>
-                              <Text style={{ color: reminderForm.time === t ? COLORS.white : COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensed }}>{t}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => {
-                            // Initialize picker value based on current form time
-                            const base = new Date();
-                            base.setSeconds(0, 0);
-                            const t = reminderForm.time && /^\d{1,2}:\d{2}$/.test(reminderForm.time)
-                              ? reminderForm.time
-                              : '09:00';
-                            const [hh, mm] = t.split(':').map((x) => parseInt(x, 10));
-                            base.setHours(isNaN(hh) ? 9 : hh, isNaN(mm) ? 0 : mm, 0, 0);
-                            setTimePickerValue(base);
-                            setShowTimePicker(true);
-                          }}
-                          style={styles.timeButton}
-                        >
-                          <Text style={styles.timeButtonText}>Pick time</Text>
-                        </TouchableOpacity>
-                        {showTimePicker && (
-                          <View style={styles.pickerContainer}>
-                            <DateTimePicker
-                              value={timePickerValue}
-                              mode="time"
-                              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                              is24Hour
-                              onChange={(event: DateTimePickerEvent, date?: Date) => {
-                                if (Platform.OS === 'android') {
-                                  setShowTimePicker(false);
-                                }
-                                if (event.type === 'dismissed') return;
-                                const d = date || timePickerValue;
-                                setTimePickerValue(d);
-                                const hh = String(d.getHours()).padStart(2, '0');
-                                const mm = String(d.getMinutes()).padStart(2, '0');
-                                setReminderForm((p) => ({ ...p, time: `${hh}:${mm}` }));
-                                setTimeError('');
-                              }}
-                              style={{ alignSelf: 'center' }}
-                            />
-                            {Platform.OS === 'ios' && (
-                              <TouchableOpacity onPress={() => setShowTimePicker(false)} style={[styles.timeButton, { marginTop: 8 }]}> 
-                                <Text style={styles.timeButtonText}>Done</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
-                        <View style={styles.customTimeRow}>
-                          <TextInput
-                            value={customTime}
-                            onChangeText={(txt) => { setCustomTime(txt); setTimeError(''); }}
-                            placeholder="HH:mm"
-                            keyboardType="numeric"
-                            maxLength={5}
-                            style={styles.customTimeInput}
-                          />
+                        <View style={styles.timeSummaryRow}>
+                          <Text style={styles.timeSummaryText}>{`${timeHour}:${timeMinute} ${timeAmPm}`}</Text>
                           <TouchableOpacity
                             onPress={() => {
-                              const norm = normalizeTimeInput(customTime);
-                              if (!norm) {
-                                setTimeError('Enter time as HH:mm (00-23:00-59)');
-                                return;
-                              }
-                              setReminderForm((p) => ({ ...p, time: norm }));
-                              setTimeError('');
+                              // seed temp with current values and open modal
+                              setTempHour(timeHour);
+                              setTempMinute(timeMinute);
+                              setTempAmPm(timeAmPm);
+                              setShowTimeSelectModal(true);
                             }}
                             style={styles.smallActionBtn}
                           >
-                            <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Set</Text>
+                            <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Select Time</Text>
                           </TouchableOpacity>
                         </View>
-                        {!!timeError && <Text style={[styles.errorText, { marginTop: 6 }]}>{timeError}</Text>}
                       </View>
                     )}
 
@@ -1476,6 +1491,82 @@ export default function Profile() {
       </Modal>
 
       {/* Legacy reminder modals removed in favor of inline manager */}
+
+      {/* Time Selection Modal (white card, matches success modal style) */}
+      <Modal
+        visible={showTimeSelectModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTimeSelectModal(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={styles.timeModalCard}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>Select Time</Text>
+            <View style={styles.timeModalGridRow}>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {hours12.map(h => (
+                    <TouchableOpacity
+                      key={h}
+                      onPress={() => setTempHour(h)}
+                      style={[styles.timeModalOption, tempHour === h && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempHour === h && styles.timeModalOptionTextActive]}>{h}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {minutes60.map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setTempMinute(m)}
+                      style={[styles.timeModalOption, tempMinute === m && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempMinute === m && styles.timeModalOptionTextActive]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {(['AM','PM'] as const).map(ap => (
+                    <TouchableOpacity
+                      key={ap}
+                      onPress={() => setTempAmPm(ap)}
+                      style={[styles.timeModalOption, tempAmPm === ap && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempAmPm === ap && styles.timeModalOptionTextActive]}>{ap}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity onPress={() => setShowTimeSelectModal(false)} style={[styles.smallActionBtn, { backgroundColor: COLORS.lightGray }]}>
+                <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setTimeHour(tempHour);
+                  setTimeMinute(tempMinute);
+                  setTimeAmPm(tempAmPm);
+                  const t24 = from12h(tempHour, tempMinute, tempAmPm);
+                  setReminderForm((p) => ({ ...p, time: t24 }));
+                  setShowTimeSelectModal(false);
+                }}
+                style={[styles.smallActionBtn, { marginLeft: 8 }]}
+              >
+                <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1805,5 +1896,87 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     color: COLORS.darkText,
     fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  triplePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  pickerBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  pickerSeparator: {
+    marginHorizontal: 8,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 18,
+  },
+  timeSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+  },
+  timeSummaryText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 16,
+  },
+  timeModalCard: {
+    width: '85%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  timeModalGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  timeModalColumn: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  timeModalOption: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    marginBottom: 6,
+  },
+  timeModalOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#f2f7ff',
+  },
+  timeModalOptionText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+    fontSize: 16,
+  },
+  timeModalOptionTextActive: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.primary,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
   },
 });

@@ -5,6 +5,12 @@ const STORAGE_KEY = "symptomReminderNotificationId";
 const BELL_UNREAD_KEY = "notificationBellUnread";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
+// Per-user namespace for AsyncStorage keys to avoid cross-user leakage on the same device
+let USER_NS: string | null = null;
+export function setReminderUserKey(ns: string | null) {
+  USER_NS = (ns && String(ns).trim().length > 0) ? String(ns) : null;
+}
+function nk(key: string): string { return USER_NS ? `${USER_NS}:${key}` : key; }
 let handlerInitialized = false;
 
 export type ReminderFrequency = "daily" | "weekly";
@@ -35,7 +41,7 @@ function genId(): string {
 
 export async function getReminders(): Promise<ReminderItem[]> {
   try {
-    const raw = await AsyncStorage.getItem(REMINDERS_KEY);
+    const raw = await AsyncStorage.getItem(nk(REMINDERS_KEY));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed as ReminderItem[];
@@ -46,7 +52,7 @@ export async function getReminders(): Promise<ReminderItem[]> {
 }
 
 async function saveReminders(list: ReminderItem[]): Promise<void> {
-  try { await AsyncStorage.setItem(REMINDERS_KEY, JSON.stringify(list)); } catch {}
+  try { await AsyncStorage.setItem(nk(REMINDERS_KEY), JSON.stringify(list)); } catch {}
 }
 
 export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"updatedAt">): Promise<ReminderItem[]> {
@@ -163,17 +169,17 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 
 export async function cancelSymptomReminder() {
   const Notifications = await getNotificationsModule();
-  const existingId = await AsyncStorage.getItem(STORAGE_KEY);
+  const existingId = await AsyncStorage.getItem(nk(STORAGE_KEY));
   if (existingId) {
     try {
       if (typeof (Notifications as any).cancelScheduledNotificationAsync === 'function') {
         await (Notifications as any).cancelScheduledNotificationAsync(existingId);
       }
     } catch {}
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(nk(STORAGE_KEY));
   }
   // Clear bell unread flag when canceling
-  try { await AsyncStorage.setItem(BELL_UNREAD_KEY, "0"); } catch {}
+  try { await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), "0"); } catch {}
 }
 
 function parseTimeToHourMinute(t: string): { hour: number; minute: number } {
@@ -242,7 +248,7 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
     trigger,
   });
 
-  await AsyncStorage.setItem(STORAGE_KEY, id);
+  await AsyncStorage.setItem(nk(STORAGE_KEY), id);
 }
 
 export async function getAllScheduledNotifications(): Promise<any[]> {
@@ -265,7 +271,7 @@ export async function getSymptomReminderDetails(): Promise<{
   trigger?: any;
 } | null> {
   const Notifications = await getNotificationsModule();
-  const storedId = await AsyncStorage.getItem(STORAGE_KEY);
+  const storedId = await AsyncStorage.getItem(nk(STORAGE_KEY));
   
   if (!storedId) {
     return { id: null, scheduled: false };
@@ -294,12 +300,12 @@ export async function getSymptomReminderDetails(): Promise<{
 
 // Bell unread helpers
 export async function setBellUnread(unread: boolean): Promise<void> {
-  try { await AsyncStorage.setItem(BELL_UNREAD_KEY, unread ? "1" : "0"); } catch {}
+  try { await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), unread ? "1" : "0"); } catch {}
 }
 
 export async function isBellUnread(): Promise<boolean> {
   try {
-    const v = await AsyncStorage.getItem(BELL_UNREAD_KEY);
+    const v = await AsyncStorage.getItem(nk(BELL_UNREAD_KEY));
     return v === "1";
   } catch {
     return false;
@@ -310,7 +316,7 @@ export async function markBellRead(): Promise<void> {
   await setBellUnread(false);
   // Store the date/time when user marked as read, so we don't re-trigger until next reminder
   const now = new Date().toISOString();
-  try { await AsyncStorage.setItem(LAST_READ_DATE_KEY, now); } catch {}
+  try { await AsyncStorage.setItem(nk(LAST_READ_DATE_KEY), now); } catch {}
 }
 
 // Legacy helper no longer used; kept for reference
@@ -348,7 +354,7 @@ export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promi
 
   // If user already read after the most recent due window start, keep cleared until next occurrence
   // We use LAST_READ_DATE_KEY as a global read marker.
-  const lastReadStr = await AsyncStorage.getItem(LAST_READ_DATE_KEY);
+  const lastReadStr = await AsyncStorage.getItem(nk(LAST_READ_DATE_KEY));
   const lastRead = lastReadStr ? new Date(lastReadStr) : undefined;
 
   const now = new Date();
@@ -406,6 +412,10 @@ export async function scheduleReminderItem(item: ReminderItem) {
   if (typeof (Notifications as any).scheduleNotificationAsync !== 'function') return;
 
   try {
+    // Ensure we have permission before scheduling multi-reminders
+    const ok = await requestNotificationPermissions();
+    if (!ok) return;
+
     if (item.frequency === "hourly") {
       // Use time interval trigger every 3600 seconds
       await (Notifications as any).scheduleNotificationAsync({
