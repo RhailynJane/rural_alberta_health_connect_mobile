@@ -30,11 +30,13 @@ interface OfflineRegion {
 interface OfflineMapDownloaderProps {
   visible: boolean;
   onClose: () => void;
+  onRegionDownloaded?: (center: { latitude: number; longitude: number; zoom?: number }) => void;
 }
 
 export default function OfflineMapDownloader({
   visible,
   onClose,
+  onRegionDownloaded,
 }: OfflineMapDownloaderProps) {
   const [regions, setRegions] = useState<OfflineRegion[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -116,6 +118,14 @@ export default function OfflineMapDownloader({
         'Success',
         `${region.name} has been downloaded for offline use!`
       );
+
+      // Notify parent to focus the map on this region
+      if (onRegionDownloaded && Array.isArray(region.center) && region.center.length === 2) {
+        const [lon, lat] = region.center as [number, number];
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          onRegionDownloaded({ latitude: lat, longitude: lon, zoom: region.zoom ?? 10 });
+        }
+      }
     } catch (error) {
       console.error('Error downloading region:', error);
       Alert.alert('Error', 'Failed to download map region. Please try again.');

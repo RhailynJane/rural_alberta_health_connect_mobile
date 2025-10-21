@@ -1,17 +1,18 @@
-import { useMutation } from "convex/react";
+import { useDatabase } from "@nozbe/watermelondb/hooks";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -21,52 +22,171 @@ import { FONTS } from "../constants/constants";
 
 export default function EmergencyContact() {
   const router = useRouter();
+  const database = useDatabase();
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser);
+  
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState('');
 
   const updateEmergencyContact = useMutation(api.emergencyContactOnboarding.update.withNameAndPhone);
 
-    // Format phone number as (XXX) XXX-XXXX
-    const formatPhoneNumber = (input: string) => {
-      // Remove all non-digit characters
-      const cleaned = input.replace(/\D/g, "");
-      const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
-      if (!match) return input;
-      let formatted = "";
-      if (match[1]) {
-        formatted += `(${match[1]}`;
-        if (match[1].length === 3) formatted += ") ";
+  // Format phone number as (XXX) XXX-XXXX
+  const formatPhoneNumber = (input: string) => {
+    // Remove all non-digit characters
+    const cleaned = input.replace(/\D/g, "");
+    
+    // Don't format if empty
+    if (cleaned.length === 0) return "";
+    
+    // Limit to 10 digits
+    const limited = cleaned.slice(0, 10);
+    
+    const match = limited.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
+    if (!match) return input;
+    
+    let formatted = "";
+    
+    // First 3 digits
+    if (match[1]) {
+      if (match[1].length === 3 && (match[2] || match[3])) {
+        formatted += `(${match[1]}) `;
+      } else {
+        formatted += match[1];
       }
-      if (match[2]) {
-        formatted += match[2];
-        if (match[2].length === 3 && match[3]) formatted += "-";
+    }
+    
+    // Next 3 digits
+    if (match[2]) {
+      formatted += match[2];
+      if (match[2].length === 3 && match[3]) {
+        formatted += "-";
       }
-      if (match[3]) {
-        formatted += match[3];
+    }
+    
+    // Last 4 digits
+    if (match[3]) {
+      formatted += match[3];
+    }
+    
+    return formatted;
+  };
+
+  // Validation logic
+  const validateField = (field: string, raw: string): boolean => {
+    const value = (raw || '').trim();
+    let error = '';
+    switch (field) {
+      case 'contactName': {
+        if (value.length === 0) {
+          error = 'Emergency contact name is required';
+        } else if (value.length < 2) {
+          error = 'Name must be at least 2 characters';
+        }
+        break;
       }
-      return formatted;
-    };
+      case 'contactPhone': {
+        if (value.length === 0) {
+          error = 'Emergency contact phone is required';
+          break;
+        }
+        const digits = value.replace(/\D/g, '');
+        if (digits.length < 10) {
+          error = 'Phone number must be at least 10 digits';
+        }
+        break;
+      }
+    }
+    setErrors((prev) => ({ ...prev, [field]: error }));
+    return !error;
+  };
+
+  const validateAll = (): boolean => {
+    const results = [
+      validateField('contactName', contactName),
+      validateField('contactPhone', contactPhone),
+    ];
+    return results.every(Boolean);
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    if (field === 'contactName') {
+      setContactName(value);
+    } else if (field === 'contactPhone') {
+      const formatted = formatPhoneNumber(value);
+      setContactPhone(formatted);
+    }
+    validateField(field, value);
+  };
+
   const handleContinue = async () => {
-    if (!contactName || !contactPhone) {
-      Alert.alert("Required Fields", "Please enter both emergency contact name and phone number.");
+    // Validate all fields
+    if (!validateAll()) {
+      setErrorModalMessage("Please fix the errors highlighted in red before continuing.");
+      setErrorModalVisible(true);
       return;
     }
 
+    if (!currentUser?._id) {
+      setErrorModalMessage("Please sign in to continue.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    console.log("🔄 Emergency Contact - Starting submission");
     setIsSubmitting(true);
+
     try {
-      await updateEmergencyContact({
-        emergencyContactName: contactName,
-        emergencyContactPhone: contactPhone
+      // Save to WatermelonDB first (offline-first)
+      await database.write(async () => {
+        const userProfilesCollection = database.get("user_profiles");
+        const existingProfiles = await userProfilesCollection.query().fetch();
+        const existingProfile = existingProfiles.find(
+          (p: any) => p.userId === currentUser._id
+        );
+
+        if (existingProfile) {
+          await existingProfile.update((profile: any) => {
+            profile.emergencyContactName = contactName;
+            profile.emergencyContactPhone = contactPhone;
+          });
+          console.log("✅ Emergency Contact - Updated existing local profile");
+        } else {
+          await userProfilesCollection.create((profile: any) => {
+            profile.userId = currentUser._id;
+            profile.emergencyContactName = contactName;
+            profile.emergencyContactPhone = contactPhone;
+          });
+          console.log("✅ Emergency Contact - Created new local profile");
+        }
       });
-      console.log("Emergency contact saved successfully");
+
+      console.log("✅ Emergency Contact - Saved to local database");
+
+      // Then sync with Convex (online)
+      try {
+        await updateEmergencyContact({
+          emergencyContactName: contactName,
+          emergencyContactPhone: contactPhone
+        });
+        console.log("✅ Emergency Contact - Synced with Convex");
+      } catch (syncError) {
+        console.log(
+          "⚠️ Emergency Contact - Saved locally, will sync when online:",
+          syncError
+        );
+      }
+
+      console.log("➡️ Navigating to medical history");
       router.push("/auth/medical-history");
     } catch (error) {
-      console.error("Error saving emergency contact:", error);
-      Alert.alert(
-        "Error",
-        "Failed to save emergency contact information. Please try again."
-      );
+      console.error("❌ Emergency Contact - Error:", error);
+      setErrorModalMessage("Failed to save emergency contact information. Please try again.");
+      setErrorModalVisible(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -116,33 +236,37 @@ export default function EmergencyContact() {
 
               <View style={styles.formContainer}>
                 <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Emergency Contact Name
+                  Emergency Contact Name *
                 </Text>
                 <TextInput
                   style={[
                     styles.input,
-                    { fontFamily: FONTS.BarlowSemiCondensed }
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.contactName ? styles.inputError : null,
                   ]}
                   placeholder="Enter emergency contact name"
                   placeholderTextColor="#999"
                   value={contactName}
-                  onChangeText={setContactName}
+                  onChangeText={(val) => handleInputChange('contactName', val)}
                 />
+                {errors.contactName ? <Text style={styles.errorText}>{errors.contactName}</Text> : null}
 
                 <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
-                  Emergency Contact Phone
+                  Emergency Contact Phone *
                 </Text>
                 <TextInput
                   style={[
                     styles.input,
-                    { fontFamily: FONTS.BarlowSemiCondensed }
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.contactPhone ? styles.inputError : null,
                   ]}
-                  placeholder="Enter emergency contact phone"
+                  placeholder="(403) 555-0123"
                   placeholderTextColor="#999"
                   value={contactPhone}
-                  onChangeText={text => setContactPhone(formatPhoneNumber(text))}
+                  onChangeText={(val) => handleInputChange('contactPhone', val)}
                   keyboardType="phone-pad"
                 />
+                {errors.contactPhone ? <Text style={styles.errorText}>{errors.contactPhone}</Text> : null}
               </View>
 
               <View style={styles.buttonContainer}>
@@ -158,10 +282,10 @@ export default function EmergencyContact() {
                 <TouchableOpacity
                   style={[
                     styles.continueButton,
-                    (isSubmitting || !contactName || !contactPhone) && styles.continueButtonDisabled
+                    isSubmitting && styles.continueButtonDisabled
                   ]}
                   onPress={handleContinue}
-                  disabled={isSubmitting || !contactName || !contactPhone}
+                  disabled={isSubmitting}
                 >
                   {isSubmitting ? (
                     <ActivityIndicator color="white" size="small" />
@@ -176,6 +300,33 @@ export default function EmergencyContact() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Error Modal */}
+      <Modal
+        visible={errorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <Text style={[styles.errorModalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Validation Error
+            </Text>
+            <Text style={[styles.errorModalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {errorModalMessage}
+            </Text>
+            <TouchableOpacity
+              style={styles.errorModalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={[styles.errorModalButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                OK
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -295,6 +446,66 @@ const styles = StyleSheet.create({
     backgroundColor: "#CCCCCC",
   },
   continueButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  inputError: {
+    borderColor: "red",
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: "red",
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorModalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  errorModalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorModalButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  errorModalButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",

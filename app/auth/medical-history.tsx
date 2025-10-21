@@ -1,10 +1,11 @@
-import { useMutation } from "convex/react";
+import { useDatabase } from "@nozbe/watermelondb/hooks";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,31 +21,118 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
+const MAX_CHARS = 500;
+
 export default function MedicalHistory() {
   const router = useRouter();
+  const database = useDatabase();
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser);
   const { refreshSession } = useSessionRefresh(); 
+  
   const [medicalConditions, setMedicalConditions] = useState('');
   const [currentMedications, setCurrentMedications] = useState('');
   const [allergies, setAllergies] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState('');
 
   const updateMedicalHistory = useMutation(api.medicalHistoryOnboarding.update.withAllConditions);
   const updateCompleteUserOnboarding = useMutation(api.medicalHistoryOnboarding.update.completeUserOnboarding);
 
-  const handleCompleteSetup = async () => {
-    setIsSubmitting(true);
-    try {
-      // Save medical history
-      await updateMedicalHistory({
-        medicalConditions: medicalConditions || undefined,
-        currentMedications: currentMedications || undefined,
-        allergies: allergies || undefined,
-      });
-      console.log("✅ Medical history saved successfully");
+  // Validation logic
+  const validateField = (field: string, value: string): boolean => {
+    let error = '';
+    if (value.length > MAX_CHARS) {
+      error = `Maximum ${MAX_CHARS} characters allowed`;
+    }
+    setErrors((prev) => ({ ...prev, [field]: error }));
+    return !error;
+  };
 
-      // Complete onboarding
-      await updateCompleteUserOnboarding();
-      console.log("✅ Onboarding marked as completed");
+  const validateAll = (): boolean => {
+    const results = [
+      validateField('medicalConditions', medicalConditions),
+      validateField('currentMedications', currentMedications),
+      validateField('allergies', allergies),
+    ];
+    return results.every(Boolean);
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    if (field === 'medicalConditions') setMedicalConditions(value);
+    else if (field === 'currentMedications') setCurrentMedications(value);
+    else if (field === 'allergies') setAllergies(value);
+    validateField(field, value);
+  };
+
+  const handleCompleteSetup = async () => {
+    // Validate all fields
+    if (!validateAll()) {
+      setErrorModalMessage("Please fix the errors highlighted in red. Each field has a maximum of 500 characters.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    if (!currentUser?._id) {
+      setErrorModalMessage("Please sign in to continue.");
+      setErrorModalVisible(true);
+      return;
+    }
+
+    console.log("🔄 Medical History - Starting submission");
+    setIsSubmitting(true);
+    
+    try {
+      // Save to WatermelonDB first (offline-first)
+      await database.write(async () => {
+        const userProfilesCollection = database.get("user_profiles");
+        const existingProfiles = await userProfilesCollection.query().fetch();
+        const existingProfile = existingProfiles.find(
+          (p: any) => p.userId === currentUser._id
+        );
+
+        if (existingProfile) {
+          await existingProfile.update((profile: any) => {
+            profile.medicalConditions = medicalConditions || '';
+            profile.currentMedications = currentMedications || '';
+            profile.allergies = allergies || '';
+            profile.onboardingCompleted = true;
+          });
+          console.log("✅ Medical History - Updated existing local profile");
+        } else {
+          await userProfilesCollection.create((profile: any) => {
+            profile.userId = currentUser._id;
+            profile.medicalConditions = medicalConditions || '';
+            profile.currentMedications = currentMedications || '';
+            profile.allergies = allergies || '';
+            profile.onboardingCompleted = true;
+          });
+          console.log("✅ Medical History - Created new local profile");
+        }
+      });
+
+      console.log("✅ Medical History - Saved to local database");
+
+      // Then sync with Convex (online)
+      try {
+        await updateMedicalHistory({
+          medicalConditions: medicalConditions || undefined,
+          currentMedications: currentMedications || undefined,
+          allergies: allergies || undefined,
+        });
+        console.log("✅ Medical History - Synced with Convex");
+
+        // Complete onboarding
+        await updateCompleteUserOnboarding();
+        console.log("✅ Onboarding marked as completed in Convex");
+      } catch (syncError) {
+        console.log(
+          "⚠️ Medical History - Saved locally, will sync when online:",
+          syncError
+        );
+      }
 
       // Refresh session to update auth state with new onboarding status
       console.log("🔄 Refreshing session via custom method...");
@@ -55,11 +143,9 @@ export default function MedicalHistory() {
       router.replace("/(tabs)/dashboard");
 
     } catch (error) {
-      console.error("❌ Error completing onboarding:", error);
-      Alert.alert(
-        "Error",
-        "Failed to complete setup. Please try again."
-      );
+      console.error("❌ Medical History - Error:", error);
+      setErrorModalMessage("Failed to complete setup. Please try again.");
+      setErrorModalVisible(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -108,56 +194,92 @@ export default function MedicalHistory() {
               </Text>
 
               <View style={styles.formContainer}>
-                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Medical Conditions (Optional)
-                </Text>
+                <View style={styles.fieldHeader}>
+                  <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Medical Conditions (Optional)
+                  </Text>
+                  <Text style={[
+                    styles.charCounter,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    medicalConditions.length > 450 ? styles.charCounterWarning : null
+                  ]}>
+                    {medicalConditions.length}/{MAX_CHARS}
+                  </Text>
+                </View>
                 <TextInput
                   style={[
                     styles.textArea,
-                    { fontFamily: FONTS.BarlowSemiCondensed }
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.medicalConditions ? styles.inputError : null,
                   ]}
                   placeholder="List any medical conditions you have"
                   placeholderTextColor="#999"
                   value={medicalConditions}
-                  onChangeText={setMedicalConditions}
+                  onChangeText={(val) => handleInputChange('medicalConditions', val)}
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
+                  maxLength={MAX_CHARS}
                 />
+                {errors.medicalConditions ? <Text style={styles.errorText}>{errors.medicalConditions}</Text> : null}
 
-                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
-                  Current Medications (Optional)
-                </Text>
+                <View style={[styles.fieldHeader, { marginTop: 16 }]}>
+                  <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Current Medications (Optional)
+                  </Text>
+                  <Text style={[
+                    styles.charCounter,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    currentMedications.length > 450 ? styles.charCounterWarning : null
+                  ]}>
+                    {currentMedications.length}/{MAX_CHARS}
+                  </Text>
+                </View>
                 <TextInput
                   style={[
                     styles.textArea,
-                    { fontFamily: FONTS.BarlowSemiCondensed }
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.currentMedications ? styles.inputError : null,
                   ]}
                   placeholder="List any current medications"
                   placeholderTextColor="#999"
                   value={currentMedications}
-                  onChangeText={setCurrentMedications}
+                  onChangeText={(val) => handleInputChange('currentMedications', val)}
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
+                  maxLength={MAX_CHARS}
                 />
+                {errors.currentMedications ? <Text style={styles.errorText}>{errors.currentMedications}</Text> : null}
 
-                <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 16 }]}>
-                  Allergies (Optional)
-                </Text>
+                <View style={[styles.fieldHeader, { marginTop: 16 }]}>
+                  <Text style={[styles.fieldLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Allergies (Optional)
+                  </Text>
+                  <Text style={[
+                    styles.charCounter,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    allergies.length > 450 ? styles.charCounterWarning : null
+                  ]}>
+                    {allergies.length}/{MAX_CHARS}
+                  </Text>
+                </View>
                 <TextInput
                   style={[
                     styles.textArea,
-                    { fontFamily: FONTS.BarlowSemiCondensed }
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.allergies ? styles.inputError : null,
                   ]}
                   placeholder="List any allergies you have"
                   placeholderTextColor="#999"
                   value={allergies}
-                  onChangeText={setAllergies}
+                  onChangeText={(val) => handleInputChange('allergies', val)}
                   multiline
                   numberOfLines={3}
                   textAlignVertical="top"
+                  maxLength={MAX_CHARS}
                 />
+                {errors.allergies ? <Text style={styles.errorText}>{errors.allergies}</Text> : null}
               </View>
 
               <View style={styles.buttonContainer}>
@@ -191,6 +313,33 @@ export default function MedicalHistory() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Error Modal */}
+      <Modal
+        visible={errorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalVisible(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <Text style={[styles.errorModalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Validation Error
+            </Text>
+            <Text style={[styles.errorModalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {errorModalMessage}
+            </Text>
+            <TouchableOpacity
+              style={styles.errorModalButton}
+              onPress={() => setErrorModalVisible(false)}
+            >
+              <Text style={[styles.errorModalButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                OK
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -311,6 +460,80 @@ const styles = StyleSheet.create({
     backgroundColor: "#CCCCCC",
   },
   completeButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  fieldHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  charCounter: {
+    fontSize: 12,
+    color: '#666',
+  },
+  charCounterWarning: {
+    color: '#FF9800',
+    fontWeight: '600',
+  },
+  inputError: {
+    borderColor: "red",
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: "red",
+    fontSize: 12,
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorModalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  errorModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  errorModalMessage: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  errorModalButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 30,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  errorModalButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",

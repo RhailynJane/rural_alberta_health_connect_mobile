@@ -9,6 +9,7 @@ export default class MedicalFacility extends Model {
   @field('type') type!: string;
   @field('address') address!: string;
   @field('phone') phone?: string;
+  @field('hours') hours?: string;
   @field('latitude') latitude!: number;
   @field('longitude') longitude!: number;
   @field('distance') distance!: number;

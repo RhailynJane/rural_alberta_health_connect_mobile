@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 1,
+  version: 2,
   tables: [
     tableSchema({
       name: 'users',
@@ -68,6 +68,7 @@ export default appSchema({
         { name: 'type', type: 'string' },
         { name: 'address', type: 'string' },
         { name: 'phone', type: 'string', isOptional: true },
+        { name: 'hours', type: 'string', isOptional: true },
         { name: 'latitude', type: 'number' },
         { name: 'longitude', type: 'number' },
         { name: 'distance', type: 'number' },

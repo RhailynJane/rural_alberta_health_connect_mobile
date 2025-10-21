@@ -1,16 +1,16 @@
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-    DEFAULT_MAP_CONFIG,
-    MAPBOX_ACCESS_TOKEN,
+  DEFAULT_MAP_CONFIG,
+  MAPBOX_ACCESS_TOKEN,
 } from '../config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 
@@ -31,24 +31,37 @@ interface MapboxOfflineMapProps {
   clinics: Clinic[];
   userLocation: { latitude: number; longitude: number } | null;
   onClinicPress?: (clinic: Clinic) => void;
+  // Optional external camera focus control
+  focusCenter?: { latitude: number; longitude: number; zoom?: number } | null;
 }
 
 export default function MapboxOfflineMap({
   clinics,
   userLocation,
   onClinicPress,
+  focusCenter,
 }: MapboxOfflineMapProps) {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const mapRef = useRef<Mapbox.MapView>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [followUserLocation, setFollowUserLocation] = useState(true);
 
-  // Find nearest clinic
-  const nearestClinic = clinics.length > 0 ? clinics[0] : null;
+  // Filter clinics to only those with valid numeric coordinates
+  const sanitizedClinics = (clinics || []).filter((c) =>
+    Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)
+  );
+  // Find nearest clinic from sanitized list
+  const nearestClinic = sanitizedClinics.length > 0 ? sanitizedClinics[0] : null;
 
   // Center on user location when available
   useEffect(() => {
-    if (userLocation && cameraRef.current && followUserLocation) {
+    if (
+      userLocation &&
+      Number.isFinite(userLocation.latitude) &&
+      Number.isFinite(userLocation.longitude) &&
+      cameraRef.current &&
+      followUserLocation
+    ) {
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
         zoomLevel: 12,
@@ -57,8 +70,30 @@ export default function MapboxOfflineMap({
     }
   }, [userLocation, followUserLocation]);
 
+  // React to external focus requests (e.g., from OfflineMapDownloader)
+  useEffect(() => {
+    if (
+      focusCenter &&
+      Number.isFinite(focusCenter.latitude) &&
+      Number.isFinite(focusCenter.longitude) &&
+      cameraRef.current
+    ) {
+      setFollowUserLocation(false);
+      cameraRef.current.setCamera({
+        centerCoordinate: [focusCenter.longitude, focusCenter.latitude],
+        zoomLevel: focusCenter.zoom ?? 10,
+        animationDuration: 1200,
+      });
+    }
+  }, [focusCenter]);
+
   const handleRecenter = () => {
-    if (userLocation && cameraRef.current) {
+    if (
+      userLocation &&
+      Number.isFinite(userLocation.latitude) &&
+      Number.isFinite(userLocation.longitude) &&
+      cameraRef.current
+    ) {
       setFollowUserLocation(true);
       cameraRef.current.setCamera({
         centerCoordinate: [userLocation.longitude, userLocation.latitude],
@@ -92,7 +127,9 @@ export default function MapboxOfflineMap({
           ref={cameraRef}
           zoomLevel={DEFAULT_MAP_CONFIG.defaultZoom}
           centerCoordinate={
-            userLocation
+            userLocation &&
+            Number.isFinite(userLocation.latitude) &&
+            Number.isFinite(userLocation.longitude)
               ? [userLocation.longitude, userLocation.latitude]
               : [-114.0719, 51.0447] // Calgary default
           }
@@ -101,7 +138,9 @@ export default function MapboxOfflineMap({
         />
 
         {/* User Location */}
-        {userLocation && (
+        {userLocation &&
+          Number.isFinite(userLocation.latitude) &&
+          Number.isFinite(userLocation.longitude) && (
           <Mapbox.PointAnnotation
             id="user-location"
             coordinate={[userLocation.longitude, userLocation.latitude]}
@@ -113,7 +152,7 @@ export default function MapboxOfflineMap({
         )}
 
         {/* Clinic Markers */}
-        {clinics.map((clinic, index) => {
+        {sanitizedClinics.map((clinic, index) => {
           const isNearest = index === 0 && nearestClinic?.id === clinic.id;
           return (
             <Mapbox.PointAnnotation
@@ -134,17 +173,6 @@ export default function MapboxOfflineMap({
                   color="white"
                 />
               </View>
-              <Mapbox.Callout title={clinic.name}>
-                <View style={styles.calloutContainer}>
-                  <Text style={styles.calloutTitle}>{clinic.name}</Text>
-                  <Text style={styles.calloutText}>{clinic.address}</Text>
-                  {clinic.distance && (
-                    <Text style={styles.calloutDistance}>
-                      {clinic.distance.toFixed(1)} km away
-                    </Text>
-                  )}
-                </View>
-              </Mapbox.Callout>
             </Mapbox.PointAnnotation>
           );
         })}
