@@ -33,6 +33,11 @@ export default defineSchema({
     currentMedications: v.optional(v.string()),
     allergies: v.optional(v.string()),
     locationServicesEnabled: v.optional(v.boolean()), 
+    // Symptom assessment reminder settings
+    symptomReminderEnabled: v.optional(v.boolean()),
+    symptomReminderFrequency: v.optional(v.string()), // e.g., "daily" | "weekly"
+    symptomReminderTime: v.optional(v.string()), // HH:mm (24h)
+    symptomReminderDayOfWeek: v.optional(v.string()), // e.g., Mon, Tue, ... if weekly
     onboardingCompleted: v.boolean(), 
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -199,6 +199,11 @@ export async function getUserProfile(ctx: QueryCtx, userId: Id<"users">) {
     emergencyContactName: profile.emergencyContactName,
     emergencyContactPhone: profile.emergencyContactPhone,
     medicalConditions: profile.medicalConditions,
+    // Reminder settings (may be undefined when not set)
+    symptomReminderEnabled: profile.symptomReminderEnabled,
+    symptomReminderFrequency: profile.symptomReminderFrequency,
+    symptomReminderTime: profile.symptomReminderTime,
+    symptomReminderDayOfWeek: profile.symptomReminderDayOfWeek,
   };
 }
 

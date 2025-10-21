@@ -15,7 +15,7 @@ import {
     ALBERTA_REGIONS,
     DEFAULT_MAP_CONFIG,
     OFFLINE_PACK_CONFIG,
-} from '../config/mapbox.config';
+} from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface OfflineRegion {

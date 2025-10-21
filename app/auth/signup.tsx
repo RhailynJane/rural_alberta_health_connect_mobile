@@ -5,15 +5,15 @@ import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
@@ -21,7 +21,7 @@ import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
-import { useSignUpForm } from "./SignUpFormContext";
+import { useSignUpForm } from "./_context/SignUpFormContext";
 
 // Validation schema
 const SignUpSchema = Yup.object().shape({
