@@ -1,38 +1,225 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
+import { useState } from "react";
 import {
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
+const styles = StyleSheet.create({
+  contentArea: {
+    flex: 1,
+    paddingBottom: 60,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 100,
+  },
+  contentSection: {
+    padding: 15,
+  },
+  entriesContainer: {
+    backgroundColor: "#F8F9FA",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    minHeight: 300,
+  },
+  entriesText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center" as const,
+    lineHeight: 24,
+  },
+  entriesList: {
+    // gap is not supported in RN, use marginBottom on children if needed
+  },
+  entryItem: {
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    marginBottom: 12,
+  },
+  entryHeader: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    alignItems: "center" as const,
+    marginBottom: 8,
+  },
+  entryTime: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    // gap is not supported in RN
+  },
+  timeText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  severityText: {
+    fontSize: 12,
+    color: "white",
+    fontWeight: "600" as const,
+  },
+  symptomsText: {
+    fontSize: 14,
+    color: "#1A1A1A",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  categoryContainer: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    marginBottom: 4,
+  },
+  categoryText: {
+    fontSize: 12,
+    color: "#2A7DE1",
+  },
+  createdByContainer: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+  },
+  createdByText: {
+    fontSize: 11,
+    color: "#666",
+  },
+  viewDetailsButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "flex-end" as const,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  viewDetailsText: {
+    fontSize: 14,
+    color: "#2A7DE1",
+    fontWeight: "600" as const,
+    marginRight: 4,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  addButtonContainer: {
+    position: "absolute" as const,
+    bottom: 120,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    backgroundColor: "transparent",
+  },
+  addEntryButton: {
+    backgroundColor: "#28A745",
+    paddingVertical: 18,
+    borderRadius: 12,
+    alignItems: "center" as const,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  addEntryButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600" as const,
+  },
+  disclaimerTitle: {
+    fontSize: 20,
+    color: "#333",
+    textAlign: "center" as const,
+  },
+  searchContainer: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "transparent",
+  },
+  searchInputWrapper: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    color: "#1A1A1A",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  clearButton: {
+    padding: 4,
+  },
+});
+
 export default function DailyLog() {
-  // Get current user directly from your existing query
   const currentUser = useQuery(api.users.getCurrentUser);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Get today's date in local timezone - computed fresh on each render
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayLocalDate = `${year}-${month}-${day}`;
+
   const todaysEntries = useQuery(
     api.healthEntries.getTodaysEntries,
-    currentUser?._id ? { userId: currentUser._id } : "skip"
+    currentUser?._id
+      ? {
+          userId: currentUser._id,
+          localDate: todayLocalDate,
+        }
+      : "skip"
   );
+
+  // Filter entries based on search query (case-insensitive)
+  const filteredEntries = todaysEntries?.filter((entry) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      entry.symptoms.toLowerCase().includes(query) ||
+      entry.category?.toLowerCase().includes(query) ||
+      entry.notes?.toLowerCase().includes(query) ||
+      entry.createdBy.toLowerCase().includes(query)
+    );
+  });
 
   const handleAddLogEntry = () => {
     router.push("/tracker/add-health-entry");
   };
 
   const handleViewEntryDetails = (entryId: string) => {
-    router.push({
-      pathname: "/tracker/log-details",
-      params: { entryId }
-    });
+    router.push({ pathname: "/tracker/log-details", params: { entryId } });
   };
 
   const getSeverityColor = (severity: number) => {
@@ -61,25 +248,108 @@ export default function DailyLog() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+      <CurvedBackground style={{ flex: 1 }}>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Tracker - Daily Log"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
 
-          <View>
-            <View style={styles.contentSection}>
+        <View style={styles.contentSection}>
+          <View
+            style={{ marginBottom: 10, marginTop: -20, alignItems: "center" }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 8,
+              }}
+            >
               <Text
-                style={[
-                  styles.disclaimerTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
+                style={{
+                  fontSize: 24,
+                  lineHeight: 28,
+                  fontWeight: "600",
+                  color: "#1A1A1A",
+                  fontFamily: FONTS.BarlowSemiCondensed,
+                }}
               >
-                Daily Log - {new Date().toLocaleDateString()}
+                Daily Log
               </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginLeft: 10,
+                }}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={22}
+                  color="#2A7DE1"
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 24,
+                    lineHeight: 28,
+                    fontWeight: "600",
+                    color: "#2A7DE1",
+                    fontFamily: FONTS.BarlowSemiCondensed,
+                  }}
+                >
+                  {new Date().toLocaleDateString()}
+                </Text>
+              </View>
             </View>
+            <Text
+              style={{
+                fontSize: 16,
+                lineHeight: 20,
+                color: "#666",
+                fontFamily: FONTS.BarlowSemiCondensed,
+                textAlign: "center",
+              }}
+            >
+              Your daily health entries for today
+            </Text>
+          </View>
+        </View>
 
+        {/* Fixed Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputWrapper}>
+            <Ionicons name="search-outline" size={20} color="#666" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search entries..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <Ionicons name="close-circle" size={20} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.contentArea}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.contentSection}>
               <View style={styles.entriesContainer}>
                 {todaysEntries === undefined ? (
@@ -91,9 +361,9 @@ export default function DailyLog() {
                   >
                     Loading...
                   </Text>
-                ) : todaysEntries && todaysEntries.length > 0 ? (
-                  <View style={styles.entriesList}>
-                    {todaysEntries.map((entry) => (
+                ) : filteredEntries && filteredEntries.length > 0 ? (
+                  <View>
+                    {filteredEntries.map((entry) => (
                       <TouchableOpacity
                         key={entry._id}
                         style={styles.entryItem}
@@ -112,7 +382,8 @@ export default function DailyLog() {
                                 { fontFamily: FONTS.BarlowSemiCondensed },
                               ]}
                             >
-                              {formatTime(entry.timestamp)}
+                              {" "}
+                              {formatTime(entry.timestamp)}{" "}
                             </Text>
                           </View>
                           <View
@@ -131,22 +402,22 @@ export default function DailyLog() {
                                 { fontFamily: FONTS.BarlowSemiCondensed },
                               ]}
                             >
+                              {" "}
                               {getSeverityText(entry.severity)} (
-                              {entry.severity}/10)
+                              {entry.severity}/10){" "}
                             </Text>
                           </View>
                         </View>
-
                         <Text
                           style={[
                             styles.symptomsText,
                             { fontFamily: FONTS.BarlowSemiCondensed },
                           ]}
                         >
-                          {entry.symptoms}
+                          {" "}
+                          {entry.symptoms}{" "}
                         </Text>
-
-                        {entry.category && (
+                        {entry.category ? (
                           <View style={styles.categoryContainer}>
                             <Ionicons
                               name="pricetag-outline"
@@ -159,11 +430,11 @@ export default function DailyLog() {
                                 { fontFamily: FONTS.BarlowSemiCondensed },
                               ]}
                             >
-                              {entry.category}
+                              {" "}
+                              {entry.category}{" "}
                             </Text>
                           </View>
-                        )}
-
+                        ) : null}
                         <View style={styles.createdByContainer}>
                           <Ionicons
                             name={
@@ -180,17 +451,23 @@ export default function DailyLog() {
                               { fontFamily: FONTS.BarlowSemiCondensed },
                             ]}
                           >
-                            {entry.createdBy}
+                            {" "}
+                            {entry.createdBy}{" "}
                           </Text>
                         </View>
-
                         {/* View Details Button */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           style={styles.viewDetailsButton}
                           onPress={() => handleViewEntryDetails(entry._id)}
                         >
-                          <Text style={styles.viewDetailsText}>View Details</Text>
-                          <Ionicons name="chevron-forward" size={16} color="#2A7DE1" />
+                          <Text style={styles.viewDetailsText}>
+                            View Details
+                          </Text>
+                          <Ionicons
+                            name="chevron-forward"
+                            size={16}
+                            color="#2A7DE1"
+                          />
                         </TouchableOpacity>
                       </TouchableOpacity>
                     ))}
@@ -202,150 +479,17 @@ export default function DailyLog() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    No entries for today
+                    {searchQuery.trim()
+                      ? "No entries match your search"
+                      : "No entries for today"}
                   </Text>
                 )}
               </View>
             </View>
-          </View>
-        </ScrollView>
-
-        <BottomNavigation />
+          </ScrollView>
+        </View>
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
-  contentContainer: {
-    flexGrow: 1,
-    paddingBottom: 100,
-  },
-  contentSection: {
-    padding: 24,
-    paddingTop: 40,
-  },
-  entriesContainer: {
-    backgroundColor: "#F8F9FA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-    minHeight: 300,
-  },
-  entriesText: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  entriesList: {
-    gap: 12,
-  },
-  entryItem: {
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-  },
-  entryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  entryTime: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  timeText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  severityText: {
-    fontSize: 12,
-    color: "white",
-    fontWeight: "600",
-  },
-  symptomsText: {
-    fontSize: 14,
-    color: "#1A1A1A",
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  categoryContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginBottom: 4,
-  },
-  categoryText: {
-    fontSize: 12,
-    color: "#2A7DE1",
-  },
-  createdByContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  createdByText: {
-    fontSize: 11,
-    color: "#666",
-  },
-  viewDetailsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#F0F0F0",
-  },
-  viewDetailsText: {
-    fontSize: 14,
-    color: "#2A7DE1",
-    fontWeight: "600",
-    marginRight: 4,
-    fontFamily: FONTS.BarlowSemiCondensed,
-  },
-  addButtonContainer: {
-    position: "absolute",
-    bottom: 120,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 24,
-    backgroundColor: "transparent",
-  },
-  addEntryButton: {
-    backgroundColor: "#28A745",
-    paddingVertical: 18,
-    borderRadius: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  addEntryButtonText: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  disclaimerTitle: {
-    fontSize: 20,
-    color: "#333",
-    textAlign: "center",
-  },
-});

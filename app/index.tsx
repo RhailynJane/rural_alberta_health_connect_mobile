@@ -29,27 +29,29 @@ export default function Index() {
       return;
     }
 
-    const timer = setTimeout(() => {
-      if (isLoading) {
-        return;
-      }
+    // Wait for auth to finish loading
+    if (isLoading) {
+      return;
+    }
 
-      // Mark that we've navigated
-      hasNavigated.current = true;
+    // If authenticated, wait for user data to load before routing
+    if (isAuthenticated && user === undefined) {
+      console.log("⏸️  Waiting for user data to load...");
+      return;
+    }
 
-      if (isAuthenticated && user) {
-        // User is authenticated and exists - go to dashboard
-        console.log("🔄 Initial route: navigating to dashboard");
-        router.replace('/(tabs)/dashboard');
-      } else {
-        // No authenticated user - show onboarding flow
-        console.log("🔄 Initial route: navigating to onboarding");
-        router.replace('/onboarding');
-      }
-    }, 5000); // 5000ms = 5 seconds
+    // Mark that we've navigated
+    hasNavigated.current = true;
 
-    // Cleanup timer if component unmounts
-    return () => clearTimeout(timer);
+    if (isAuthenticated && user) {
+      // Authenticated - go to dashboard regardless of onboarding status
+      console.log("🔄 Initial route: navigating to dashboard");
+      router.replace('/(tabs)/dashboard');
+    } else {
+      // Not authenticated - show onboarding flow
+      console.log("🔄 Initial route: navigating to onboarding");
+      router.replace('/onboarding');
+    }
   }, [router, isAuthenticated, isLoading, user, isRefreshing]);
   
   return (

@@ -1,9 +1,12 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { DatabaseProvider } from '@nozbe/watermelondb/react';
 import { ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { database } from '../watermelon/database';
+import { SignUpFormProvider } from "./auth/SignUpFormContext";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
@@ -48,7 +51,6 @@ export const useSessionRefresh = () => {
   return context;
 };
 
-
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -66,21 +68,25 @@ export default function RootLayout() {
   };
 
   return (
-    <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
-      <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
-        <SafeAreaProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/signin" />
-            <Stack.Screen name="auth/signup" />
-            <Stack.Screen name="auth/personal-info" />
-            <Stack.Screen name="auth/emergency-contact" />
-            <Stack.Screen name="auth/medical-history" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
-        </SafeAreaProvider>
-      </ConvexAuthProvider>
-    </SessionRefreshContext.Provider>
+    <DatabaseProvider database={database}>
+      <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
+        <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+          <SignUpFormProvider>
+            <SafeAreaProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="auth/signin" />
+                <Stack.Screen name="auth/signup" />
+                <Stack.Screen name="auth/personal-info" />
+                <Stack.Screen name="auth/emergency-contact" />
+                <Stack.Screen name="auth/medical-history" />
+                <Stack.Screen name="(tabs)" />
+              </Stack>
+            </SafeAreaProvider>
+          </SignUpFormProvider>
+        </ConvexAuthProvider>
+      </SessionRefreshContext.Provider>
+    </DatabaseProvider>
   );
 }

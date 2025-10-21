@@ -100,6 +100,10 @@ const BottomNavigation: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     height: 70,
     backgroundColor: 'white',
@@ -115,8 +119,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 2,
+    paddingHorizontal: 2
   },
   tabFocused: {
     borderTopWidth: 2,

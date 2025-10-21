@@ -1,5 +1,12 @@
 import { router } from "expo-router";
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -25,38 +32,86 @@ export default function Tracker() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <CurvedHeader title="Health Tracker" height={120} showLogo={true} />
+          <CurvedHeader
+            title="Health Tracker"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+          />
 
           <View style={styles.contentSection}>
             {/* Medical Disclaimer */}
             <View style={styles.disclaimerContainer}>
-              <Text style={[styles.disclaimerTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.disclaimerTitle,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 Medical Disclaimer
               </Text>
-              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
                 This tracker is for personal monitoring only.
               </Text>
-              <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Seek immediate medical attention for severe symptoms or emergencies.
+              <Text
+                style={[
+                  styles.disclaimerText,
+                  { fontFamily: FONTS.BarlowSemiCondensed },
+                ]}
+              >
+                Seek immediate medical attention for severe symptoms or
+                emergencies.
               </Text>
             </View>
 
             {/* Navigation Cards */}
             <View style={styles.navigationContainer}>
-              <TouchableOpacity style={styles.navCard} onPress={navigateToDailyLog}>
-                <Text style={[styles.navCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <TouchableOpacity
+                style={styles.navCard}
+                onPress={navigateToDailyLog}
+              >
+                <Text
+                  style={[
+                    styles.navCardTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   Daily Log
                 </Text>
-                <Text style={[styles.navCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.navCardText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   View and manage todays health entries
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.navCard} onPress={navigateToHistory}>
-                <Text style={[styles.navCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              <TouchableOpacity
+                style={styles.navCard}
+                onPress={navigateToHistory}
+              >
+                <Text
+                  style={[
+                    styles.navCardTitle,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   History
                 </Text>
-                <Text style={[styles.navCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                <Text
+                  style={[
+                    styles.navCardText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
                   View past entries and health trends
                 </Text>
               </TouchableOpacity>
@@ -66,15 +121,22 @@ export default function Tracker() {
 
         {/* Add Log Entry Button */}
         <View style={styles.addButtonContainer}>
-          <TouchableOpacity style={styles.addEntryButton} onPress={handleAddLogEntry}>
-            <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <TouchableOpacity
+            style={styles.addEntryButton}
+            onPress={handleAddLogEntry}
+          >
+            <Text
+              style={[
+                styles.addEntryButtonText,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+              ]}
+            >
               Add Log Entry
             </Text>
           </TouchableOpacity>
         </View>
-
-        <BottomNavigation />
       </CurvedBackground>
+      <BottomNavigation />
     </SafeAreaView>
   );
 }

@@ -1,5 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Ionicons } from "@expo/vector-icons";
+import { useMutation } from "convex/react";
 import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
@@ -7,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,10 +15,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
+import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+import { useSignUpForm } from "./SignUpFormContext";
 
 // Validation schema
 const SignUpSchema = Yup.object().shape({
@@ -59,9 +62,13 @@ export default function SignUp() {
   const [pendingSetFieldValue, setPendingSetFieldValue] = useState<
     ((field: string, value: any) => void) | null
   >(null);
+  const { values: persistedValues, setValues: setPersistedValues } =
+    useSignUpForm();
+  const ensureProfileExists = useMutation((api as any)["profile/ensureProfileExists"].ensureProfileExists);
 
   const handleSignUp = async (values: SignUpFormValues) => {
-    console.log("Sign up attempted with:", values);
+    const { password, confirmPassword, ...safeValues } = values;
+    console.log("Sign up attempted with:", safeValues);
     setSubmitError(null);
     try {
       await signIn("password", {
@@ -72,6 +79,8 @@ export default function SignUp() {
         hasCompletedOnboarding: false,
         flow: "signUp",
       });
+      // Ensure profile exists in Convex
+      await ensureProfileExists();
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
@@ -109,6 +118,14 @@ export default function SignUp() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Alberta Health Connect"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+        />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.container}
@@ -116,16 +133,23 @@ export default function SignUp() {
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Logo and Header Container */}
-            <CurvedHeader
-              title="Alberta Health Connect"
-              height={120}
-              showLogo={true}
-              screenType="signin"
-            />
-
             <View style={styles.contentSection}>
+              {submitError && (
+                <Text
+                  style={[
+                    {
+                      color: "#ff3b30",
+                      textAlign: "center",
+                      marginBottom: 8,
+                      fontFamily: FONTS.BarlowSemiCondensed,
+                    },
+                  ]}
+                >
+                  {submitError}
+                </Text>
+              )}
               <Text
                 style={[
                   styles.welcomeText,
@@ -144,16 +168,10 @@ export default function SignUp() {
               </Text>
 
               <Formik
-                initialValues={{
-                  firstName: "",
-                  lastName: "",
-                  email: "",
-                  password: "",
-                  confirmPassword: "",
-                  agreeToTerms: false,
-                }}
+                initialValues={persistedValues}
                 validationSchema={SignUpSchema}
                 onSubmit={handleSignUp}
+                enableReinitialize={true}
               >
                 {({
                   handleChange,
@@ -163,272 +181,315 @@ export default function SignUp() {
                   values,
                   errors,
                   touched,
-                }) => (
-                  <View style={styles.formContainer}>
-                    <View style={styles.nameRow}>
-                      <View style={styles.nameInputContainer}>
-                        <Text
-                          style={[
-                            styles.label,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          First Name
-                        </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.firstName &&
-                              touched.firstName &&
-                              styles.inputError,
-                          ]}
-                          placeholder="Enter your first name"
-                          placeholderTextColor="#999"
-                          value={values.firstName}
-                          onChangeText={handleChange("firstName")}
-                          onBlur={handleBlur("firstName")}
-                          autoCapitalize="words"
-                        />
-                        {errors.firstName && touched.firstName && (
-                          <Text style={styles.errorText}>
-                            {errors.firstName}
+                }) => {
+                  // Persist values on every change
+                  const persistField = (field: string, value: any) => {
+                    setFieldValue(field, value);
+                    setPersistedValues({ ...values, [field]: value });
+                  };
+
+                  return (
+                    <View style={styles.formContainer}>
+                      <View style={styles.nameRow}>
+                        <View style={styles.nameInputContainer}>
+                          <Text
+                            style={[
+                              styles.label,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            First Name
                           </Text>
-                        )}
+                          <TextInput
+                            style={[
+                              styles.input,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                              errors.firstName &&
+                                touched.firstName &&
+                                styles.inputError,
+                            ]}
+                            placeholder="Enter your first name"
+                            placeholderTextColor="#999"
+                            value={values.firstName}
+                            onChangeText={(text) =>
+                              persistField("firstName", text)
+                            }
+                            onBlur={handleBlur("firstName")}
+                            autoCapitalize="words"
+                          />
+                          {errors.firstName && touched.firstName && (
+                            <Text style={styles.errorText}>
+                              {errors.firstName}
+                            </Text>
+                          )}
+                        </View>
+
+                        <View style={styles.nameInputContainer}>
+                          <Text
+                            style={[
+                              styles.label,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            Last Name
+                          </Text>
+                          <TextInput
+                            style={[
+                              styles.input,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                              errors.lastName &&
+                                touched.lastName &&
+                                styles.inputError,
+                            ]}
+                            placeholder="Enter your last name"
+                            placeholderTextColor="#999"
+                            value={values.lastName}
+                            onChangeText={(text) =>
+                              persistField("lastName", text)
+                            }
+                            onBlur={handleBlur("lastName")}
+                            autoCapitalize="words"
+                          />
+                          {errors.lastName && touched.lastName && (
+                            <Text style={styles.errorText}>
+                              {errors.lastName}
+                            </Text>
+                          )}
+                        </View>
                       </View>
 
-                      <View style={styles.nameInputContainer}>
-                        <Text
-                          style={[
-                            styles.label,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Last Name
-                        </Text>
+                      <Text
+                        style={[
+                          styles.label,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        Email
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.input,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          errors.email && touched.email && styles.inputError,
+                        ]}
+                        placeholder="Enter your email"
+                        placeholderTextColor="#999"
+                        value={values.email}
+                        onChangeText={(text) => persistField("email", text)}
+                        onBlur={handleBlur("email")}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                      {errors.email && touched.email && (
+                        <Text style={styles.errorText}>{errors.email}</Text>
+                      )}
+
+                      <Text
+                        style={[
+                          styles.label,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        Password
+                      </Text>
+                      <View style={styles.passwordContainer}>
                         <TextInput
                           style={[
-                            styles.input,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.lastName &&
-                              touched.lastName &&
+                            styles.passwordInput,
+                            {
+                              fontFamily: FONTS.BarlowSemiCondensed,
+                              color: "#1A1A1A",
+                            },
+                            errors.password &&
+                              touched.password &&
                               styles.inputError,
                           ]}
-                          placeholder="Enter your last name"
+                          placeholder="Enter your password"
                           placeholderTextColor="#999"
-                          value={values.lastName}
-                          onChangeText={handleChange("lastName")}
-                          onBlur={handleBlur("lastName")}
-                          autoCapitalize="words"
+                          value={values.password}
+                          onChangeText={(text) =>
+                            persistField("password", text)
+                          }
+                          onBlur={handleBlur("password")}
+                          secureTextEntry={!showPassword}
                         />
-                        {errors.lastName && touched.lastName && (
-                          <Text style={styles.errorText}>
-                            {errors.lastName}
-                          </Text>
-                        )}
+                        <TouchableOpacity
+                          style={styles.eyeIcon}
+                          onPress={() => setShowPassword(!showPassword)}
+                        >
+                          <Ionicons
+                            name={showPassword ? "eye-off" : "eye"}
+                            size={24}
+                            color="#999"
+                          />
+                        </TouchableOpacity>
                       </View>
-                    </View>
+                      {errors.password && touched.password && (
+                        <Text style={styles.errorText}>{errors.password}</Text>
+                      )}
 
-                    <Text
-                      style={[
-                        styles.label,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Email
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.email && touched.email && styles.inputError,
-                      ]}
-                      placeholder="Enter your email"
-                      placeholderTextColor="#999"
-                      value={values.email}
-                      onChangeText={handleChange("email")}
-                      onBlur={handleBlur("email")}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                    />
-                    {errors.email && touched.email && (
-                      <Text style={styles.errorText}>{errors.email}</Text>
-                    )}
-
-                    <Text
-                      style={[
-                        styles.label,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Password
-                    </Text>
-                    <View style={styles.passwordContainer}>
-                      <TextInput
-                        style={[
-                          styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                          errors.password &&
-                            touched.password &&
-                            styles.inputError,
-                        ]}
-                        placeholder="Enter your password"
-                        placeholderTextColor="#999"
-                        value={values.password}
-                        onChangeText={handleChange("password")}
-                        onBlur={handleBlur("password")}
-                        secureTextEntry={!showPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeIcon}
-                        onPress={() => setShowPassword(!showPassword)}
-                      >
-                        <Ionicons
-                          name={showPassword ? "eye-off" : "eye"}
-                          size={24}
-                          color="#999"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    {errors.password && touched.password && (
-                      <Text style={styles.errorText}>{errors.password}</Text>
-                    )}
-
-                    <Text
-                      style={[
-                        styles.label,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Confirm Password
-                    </Text>
-                    <View style={styles.passwordContainer}>
-                      <TextInput
-                        style={[
-                          styles.passwordInput,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                          errors.confirmPassword &&
-                            touched.confirmPassword &&
-                            styles.inputError,
-                        ]}
-                        placeholder="Confirm your password"
-                        placeholderTextColor="#999"
-                        value={values.confirmPassword}
-                        onChangeText={handleChange("confirmPassword")}
-                        onBlur={handleBlur("confirmPassword")}
-                        secureTextEntry={!showConfirmPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeIcon}
-                        onPress={() =>
-                          setShowConfirmPassword(!showConfirmPassword)
-                        }
-                      >
-                        <Ionicons
-                          name={showConfirmPassword ? "eye-off" : "eye"}
-                          size={24}
-                          color="#999"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    {errors.confirmPassword && touched.confirmPassword && (
-                      <Text style={styles.errorText}>
-                        {errors.confirmPassword}
-                      </Text>
-                    )}
-
-                    <View style={styles.checkboxContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.customCheckbox,
-                          values.agreeToTerms && styles.customCheckboxChecked,
-                        ]}
-                        onPress={() =>
-                          handleCheckboxPress(
-                            setFieldValue,
-                            values.agreeToTerms
-                          )
-                        }
-                        activeOpacity={0.7}
-                      >
-                        {values.agreeToTerms && (
-                          <Text style={styles.checkboxCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
                       <Text
                         style={[
-                          styles.checkboxLabel,
+                          styles.label,
                           { fontFamily: FONTS.BarlowSemiCondensed },
                         ]}
                       >
-                        I agree to the{" "}
-                        <Text
-                          style={styles.linkText}
-                          onPress={() => router.push("/auth/terms-of-service")}
+                        Confirm Password
+                      </Text>
+                      <View style={styles.passwordContainer}>
+                        <TextInput
+                          style={[
+                            styles.passwordInput,
+                            {
+                              fontFamily: FONTS.BarlowSemiCondensed,
+                              color: "#1A1A1A",
+                            },
+                            errors.confirmPassword &&
+                              touched.confirmPassword &&
+                              styles.inputError,
+                          ]}
+                          placeholder="Confirm your password"
+                          placeholderTextColor="#999"
+                          value={values.confirmPassword}
+                          onChangeText={(text) =>
+                            persistField("confirmPassword", text)
+                          }
+                          onBlur={handleBlur("confirmPassword")}
+                          secureTextEntry={!showConfirmPassword}
+                        />
+                        <TouchableOpacity
+                          style={styles.eyeIcon}
+                          onPress={() =>
+                            setShowConfirmPassword(!showConfirmPassword)
+                          }
                         >
-                          Terms of Service
-                        </Text>{" "}
-                        and{" "}
-                        <Text
-                          style={styles.linkText}
-                          onPress={() => router.push("/auth/privacy-policy")}
-                        >
-                          Privacy Policy
+                          <Ionicons
+                            name={showConfirmPassword ? "eye-off" : "eye"}
+                            size={24}
+                            color="#999"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      {/* Real-time password matching feedback */}
+                      {values.confirmPassword.length > 0 && (
+                        <View style={styles.passwordMatchContainer}>
+                          {values.password === values.confirmPassword ? (
+                            <View style={styles.passwordMatchRow}>
+                              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                              <Text style={[styles.passwordMatchText, styles.passwordMatchSuccess]}>
+                                Passwords match
+                              </Text>
+                            </View>
+                          ) : (
+                            <View style={styles.passwordMatchRow}>
+                              <Ionicons name="close-circle" size={16} color="#ff3b30" />
+                              <Text style={[styles.passwordMatchText, styles.passwordMatchError]}>
+                                Passwords do not match
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      {errors.confirmPassword && touched.confirmPassword && (
+                        <Text style={styles.errorText}>
+                          {errors.confirmPassword}
                         </Text>
-                        . I understand this app provides health information only
-                        and does not replace professional medical care.
-                      </Text>
-                    </View>
-                    {errors.agreeToTerms && (
-                      <Text style={styles.errorText}>
-                        {errors.agreeToTerms}
-                      </Text>
-                    )}
+                      )}
 
-                    <TouchableOpacity
-                      style={styles.signUpButton}
-                      onPress={() => handleSubmit()}
-                    >
-                      <Text
-                        style={[
-                          styles.signUpButtonText,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Sign Up
-                      </Text>
-                    </TouchableOpacity>
+                      <View style={styles.checkboxContainer}>
+                        <TouchableOpacity
+                          style={[
+                            styles.customCheckbox,
+                            values.agreeToTerms && styles.customCheckboxChecked,
+                          ]}
+                          onPress={() =>
+                            handleCheckboxPress((field: string, value: any) => {
+                              setFieldValue(field, value);
+                              setPersistedValues({ ...values, [field]: value });
+                            }, values.agreeToTerms)
+                          }
+                          activeOpacity={0.7}
+                        >
+                          {values.agreeToTerms && (
+                            <Text style={styles.checkboxCheck}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                        <Text
+                          style={[
+                            styles.checkboxLabel,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          I agree to the{" "}
+                          <Text
+                            style={styles.linkText}
+                            onPress={() =>
+                              router.push("/auth/terms-of-service")
+                            }
+                          >
+                            Terms of Service
+                          </Text>{" "}
+                          and{" "}
+                          <Text
+                            style={styles.linkText}
+                            onPress={() => router.push("/auth/privacy-policy")}
+                          >
+                            Privacy Policy
+                          </Text>
+                          . I understand this app provides health information
+                          only and does not replace professional medical care.
+                        </Text>
+                      </View>
+                      {errors.agreeToTerms && (
+                        <Text style={styles.errorText}>
+                          {errors.agreeToTerms}
+                        </Text>
+                      )}
 
-                    <View style={styles.signInContainer}>
-                      <Text
-                        style={[
-                          styles.signInText,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Already have an account?{" "}
-                      </Text>
                       <TouchableOpacity
-                        onPress={() => router.push("/auth/signin")}
+                        style={styles.signUpButton}
+                        onPress={() => handleSubmit()}
                       >
                         <Text
                           style={[
-                            styles.signInLink,
+                            styles.signUpButtonText,
                             { fontFamily: FONTS.BarlowSemiCondensed },
                           ]}
                         >
-                          Sign In
+                          Sign Up
                         </Text>
                       </TouchableOpacity>
+
+                      <View style={styles.signInContainer}>
+                        <Text
+                          style={[
+                            styles.signInText,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          Already have an account?{" "}
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() => router.push("/auth/signin")}
+                        >
+                          <Text
+                            style={[
+                              styles.signInLink,
+                              { fontFamily: FONTS.BarlowSemiCondensed },
+                            ]}
+                          >
+                            Sign In
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  );
+                }}
               </Formik>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
-
       {/* Agreement Confirmation Modal */}
       <Modal
         visible={showAgreementModal}
@@ -541,7 +602,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A1A1A",
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
@@ -677,6 +738,25 @@ const styles = StyleSheet.create({
     color: "#2A7DE1",
     textDecorationLine: "underline",
     fontWeight: "600",
+  },
+  passwordMatchContainer: {
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  passwordMatchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  passwordMatchText: {
+    fontSize: 14,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  passwordMatchSuccess: {
+    color: "#34C759",
+  },
+  passwordMatchError: {
+    color: "#ff3b30",
   },
   // Modal Styles
   modalOverlay: {

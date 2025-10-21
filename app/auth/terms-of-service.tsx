@@ -16,16 +16,16 @@ export default function TermsOfService() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
+        {/* Fixed Header */}
+        <CurvedHeader
+          title="Terms of Service"
+          height={150}
+          showLogo={false}
+          bottomSpacing={0}
+        />
         <ScrollView contentContainerStyle={styles.contentContainer}>
-          {/* Header */}
-          <CurvedHeader
-            title="Terms of Service"
-            height={120}
-            showLogo={false}
-          />
-
           <View style={styles.contentSection}>
-            <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 0 }]}>
               Terms of Service for Rural Alberta Health Connect
             </Text>
             <Text style={[styles.effectiveDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-    paddingTop: 30,
+    paddingTop: 10,
     paddingBottom: 40, // Added padding at bottom
   },
   title: {

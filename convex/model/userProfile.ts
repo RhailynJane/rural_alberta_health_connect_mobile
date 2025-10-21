@@ -8,11 +8,21 @@ import { safeString } from "../utils/sanitize";
 export async function updatePersonalInfoModel(
   ctx: MutationCtx,
   userId: Id<"users">,
-  data: { ageRange: string; location: string }
+  data: { 
+    age: string; 
+    address1: string;
+    address2: string;
+    city: string;
+    province: string;
+    postalCode: string;
+    location: string; 
+    onboardingCompleted?: boolean 
+  }
 ) {
-  // Validate required fields
-  if (!data.ageRange || !data.location) {
-    throw new Error("Age range and location are required for personal info");
+  // Validate required fields - only age is strictly required
+  // city and province can be empty strings during initial onboarding
+  if (!data.age) {
+    throw new Error("Age is required for personal info");
   }
 
   // Check if profile already exists
@@ -24,8 +34,14 @@ export async function updatePersonalInfoModel(
   if (existingProfile) {
     // Update existing profile
     await ctx.db.patch(existingProfile._id, {
-      ageRange: safeString(data.ageRange),
+      age: safeString(data.age),
+      address1: safeString(data.address1),
+      address2: safeString(data.address2),
+      city: safeString(data.city),
+      province: safeString(data.province),
+      postalCode: safeString(data.postalCode),
       location: safeString(data.location),
+      onboardingCompleted: typeof data.onboardingCompleted === "boolean" ? data.onboardingCompleted : existingProfile.onboardingCompleted,
       updatedAt: Date.now(),
     });
     return existingProfile._id;
@@ -33,9 +49,14 @@ export async function updatePersonalInfoModel(
     // Create new profile
     return await ctx.db.insert("userProfiles", {
       userId,
-      ageRange: safeString(data.ageRange),
+      age: safeString(data.age),
+      address1: safeString(data.address1),
+      address2: safeString(data.address2),
+      city: safeString(data.city),
+      province: safeString(data.province),
+      postalCode: safeString(data.postalCode),
       location: safeString(data.location),
-      onboardingCompleted: false,
+      onboardingCompleted: typeof data.onboardingCompleted === "boolean" ? data.onboardingCompleted : false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -166,12 +187,17 @@ export async function getUserProfile(ctx: QueryCtx, userId: Id<"users">) {
   if (!profile) return null;
   return {
     _id: profile._id,
-    ageRange: profile.ageRange,
+    age: profile.age,
+    address1: profile.address1,
+    address2: profile.address2,
+    city: profile.city,
+    province: profile.province,
+    postalCode: profile.postalCode,
+    location: profile.location,
     allergies: profile.allergies,
     currentMedications: profile.currentMedications,
     emergencyContactName: profile.emergencyContactName,
     emergencyContactPhone: profile.emergencyContactPhone,
-    location: profile.location,
     medicalConditions: profile.medicalConditions,
   };
 }
