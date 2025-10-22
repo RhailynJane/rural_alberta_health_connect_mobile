@@ -2,21 +2,21 @@ import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Yup from 'yup';
 import CurvedBackground from '../components/curvedBackground';
 import CurvedHeader from '../components/curvedHeader';
-import { FONTS } from '../constants/constants';
+import { COLORS, FONTS } from '../constants/constants';
 
 // Validation schema
 const ForgotPasswordSchema = Yup.object().shape({
@@ -43,6 +43,12 @@ export default function ForgotPassword() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showCodeField, setShowCodeField] = useState(false);
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   const handleSendCode = async (email: string) => {
     setIsLoading(true);
@@ -51,20 +57,18 @@ export default function ForgotPassword() {
       console.log('Sending verification code to:', email);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
       
-      Alert.alert(
-        'Code Sent',
-        'A verification code has been sent to your email address.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Code Sent');
+      setModalMessage('A verification code has been sent to your email address.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
       
       setShowCodeField(true);
     } catch (error) {
       console.error('Failed to send verification code:', error);
-      Alert.alert(
-        'Error',
-        'Failed to send verification code. Please try again.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Error');
+      setModalMessage('Failed to send verification code. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -77,23 +81,25 @@ export default function ForgotPassword() {
       console.log('Resetting password for:', email, 'with code:', code);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
       
-      Alert.alert(
-        'Password Reset',
-        'Your password has been successfully reset. You can now sign in with your new password.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          }
-        ]
-      );
+      setModalTitle('Password Reset');
+      setModalMessage('Your password has been successfully reset. You can now sign in with your new password.');
+      setModalButtons([
+        {
+          label: 'OK',
+          onPress: () => {
+            setModalVisible(false);
+            router.back();
+          },
+          variant: 'primary'
+        }
+      ]);
+      setModalVisible(true);
     } catch (error) {
       console.error('Failed to reset password:', error);
-      Alert.alert(
-        'Error',
-        'Failed to reset password. Please check the verification code and try again.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Error');
+      setModalMessage('Failed to reset password. Please check the verification code and try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -236,6 +242,53 @@ export default function ForgotPassword() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Modal for alerts and confirmations */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

@@ -3,15 +3,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -21,7 +21,7 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
-import { FONTS } from "../../constants/constants";
+import { COLORS, FONTS } from "../../constants/constants";
 
 // Define types for our component
 interface ClinicInfo {
@@ -71,6 +71,12 @@ export default function Emergency() {
   );
   const [showOfflineDownloader, setShowOfflineDownloader] = useState(false);
   const [mapFocus, setMapFocus] = useState<{ latitude: number; longitude: number; zoom?: number } | null>(null);
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   // Get location services status and emergency details
   const locationStatus = useQuery(
@@ -209,9 +215,12 @@ export default function Emergency() {
   // Function to handle emergency calls
   const handleEmergencyCall = (number: string) => {
     const cleanNumber = number.replace(/[^0-9+]/g, "");
-    Linking.openURL(`tel:${cleanNumber}`).catch((err) =>
-      Alert.alert("Error", "Could not make the call. Please check your device.")
-    );
+    Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
+      setModalTitle("Error");
+      setModalMessage("Could not make the call. Please check your device.");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    });
   };
 
   // Function to open in maps
@@ -246,7 +255,10 @@ export default function Emergency() {
         });
       }
     } else {
-      Alert.alert("Info", "Map directions not available for this clinic");
+      setModalTitle("Info");
+      setModalMessage("Map directions not available for this clinic");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     }
   };
 
@@ -256,25 +268,34 @@ export default function Emergency() {
       try {
         const newEnabledState = !locationStatus.locationServicesEnabled;
         
-        // If enabling, show permission alert
+        // If enabling, show permission modal
         if (newEnabledState) {
-          Alert.alert(
-            "Enable Location Services",
-            "This app would like to access your location to provide better emergency assistance and find nearby clinics.",
-            [
-              {
-                text: "Cancel",
-                style: "cancel"
-              },
-              {
-                text: "Enable",
-                onPress: async () => {
+          setModalTitle("Enable Location Services");
+          setModalMessage("This app would like to access your location to provide better emergency assistance and find nearby clinics.");
+          setModalButtons([
+            { 
+              label: "Cancel", 
+              onPress: () => setModalVisible(false), 
+              variant: 'secondary' 
+            },
+            { 
+              label: "Enable", 
+              onPress: async () => {
+                setModalVisible(false);
+                try {
                   await toggleLocationServices({ enabled: true });
                   console.log("📍 Location services enabled");
+                } catch {
+                  setModalTitle("Error");
+                  setModalMessage("Failed to enable location services");
+                  setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+                  setModalVisible(true);
                 }
-              }
-            ]
-          );
+              }, 
+              variant: 'primary' 
+            }
+          ]);
+          setModalVisible(true);
         } else {
           await toggleLocationServices({ enabled: false });
           console.log("📍 Location services disabled");
@@ -283,7 +304,10 @@ export default function Emergency() {
         }
       } catch (error) {
         console.error("Failed to update location services:", error);
-        Alert.alert("Error", "Failed to update location services");
+        setModalTitle("Error");
+        setModalMessage("Failed to update location services");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
       }
     }
   };
@@ -578,28 +602,34 @@ export default function Emergency() {
                     }
                   })()}
                   onClinicPress={(clinic) => {
-                    Alert.alert(
-                      clinic.name,
-                      `${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`,
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Call",
-                          onPress: () =>
-                            clinic.phone && handleEmergencyCall(clinic.phone),
+                    setModalTitle(clinic.name);
+                    setModalMessage(`${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`);
+                    setModalButtons([
+                      { text: "Cancel", onPress: () => setModalVisible(false), variant: 'secondary' },
+                      {
+                        label: "Call",
+                        onPress: () => {
+                          setModalVisible(false);
+                          clinic.phone && handleEmergencyCall(clinic.phone);
                         },
-                        {
-                          text: "Directions",
-                          onPress: () => openInMaps({
+                        variant: 'primary',
+                      },
+                      {
+                        label: "Directions",
+                        onPress: () => {
+                          setModalVisible(false);
+                          openInMaps({
                             name: clinic.name,
                             coordinates: {
                               latitude: clinic.latitude,
                               longitude: clinic.longitude,
                             },
-                          } as any),
+                          } as any);
                         },
-                      ]
-                    );
+                        variant: 'primary',
+                      },
+                    ] as any);
+                    setModalVisible(true);
                   }}
                 />
               </View>
@@ -685,6 +715,53 @@ export default function Emergency() {
           setMapFocus(center);
         }}
       />
+
+      {/* Modal for alerts and confirmations */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

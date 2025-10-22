@@ -2,7 +2,6 @@ import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     ScrollView,
     StyleSheet,
@@ -41,6 +40,12 @@ export default function OfflineMapDownloader({
   const [regions, setRegions] = useState<OfflineRegion[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   useEffect(() => {
     if (visible) {
@@ -65,7 +70,10 @@ export default function OfflineMapDownloader({
       setRegions(regionStatus);
     } catch (error) {
       console.error('Error loading offline regions:', error);
-      Alert.alert('Error', 'Failed to load offline regions');
+      setModalTitle('Error');
+      setModalMessage('Failed to load offline regions');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     }
   };
 
@@ -114,10 +122,10 @@ export default function OfflineMapDownloader({
         )
       );
 
-      Alert.alert(
-        'Success',
-        `${region.name} has been downloaded for offline use!`
-      );
+      setModalTitle('Success');
+      setModalMessage(`${region.name} has been downloaded for offline use!`);
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
 
       // Notify parent to focus the map on this region
       if (onRegionDownloaded && Array.isArray(region.center) && region.center.length === 2) {
@@ -128,7 +136,10 @@ export default function OfflineMapDownloader({
       }
     } catch (error) {
       console.error('Error downloading region:', error);
-      Alert.alert('Error', 'Failed to download map region. Please try again.');
+      setModalTitle('Error');
+      setModalMessage('Failed to download map region. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setDownloading(null);
       setDownloadProgress(0);
@@ -139,33 +150,39 @@ export default function OfflineMapDownloader({
     const region = ALBERTA_REGIONS.find((r) => r.id === regionId);
     if (!region) return;
 
-    Alert.alert(
-      'Delete Offline Map',
-      `Are you sure you want to delete the offline map for ${region.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await Mapbox.offlineManager.deletePack(regionId);
-              setRegions((prev) =>
-                prev.map((r) =>
-                  r.id === regionId
-                    ? { ...r, downloaded: false, progress: 0 }
-                    : r
-                )
-              );
-              Alert.alert('Success', 'Offline map deleted');
-            } catch (error) {
-              console.error('Error deleting region:', error);
-              Alert.alert('Error', 'Failed to delete offline map');
-            }
-          },
+    setModalTitle('Delete Offline Map');
+    setModalMessage(`Are you sure you want to delete the offline map for ${region.name}?`);
+    setModalButtons([
+      { label: 'Cancel', onPress: () => setModalVisible(false), variant: 'secondary' },
+      {
+        label: 'Delete',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            await Mapbox.offlineManager.deletePack(regionId);
+            setRegions((prev) =>
+              prev.map((r) =>
+                r.id === regionId
+                  ? { ...r, downloaded: false, progress: 0 }
+                  : r
+              )
+            );
+            setModalTitle('Success');
+            setModalMessage('Offline map deleted');
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          } catch (error) {
+            console.error('Error deleting region:', error);
+            setModalTitle('Error');
+            setModalMessage('Failed to delete offline map');
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          }
         },
-      ]
-    );
+        variant: 'destructive',
+      },
+    ]);
+    setModalVisible(true);
   };
 
   return (
@@ -254,6 +271,53 @@ export default function OfflineMapDownloader({
           </View>
         </View>
       </View>
+
+      {/* Alert Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }

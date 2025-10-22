@@ -6,22 +6,21 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
-import { FONTS } from "../../constants/constants";
+import { COLORS, FONTS } from "../../constants/constants";
 
 // AI Context Types
 type SymptomCategory =
@@ -88,6 +87,18 @@ export default function SymptomAssessment() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState("");
 
+  // Alert modal state
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [alertModalTitle, setAlertModalTitle] = useState("");
+  const [alertModalMessage, setAlertModalMessage] = useState("");
+  const [alertModalButtons, setAlertModalButtons] = useState<
+    {
+      label: string;
+      onPress: () => void;
+      variant?: "primary" | "secondary" | "destructive";
+    }[]
+  >([]);
+
   // AI context data
   const [aiContext, setAiContext] = useState<Partial<AIImageContext>>({
     timestamp: new Date().toISOString(),
@@ -145,10 +156,16 @@ export default function SymptomAssessment() {
 
   const handleContinue = async () => {
     if (!selectedCategory && !symptomDescription.trim()) {
-      Alert.alert(
-        "Information Required",
-        "Please select a symptom category or describe your symptoms."
-      );
+      setAlertModalTitle("Information Required");
+      setAlertModalMessage("Please select a symptom category or describe your symptoms.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
       return;
     }
 
@@ -187,10 +204,16 @@ export default function SymptomAssessment() {
       });
     } catch (error) {
       console.error("Error during navigation:", error);
-      Alert.alert(
-        "Navigation Error",
-        "Failed to proceed. Please try again."
-      );
+      setAlertModalTitle("Navigation Error");
+      setAlertModalMessage("Failed to proceed. Please try again.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
     } finally {
       setIsProcessing(false);
     }
@@ -223,10 +246,16 @@ export default function SymptomAssessment() {
   const requestCameraPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
-        "Permission Required",
-        "Camera permissions are needed to take photos."
-      );
+      setAlertModalTitle("Permission Required");
+      setAlertModalMessage("Camera permissions are needed to take photos.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
       return false;
     }
     return true;
@@ -235,10 +264,16 @@ export default function SymptomAssessment() {
   const requestGalleryPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
-        "Permission Required",
-        "Gallery permissions are needed to upload photos."
-      );
+      setAlertModalTitle("Permission Required");
+      setAlertModalMessage("Gallery permissions are needed to upload photos.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
       return false;
     }
     return true;
@@ -798,6 +833,43 @@ export default function SymptomAssessment() {
         </Modal>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Alert Modal */}
+      <Modal
+        visible={alertModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setAlertModalVisible(false)}
+      >
+        <View style={styles.alertModalOverlay}>
+          <View style={styles.alertModalContent}>
+            <Text style={styles.alertModalTitle}>{alertModalTitle}</Text>
+            <Text style={styles.alertModalMessage}>{alertModalMessage}</Text>
+            <View style={styles.alertModalButtons}>
+              {alertModalButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.alertModalButton,
+                    button.variant === "destructive" && styles.alertDestructiveButton,
+                    button.variant === "secondary" && styles.alertSecondaryButton,
+                  ]}
+                  onPress={button.onPress}
+                >
+                  <Text
+                    style={[
+                      styles.alertModalButtonText,
+                      button.variant === "secondary" && styles.alertSecondaryButtonText,
+                    ]}
+                  >
+                    {button.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1061,5 +1133,71 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Alert Modal styles
+  alertModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertModalContent: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  alertModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertModalMessage: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 24,
+    lineHeight: 24,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertModalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  alertModalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    minWidth: 100,
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+  },
+  alertSecondaryButton: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  alertDestructiveButton: {
+    backgroundColor: "#DC3545",
+  },
+  alertModalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertSecondaryButtonText: {
+    color: COLORS.primary,
   },
 });

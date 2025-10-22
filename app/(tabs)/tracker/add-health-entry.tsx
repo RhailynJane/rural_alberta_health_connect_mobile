@@ -5,25 +5,24 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
-import { FONTS } from "../../constants/constants";
+import { COLORS, FONTS } from "../../constants/constants";
 
 export default function AddHealthEntry() {
   const currentUser = useQuery(api.users.getCurrentUser);
@@ -43,6 +42,18 @@ export default function AddHealthEntry() {
   // Error modal state
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorModalMessage, setErrorModalMessage] = useState("");
+
+  // Alert modal state
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [alertModalTitle, setAlertModalTitle] = useState("");
+  const [alertModalMessage, setAlertModalMessage] = useState("");
+  const [alertModalButtons, setAlertModalButtons] = useState<
+    {
+      label: string;
+      onPress: () => void;
+      variant?: "primary" | "secondary" | "destructive";
+    }[]
+  >([]);
 
   // State for picker visibility
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -249,15 +260,30 @@ export default function AddHealthEntry() {
   // Save health entry and navigate back
   const handleSaveEntry = async () => {
     if (!currentUser?._id) {
-      Alert.alert("Error", "You must be logged in to save entries.");
+      setAlertModalTitle("Error");
+      setAlertModalMessage("You must be logged in to save entries.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
       return;
     }
 
     if (!symptoms.trim() || !severity) {
-      Alert.alert(
-        "Missing Information",
-        "Please fill in symptoms and severity."
-      );
+      setAlertModalTitle("Missing Information");
+      setAlertModalMessage("Please fill in symptoms and severity.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
       return;
     }
 
@@ -289,7 +315,16 @@ export default function AddHealthEntry() {
       setShowSuccessModal(true);
     } catch (error) {
       console.error("❌ Failed to save manual entry:", error);
-      Alert.alert("Error", "Failed to save entry. Please try again.");
+      setAlertModalTitle("Error");
+      setAlertModalMessage("Failed to save entry. Please try again.");
+      setAlertModalButtons([
+        {
+          label: "OK",
+          onPress: () => setAlertModalVisible(false),
+          variant: "primary",
+        },
+      ]);
+      setAlertModalVisible(true);
     }
   };
 
@@ -729,6 +764,43 @@ export default function AddHealthEntry() {
         {/* Bottom navigation */}
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Alert Modal */}
+      <Modal
+        visible={alertModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setAlertModalVisible(false)}
+      >
+        <View style={styles.alertModalOverlay}>
+          <View style={styles.alertModalContent}>
+            <Text style={styles.alertModalTitle}>{alertModalTitle}</Text>
+            <Text style={styles.alertModalMessage}>{alertModalMessage}</Text>
+            <View style={styles.alertModalButtons}>
+              {alertModalButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.alertModalButton,
+                    button.variant === "destructive" && styles.alertDestructiveButton,
+                    button.variant === "secondary" && styles.alertSecondaryButton,
+                  ]}
+                  onPress={button.onPress}
+                >
+                  <Text
+                    style={[
+                      styles.alertModalButtonText,
+                      button.variant === "secondary" && styles.alertSecondaryButtonText,
+                    ]}
+                  >
+                    {button.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1020,5 +1092,71 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Alert Modal styles
+  alertModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertModalContent: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  alertModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertModalMessage: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 24,
+    lineHeight: 24,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertModalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  alertModalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    minWidth: 100,
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+  },
+  alertSecondaryButton: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  alertDestructiveButton: {
+    backgroundColor: "#DC3545",
+  },
+  alertModalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  alertSecondaryButtonText: {
+    color: COLORS.primary,
   },
 });

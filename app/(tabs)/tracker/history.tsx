@@ -3,14 +3,14 @@ import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Alert,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -18,11 +18,22 @@ import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
-import { FONTS } from "../../constants/constants";
-
+import { COLORS, FONTS } from "../../constants/constants";
 export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalMessage, setModalMessage] = useState("");
+  const [modalButtons, setModalButtons] = useState<
+    {
+      label: string;
+      onPress: () => void;
+      variant?: "primary" | "secondary" | "destructive";
+    }[]
+  >([]);
 
   // Set dates without time components for proper filtering
   const getDateWithoutTime = (date: Date) => {
@@ -112,7 +123,16 @@ export default function History() {
       const dateWithoutTime = getDateWithoutTime(selectedDate);
       // Validate that start date is not after end date
       if (dateWithoutTime > endDate) {
-        Alert.alert("Invalid Date", "Start date must be before end date");
+        setModalTitle("Invalid Date");
+        setModalMessage("Start date must be before end date");
+        setModalButtons([
+          {
+            label: "OK",
+            onPress: () => setModalVisible(false),
+            variant: "primary",
+          },
+        ]);
+        setModalVisible(true);
         return;
       }
       setStartDate(dateWithoutTime);
@@ -126,7 +146,16 @@ export default function History() {
       const endOfDay = getEndOfDay(selectedDate);
       // Validate that end date is not before start date
       if (endOfDay < startDate) {
-        Alert.alert("Invalid Date", "End date must be after start date");
+        setModalTitle("Invalid Date");
+        setModalMessage("End date must be after start date");
+        setModalButtons([
+          {
+            label: "OK",
+            onPress: () => setModalVisible(false),
+            variant: "primary",
+          },
+        ]);
+        setModalVisible(true);
         return;
       }
       setEndDate(endOfDay);
@@ -557,6 +586,43 @@ export default function History() {
         )}
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Custom Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{modalTitle}</Text>
+            <Text style={styles.modalMessage}>{modalMessage}</Text>
+            <View style={styles.modalButtons}>
+              {modalButtons.map((button, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.modalButton,
+                    button.variant === "destructive" && styles.destructiveButton,
+                    button.variant === "secondary" && styles.secondaryButton,
+                  ]}
+                  onPress={button.onPress}
+                >
+                  <Text
+                    style={[
+                      styles.modalButtonText,
+                      button.variant === "secondary" && styles.secondaryButtonText,
+                    ]}
+                  >
+                    {button.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -815,5 +881,71 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.primary,
+    marginBottom: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: "#333",
+    marginBottom: 24,
+    lineHeight: 24,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 25,
+    minWidth: 100,
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+  },
+  secondaryButton: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  destructiveButton: {
+    backgroundColor: "#DC3545",
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  secondaryButtonText: {
+    color: COLORS.primary,
   },
 });
