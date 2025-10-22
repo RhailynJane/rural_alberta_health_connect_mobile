@@ -2,6 +2,8 @@ import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
 import React from "react";
 import { Dimensions, Image, StyleSheet, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { ReminderSettings } from "../_utils/notifications";
+import NotificationBell from "./NotificationBell";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -20,6 +22,9 @@ interface CurvedHeaderProps {
   showLogo?: boolean;
   screenType?: 'onboarding' | 'signin'; // New prop to determine screen type
   bottomSpacing?: number; // controls margin below header container
+  showNotificationBell?: boolean; // New prop to show notification bell
+  reminderEnabled?: boolean; // New prop to pass reminder status
+  reminderSettings?: ReminderSettings | null; // New prop to pass full reminder settings
 }
 
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
@@ -32,6 +37,9 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   showLogo = false,
   screenType = 'onboarding', // Default to onboarding
   bottomSpacing = 20,
+  showNotificationBell = false,
+  reminderEnabled = false,
+  reminderSettings = null,
 }) => {
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
@@ -66,6 +74,11 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
 
       {/* Content */}
       <View style={styles.content}>
+        {showNotificationBell && (
+          <View style={styles.notificationBellContainer}>
+            <NotificationBell reminderEnabled={reminderEnabled} reminderSettings={reminderSettings} />
+          </View>
+        )}
         {children ? (
           children
         ) : (
@@ -201,6 +214,12 @@ const styles = StyleSheet.create({
     textAlign: "left",
     lineHeight: 22,
     letterSpacing: 0.3,
+  },
+  notificationBellContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 16,
+    zIndex: 10,
   },
 });
 

@@ -6,7 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { database } from '../watermelon/database';
-import { SignUpFormProvider } from "./auth/SignUpFormContext";
+import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 

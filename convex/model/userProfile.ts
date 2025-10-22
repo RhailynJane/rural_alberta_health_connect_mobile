@@ -199,6 +199,7 @@ export async function getUserProfile(ctx: QueryCtx, userId: Id<"users">) {
     emergencyContactName: profile.emergencyContactName,
     emergencyContactPhone: profile.emergencyContactPhone,
     medicalConditions: profile.medicalConditions,
+    // Note: Reminder settings are managed via profile/reminders endpoints and are intentionally omitted here
   };
 }
 

@@ -190,6 +190,7 @@ export default function LogDetails() {
             showLogo={true}
             screenType="signin"
             bottomSpacing={0}
+            showNotificationBell={true}
           />
           <View style={styles.contentArea}>
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
@@ -216,6 +217,7 @@ export default function LogDetails() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
         />
 
         {/* Scrollable content below header */}

@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 2,
+  version: 3,
   tables: [
     tableSchema({
       name: 'users',
@@ -75,6 +75,19 @@ export default appSchema({
         { name: 'distance_text', type: 'string' },
         { name: 'source', type: 'string' },
         { name: 'user_location', type: 'string' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'reminders',
+      columns: [
+        { name: 'user_id', type: 'string', isIndexed: true },
+        { name: 'reminder_id', type: 'string', isIndexed: true },
+        { name: 'enabled', type: 'boolean' },
+        { name: 'frequency', type: 'string' },
+        { name: 'time', type: 'string', isOptional: true },
+        { name: 'day_of_week', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
       ],

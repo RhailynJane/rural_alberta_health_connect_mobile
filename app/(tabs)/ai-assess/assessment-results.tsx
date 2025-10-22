@@ -7,14 +7,14 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -621,6 +621,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}

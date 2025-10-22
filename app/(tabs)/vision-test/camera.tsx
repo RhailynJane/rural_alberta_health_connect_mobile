@@ -2,20 +2,20 @@
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Camera,
-  runAtTargetFps,
-  useCameraDevice,
-  useCameraPermission,
+    Camera,
+    runAtTargetFps,
+    useCameraDevice,
+    useCameraPermission,
 } from "react-native-vision-camera";
 import { Worklets } from "react-native-worklets-core";
 import { useResizePlugin } from "vision-camera-resize-plugin";
@@ -495,6 +495,7 @@ export default function VisionCameraScreen() {
             showLogo={false}
             screenType="signin"
             bottomSpacing={0}
+            showNotificationBell={true}
           />
           <View style={styles.centerBox}>
             <Ionicons name="camera" size={48} color="#666" />
@@ -533,6 +534,7 @@ export default function VisionCameraScreen() {
             showLogo={false}
             screenType="signin"
             bottomSpacing={0}
+            showNotificationBell={true}
           />
           <View style={styles.centerBox}>
             <ActivityIndicator size="large" color="#2A7DE1" />

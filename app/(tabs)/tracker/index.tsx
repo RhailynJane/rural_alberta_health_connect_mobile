@@ -1,18 +1,27 @@
+import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function Tracker() {
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !isLoading ? {} : "skip"
+  );
   const handleAddLogEntry = () => {
     router.push("/tracker/add-health-entry");
   };
@@ -38,6 +47,9 @@ export default function Tracker() {
             showLogo={true}
             screenType="signin"
             bottomSpacing={0}
+            showNotificationBell={true}
+            reminderEnabled={reminderSettings?.enabled || false}
+            reminderSettings={reminderSettings || null}
           />
 
           <View style={styles.contentSection}>

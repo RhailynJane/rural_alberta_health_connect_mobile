@@ -5,13 +5,13 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -19,16 +19,28 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import HealthStatusTag from "../components/HealthStatusTag";
-import { FONTS } from "../constants/constants";
+import { COLORS, FONTS } from "../constants/constants";
 
 export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const queryArgs = isAuthenticated ? {} : "skip";
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   // Get current user data
   const user = useQuery(api.users.getCurrentUser, queryArgs);
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !isLoading ? {} : "skip"
+  );
 
   // Get entries for the last 7 days to calculate health score
   const getLast7DaysDateRange = () => {
@@ -136,56 +148,57 @@ export default function Dashboard() {
   };
 
   const handleEmergencyCall = (): void => {
-    Alert.alert(
-      "Emergency Call",
-      "For life-threatening emergencies, call 911 immediately.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
+    setModalTitle("Emergency Call");
+    setModalMessage("For life-threatening emergencies, call 911 immediately.");
+    setModalButtons([
+      {
+        label: "Cancel",
+        onPress: () => setModalVisible(false),
+        variant: 'secondary',
+      },
+      {
+        label: "Call 911",
+        onPress: () => {
+          setModalVisible(false);
+          Linking.openURL("tel:911").catch((err) => {
+            console.error("Error calling 911:", err);
+            setModalTitle("Error");
+            setModalMessage("Could not make the call. Please check your device.");
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          });
         },
-        {
-          text: "Call 911",
-          onPress: () => {
-            Linking.openURL("tel:911").catch((err) => {
-              console.error("Error calling 911:", err);
-              Alert.alert(
-                "Error",
-                "Could not make the call. Please check your device."
-              );
-            });
-          },
-          style: "destructive",
-        },
-      ],
-      { cancelable: true }
-    );
+        variant: 'destructive',
+      },
+    ]);
+    setModalVisible(true);
   };
 
   const callHealthLink = (): void => {
-    Alert.alert(
-      "Health Link Alberta",
-      "Call 811 for non-emergency health advice?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
+    setModalTitle("Health Link Alberta");
+    setModalMessage("Call 811 for non-emergency health advice?");
+    setModalButtons([
+      {
+        label: "Cancel",
+        onPress: () => setModalVisible(false),
+        variant: 'secondary',
+      },
+      {
+        label: "Call 811",
+        onPress: () => {
+          setModalVisible(false);
+          Linking.openURL("tel:811").catch((err) => {
+            console.error("Error calling 811:", err);
+            setModalTitle("Error");
+            setModalMessage("Could not make the call. Please check your device.");
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          });
         },
-        {
-          text: "Call 811",
-          onPress: () => {
-            Linking.openURL("tel:811").catch((err) => {
-              console.error("Error calling 811:", err);
-              Alert.alert(
-                "Error",
-                "Could not make the call. Please check your device."
-              );
-            });
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+        variant: 'primary',
+      },
+    ]);
+    setModalVisible(true);
   };
 
   const navigateToHistory = (): void => {
@@ -206,6 +219,9 @@ export default function Dashboard() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderSettings?.enabled || false}
+          reminderSettings={reminderSettings || null}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
@@ -447,6 +463,53 @@ export default function Dashboard() {
         </View>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Modal for alerts and confirmations */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

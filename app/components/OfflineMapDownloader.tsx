@@ -1,21 +1,20 @@
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-    ALBERTA_REGIONS,
-    DEFAULT_MAP_CONFIG,
-    OFFLINE_PACK_CONFIG,
-} from '../config/mapbox.config';
+  ALBERTA_REGIONS,
+  DEFAULT_MAP_CONFIG,
+  OFFLINE_PACK_CONFIG,
+} from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface OfflineRegion {
@@ -41,6 +40,12 @@ export default function OfflineMapDownloader({
   const [regions, setRegions] = useState<OfflineRegion[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   useEffect(() => {
     if (visible) {
@@ -65,13 +70,22 @@ export default function OfflineMapDownloader({
       setRegions(regionStatus);
     } catch (error) {
       console.error('Error loading offline regions:', error);
-      Alert.alert('Error', 'Failed to load offline regions');
+      setModalTitle('Error');
+      setModalMessage('Failed to load offline regions');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     }
   };
 
   const downloadRegion = async (regionId: string) => {
     const region = ALBERTA_REGIONS.find((r) => r.id === regionId);
     if (!region) return;
+
+    // Prevent multiple simultaneous downloads
+    if (downloading) {
+      console.log('Download already in progress, skipping...');
+      return;
+    }
 
     try {
       setDownloading(regionId);
@@ -114,10 +128,10 @@ export default function OfflineMapDownloader({
         )
       );
 
-      Alert.alert(
-        'Success',
-        `${region.name} has been downloaded for offline use!`
-      );
+      setModalTitle('Success');
+      setModalMessage(`${region.name} has been downloaded for offline use!`);
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
 
       // Notify parent to focus the map on this region
       if (onRegionDownloaded && Array.isArray(region.center) && region.center.length === 2) {
@@ -128,7 +142,18 @@ export default function OfflineMapDownloader({
       }
     } catch (error) {
       console.error('Error downloading region:', error);
-      Alert.alert('Error', 'Failed to download map region. Please try again.');
+      
+      // Reset region progress on error
+      setRegions((prev) =>
+        prev.map((r) =>
+          r.id === regionId ? { ...r, progress: 0 } : r
+        )
+      );
+      
+      setModalTitle('Error');
+      setModalMessage('Failed to download map region. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setDownloading(null);
       setDownloadProgress(0);
@@ -139,122 +164,178 @@ export default function OfflineMapDownloader({
     const region = ALBERTA_REGIONS.find((r) => r.id === regionId);
     if (!region) return;
 
-    Alert.alert(
-      'Delete Offline Map',
-      `Are you sure you want to delete the offline map for ${region.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await Mapbox.offlineManager.deletePack(regionId);
-              setRegions((prev) =>
-                prev.map((r) =>
-                  r.id === regionId
-                    ? { ...r, downloaded: false, progress: 0 }
-                    : r
-                )
-              );
-              Alert.alert('Success', 'Offline map deleted');
-            } catch (error) {
-              console.error('Error deleting region:', error);
-              Alert.alert('Error', 'Failed to delete offline map');
-            }
-          },
+    setModalTitle('Delete Offline Map');
+    setModalMessage(`Are you sure you want to delete the offline map for ${region.name}?`);
+    setModalButtons([
+      { label: 'Cancel', onPress: () => setModalVisible(false), variant: 'secondary' },
+      {
+        label: 'Delete',
+        onPress: async () => {
+          setModalVisible(false);
+          try {
+            await Mapbox.offlineManager.deletePack(regionId);
+            setRegions((prev) =>
+              prev.map((r) =>
+                r.id === regionId
+                  ? { ...r, downloaded: false, progress: 0 }
+                  : r
+              )
+            );
+            setModalTitle('Success');
+            setModalMessage('Offline map deleted');
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          } catch (error) {
+            console.error('Error deleting region:', error);
+            setModalTitle('Error');
+            setModalMessage('Failed to delete offline map');
+            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+            setModalVisible(true);
+          }
         },
-      ]
-    );
+        variant: 'destructive',
+      },
+    ]);
+    setModalVisible(true);
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Offline Maps</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color={COLORS.darkGray} />
-            </TouchableOpacity>
-          </View>
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Offline Maps</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Icon name="close" size={24} color={COLORS.darkGray} />
+              </TouchableOpacity>
+            </View>
 
-          <Text style={styles.subtitle}>
-            Download maps for offline use in areas with poor connectivity
-          </Text>
-
-          {/* Regions List */}
-          <ScrollView style={styles.regionsList}>
-            {regions.map((region) => (
-              <View key={region.id} style={styles.regionCard}>
-                <View style={styles.regionInfo}>
-                  <Text style={styles.regionName}>{region.name}</Text>
-                  {region.description && (
-                    <Text style={styles.regionDescription}>{region.description}</Text>
-                  )}
-                  <Text style={styles.regionSize}>Size: {region.size}</Text>
-                  {region.downloaded && (
-                    <View style={styles.downloadedBadge}>
-                      <Icon name="checkmark-circle" size={16} color="#10B981" />
-                      <Text style={styles.downloadedText}>Downloaded</Text>
-                    </View>
-                  )}
-                  {downloading === region.id && (
-                    <View style={styles.progressContainer}>
-                      <Text style={styles.progressText}>
-                        {Math.round(downloadProgress)}%
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.regionActions}>
-                  {!region.downloaded && !downloading && (
-                    <TouchableOpacity
-                      style={styles.downloadButton}
-                      onPress={() => downloadRegion(region.id)}
-                    >
-                      <Icon name="download-outline" size={20} color="white" />
-                      <Text style={styles.downloadButtonText}>Download</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {downloading === region.id && (
-                    <View style={styles.downloadingContainer}>
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                      <Text style={styles.downloadingText}>Downloading...</Text>
-                    </View>
-                  )}
-
-                  {region.downloaded && downloading !== region.id && (
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => deleteRegion(region.id)}
-                    >
-                      <Icon name="trash-outline" size={20} color="#EF4444" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Info Footer */}
-          <View style={styles.footer}>
-            <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.footerText}>
-              Each region is approximately 10-50 MB. Download on WiFi recommended.
+            <Text style={styles.subtitle}>
+              Download maps for offline use in areas with poor connectivity
             </Text>
+
+            {/* Regions List */}
+            <ScrollView style={styles.regionsList}>
+              {regions.map((region) => (
+                <View key={region.id} style={styles.regionCard}>
+                  <View style={styles.regionInfo}>
+                    <Text style={styles.regionName}>{region.name}</Text>
+                    {region.description && (
+                      <Text style={styles.regionDescription}>{region.description}</Text>
+                    )}
+                    <Text style={styles.regionSize}>Size: {region.size}</Text>
+                    {region.downloaded && (
+                      <View style={styles.downloadedBadge}>
+                        <Icon name="checkmark-circle" size={16} color="#10B981" />
+                        <Text style={styles.downloadedText}>Downloaded</Text>
+                      </View>
+                    )}
+                    {downloading === region.id && (
+                      <View style={styles.progressContainer}>
+                        <Text style={styles.progressText}>
+                          {Math.round(downloadProgress)}%
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.regionActions}>
+                    {!region.downloaded && !downloading && (
+                      <TouchableOpacity
+                        style={styles.downloadButton}
+                        onPress={() => downloadRegion(region.id)}
+                        disabled={downloading !== null}
+                      >
+                        <Icon name="download-outline" size={20} color="white" />
+                        <Text style={styles.downloadButtonText}>Download</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {downloading === region.id && (
+                      <View style={styles.downloadingContainer}>
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                        <Text style={styles.downloadingText}>Downloading...</Text>
+                      </View>
+                    )}
+
+                    {region.downloaded && downloading !== region.id && (
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => deleteRegion(region.id)}
+                      >
+                        <Icon name="trash-outline" size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Info Footer */}
+            <View style={styles.footer}>
+              <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.footerText}>
+                Each region is approximately 10-50 MB. Download on WiFi recommended.
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      {/* Alert Modal - Separate from main modal to avoid nesting issues */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
