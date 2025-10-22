@@ -65,4 +65,15 @@ export default defineSchema({
     .index("byTimestamp", ["timestamp"])
     .index("by_user_date", ["userId", "date"]),
 
+  passwordResetCodes: defineTable({
+    userId: v.id("users"),
+    email: v.string(),
+    code: v.string(),
+    expiresAt: v.number(),
+    used: v.boolean(),
+  })
+    .index("by_email", ["email"])
+    .index("by_email_code", ["email", "code"])
+    .index("by_expiry", ["expiresAt"]),
+
 });

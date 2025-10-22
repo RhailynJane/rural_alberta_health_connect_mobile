@@ -1,3 +1,5 @@
+import { useAuthActions } from "@convex-dev/auth/react";
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
@@ -18,31 +20,33 @@ import CurvedBackground from '../components/curvedBackground';
 import CurvedHeader from '../components/curvedHeader';
 import { COLORS, FONTS } from '../constants/constants';
 
-// Validation schema
-const ForgotPasswordSchema = Yup.object().shape({
+// Validation schemas for each step
+const EmailSchema = Yup.object().shape({
   email: Yup.string()
-    .email('Invalid email address')
+    .trim()
+    .email('Please enter a valid email address')
+    .required('Email is required'),
+});
+
+const ResetSchema = Yup.object().shape({
+  email: Yup.string()
+    .trim()
+    .email('Please enter a valid email address')
     .required('Email is required'),
   code: Yup.string()
-    .when('showCodeField', {
-      is: true,
-      then: (schema) => schema.required('Verification code is required'),
-      otherwise: (schema) => schema.notRequired(),
-    }),
+    .trim()
+    .required('Verification code is required'),
   newPassword: Yup.string()
-    .when('showCodeField', {
-      is: true,
-      then: (schema) => schema
-        .min(6, 'Password must be at least 6 characters')
-        .required('New password is required'),
-      otherwise: (schema) => schema.notRequired(),
-    }),
+    .min(6, 'Password must be at least 6 characters')
+    .required('New password is required'),
 });
 
 export default function ForgotPassword() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
   const [isLoading, setIsLoading] = useState(false);
-  const [showCodeField, setShowCodeField] = useState(false);
+  const [step, setStep] = useState<"forgot" | { email: string }>("forgot");
+  const [showPassword, setShowPassword] = useState(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -53,16 +57,18 @@ export default function ForgotPassword() {
   const handleSendCode = async (email: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call to send verification code
-      console.log('Sending verification code to:', email);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('flow', 'reset');
       
-      setModalTitle('Code Sent');
-      setModalMessage('A verification code has been sent to your email address.');
+      await signIn("password", formData);
+      
+      setModalTitle('✉️ Verification Code Sent');
+      setModalMessage('A 6-digit verification code has been sent to your email. Please check your inbox and spam folder. The code will expire in 10 minutes.');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
       
-      setShowCodeField(true);
+      setStep({ email });
     } catch (error) {
       console.error('Failed to send verification code:', error);
       setModalTitle('Error');
@@ -77,11 +83,15 @@ export default function ForgotPassword() {
   const handleResetPassword = async (email: string, code: string, newPassword: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call to reset password
-      console.log('Resetting password for:', email, 'with code:', code);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('code', code);
+      formData.append('newPassword', newPassword);
+      formData.append('flow', 'reset-verification');
       
-      setModalTitle('Password Reset');
+      await signIn("password", formData);
+      
+      setModalTitle('✅ Password Reset Successful');
       setModalMessage('Your password has been successfully reset. You can now sign in with your new password.');
       setModalButtons([
         {
@@ -96,8 +106,20 @@ export default function ForgotPassword() {
       setModalVisible(true);
     } catch (error) {
       console.error('Failed to reset password:', error);
+      // Extract user-friendly message from error
+      let errorMessage = 'Failed to reset password. Please try again.';
+      
+      if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes('invalid') && (msg.includes('code') || msg.includes('verification'))) {
+          errorMessage = 'Invalid verification code. Please check and try again.';
+        } else if (msg.includes('expired')) {
+          errorMessage = 'Verification code has expired. Please request a new one.';
+        }
+      }
+      
       setModalTitle('Error');
-      setModalMessage('Failed to reset password. Please check the verification code and try again.');
+      setModalMessage(errorMessage);
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
     } finally {
@@ -127,16 +149,17 @@ export default function ForgotPassword() {
                 Forgot Password
               </Text>
               <Text style={[styles.subtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                {showCodeField
+                {step !== "forgot"
                   ? 'Enter the verification code sent to your email and set a new password'
                   : 'Enter your email address to receive a verification code'}
               </Text>
 
               <Formik
-                initialValues={{ email: '', code: '', newPassword: '', showCodeField }}
-                validationSchema={ForgotPasswordSchema}
+                initialValues={{ email: step !== "forgot" ? step.email : '', code: '', newPassword: '' }}
+                validationSchema={step !== "forgot" ? ResetSchema : EmailSchema}
+                enableReinitialize
                 onSubmit={(values) => {
-                  if (showCodeField) {
+                  if (step !== "forgot") {
                     handleResetPassword(values.email, values.code, values.newPassword);
                   } else {
                     handleSendCode(values.email);
@@ -145,29 +168,31 @@ export default function ForgotPassword() {
               >
                 {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
                   <View style={styles.formContainer}>
-                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Email
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.email && touched.email && styles.inputError
-                      ]}
-                      placeholder="Enter your email"
-                      placeholderTextColor="#999"
-                      value={values.email}
-                      onChangeText={handleChange('email')}
-                      onBlur={handleBlur('email')}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      editable={!showCodeField}
-                    />
-                    {errors.email && touched.email && (
-                      <Text style={styles.errorText}>{errors.email}</Text>
-                    )}
-
-                    {showCodeField && (
+                    {step === "forgot" ? (
+                      <>
+                        <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Email
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                            errors.email && touched.email && styles.inputError
+                          ]}
+                          placeholder="Enter your email"
+                          placeholderTextColor="#999"
+                          value={values.email}
+                          onChangeText={(text) => handleChange('email')(text.trim())}
+                          onBlur={handleBlur('email')}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        {errors.email && touched.email && (
+                          <Text style={styles.errorText}>{errors.email}</Text>
+                        )}
+                      </>
+                    ) : (
                       <>
                         <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           Verification Code
@@ -192,19 +217,31 @@ export default function ForgotPassword() {
                         <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           New Password
                         </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.newPassword && touched.newPassword && styles.inputError
-                          ]}
-                          placeholder="Enter new password"
-                          placeholderTextColor="#999"
-                          value={values.newPassword}
-                          onChangeText={handleChange('newPassword')}
-                          onBlur={handleBlur('newPassword')}
-                          secureTextEntry
-                        />
+                        <View style={styles.passwordContainer}>
+                          <TextInput
+                            style={[
+                              styles.passwordInput,
+                              { fontFamily: FONTS.BarlowSemiCondensed, color: '#1A1A1A' },
+                              errors.newPassword && touched.newPassword && styles.inputError
+                            ]}
+                            placeholder="Enter new password"
+                            placeholderTextColor="#999"
+                            value={values.newPassword}
+                            onChangeText={handleChange('newPassword')}
+                            onBlur={handleBlur('newPassword')}
+                            secureTextEntry={!showPassword}
+                          />
+                          <TouchableOpacity
+                            style={styles.eyeIcon}
+                            onPress={() => setShowPassword(!showPassword)}
+                          >
+                            <Ionicons
+                              name={showPassword ? 'eye-off' : 'eye'}
+                              size={24}
+                              color="#666"
+                            />
+                          </TouchableOpacity>
+                        </View>
                         {errors.newPassword && touched.newPassword && (
                           <Text style={styles.errorText}>{errors.newPassword}</Text>
                         )}
@@ -218,14 +255,25 @@ export default function ForgotPassword() {
                     >
                       <Text style={[styles.buttonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                         {isLoading
-                          ? showCodeField
+                          ? step !== "forgot"
                             ? 'Resetting Password...'
                             : 'Sending Code...'
-                          : showCodeField
+                          : step !== "forgot"
                             ? 'Reset Password'
                             : 'Send Verification Code'}
                       </Text>
                     </TouchableOpacity>
+
+                    {step !== "forgot" && (
+                      <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => setStep("forgot")}
+                      >
+                        <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Request New Code
+                        </Text>
+                      </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                       style={styles.backButton}
@@ -343,6 +391,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    color: '#1A1A1A',
+  },
+  passwordContainer: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 8,
+  },
+  passwordInput: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 16,
+    paddingRight: 50,
+    fontSize: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    padding: 4,
   },
   inputError: {
     borderColor: '#ff3b30',
@@ -382,5 +456,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2A7DE1',
     fontWeight: '600',
+    marginTop: 8,
   },
 });
