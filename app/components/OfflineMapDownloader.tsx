@@ -1,19 +1,19 @@
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-    ALBERTA_REGIONS,
-    DEFAULT_MAP_CONFIG,
-    OFFLINE_PACK_CONFIG,
+  ALBERTA_REGIONS,
+  DEFAULT_MAP_CONFIG,
+  OFFLINE_PACK_CONFIG,
 } from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 
@@ -81,6 +81,12 @@ export default function OfflineMapDownloader({
     const region = ALBERTA_REGIONS.find((r) => r.id === regionId);
     if (!region) return;
 
+    // Prevent multiple simultaneous downloads
+    if (downloading) {
+      console.log('Download already in progress, skipping...');
+      return;
+    }
+
     try {
       setDownloading(regionId);
       setDownloadProgress(0);
@@ -136,6 +142,14 @@ export default function OfflineMapDownloader({
       }
     } catch (error) {
       console.error('Error downloading region:', error);
+      
+      // Reset region progress on error
+      setRegions((prev) =>
+        prev.map((r) =>
+          r.id === regionId ? { ...r, progress: 0 } : r
+        )
+      );
+      
       setModalTitle('Error');
       setModalMessage('Failed to download map region. Please try again.');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
@@ -186,93 +200,96 @@ export default function OfflineMapDownloader({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Offline Maps</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color={COLORS.darkGray} />
-            </TouchableOpacity>
-          </View>
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={onClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Offline Maps</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Icon name="close" size={24} color={COLORS.darkGray} />
+              </TouchableOpacity>
+            </View>
 
-          <Text style={styles.subtitle}>
-            Download maps for offline use in areas with poor connectivity
-          </Text>
-
-          {/* Regions List */}
-          <ScrollView style={styles.regionsList}>
-            {regions.map((region) => (
-              <View key={region.id} style={styles.regionCard}>
-                <View style={styles.regionInfo}>
-                  <Text style={styles.regionName}>{region.name}</Text>
-                  {region.description && (
-                    <Text style={styles.regionDescription}>{region.description}</Text>
-                  )}
-                  <Text style={styles.regionSize}>Size: {region.size}</Text>
-                  {region.downloaded && (
-                    <View style={styles.downloadedBadge}>
-                      <Icon name="checkmark-circle" size={16} color="#10B981" />
-                      <Text style={styles.downloadedText}>Downloaded</Text>
-                    </View>
-                  )}
-                  {downloading === region.id && (
-                    <View style={styles.progressContainer}>
-                      <Text style={styles.progressText}>
-                        {Math.round(downloadProgress)}%
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.regionActions}>
-                  {!region.downloaded && !downloading && (
-                    <TouchableOpacity
-                      style={styles.downloadButton}
-                      onPress={() => downloadRegion(region.id)}
-                    >
-                      <Icon name="download-outline" size={20} color="white" />
-                      <Text style={styles.downloadButtonText}>Download</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {downloading === region.id && (
-                    <View style={styles.downloadingContainer}>
-                      <ActivityIndicator size="small" color={COLORS.primary} />
-                      <Text style={styles.downloadingText}>Downloading...</Text>
-                    </View>
-                  )}
-
-                  {region.downloaded && downloading !== region.id && (
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => deleteRegion(region.id)}
-                    >
-                      <Icon name="trash-outline" size={20} color="#EF4444" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Info Footer */}
-          <View style={styles.footer}>
-            <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
-            <Text style={styles.footerText}>
-              Each region is approximately 10-50 MB. Download on WiFi recommended.
+            <Text style={styles.subtitle}>
+              Download maps for offline use in areas with poor connectivity
             </Text>
+
+            {/* Regions List */}
+            <ScrollView style={styles.regionsList}>
+              {regions.map((region) => (
+                <View key={region.id} style={styles.regionCard}>
+                  <View style={styles.regionInfo}>
+                    <Text style={styles.regionName}>{region.name}</Text>
+                    {region.description && (
+                      <Text style={styles.regionDescription}>{region.description}</Text>
+                    )}
+                    <Text style={styles.regionSize}>Size: {region.size}</Text>
+                    {region.downloaded && (
+                      <View style={styles.downloadedBadge}>
+                        <Icon name="checkmark-circle" size={16} color="#10B981" />
+                        <Text style={styles.downloadedText}>Downloaded</Text>
+                      </View>
+                    )}
+                    {downloading === region.id && (
+                      <View style={styles.progressContainer}>
+                        <Text style={styles.progressText}>
+                          {Math.round(downloadProgress)}%
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.regionActions}>
+                    {!region.downloaded && !downloading && (
+                      <TouchableOpacity
+                        style={styles.downloadButton}
+                        onPress={() => downloadRegion(region.id)}
+                        disabled={downloading !== null}
+                      >
+                        <Icon name="download-outline" size={20} color="white" />
+                        <Text style={styles.downloadButtonText}>Download</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {downloading === region.id && (
+                      <View style={styles.downloadingContainer}>
+                        <ActivityIndicator size="small" color={COLORS.primary} />
+                        <Text style={styles.downloadingText}>Downloading...</Text>
+                      </View>
+                    )}
+
+                    {region.downloaded && downloading !== region.id && (
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => deleteRegion(region.id)}
+                      >
+                        <Icon name="trash-outline" size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Info Footer */}
+            <View style={styles.footer}>
+              <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.footerText}>
+                Each region is approximately 10-50 MB. Download on WiFi recommended.
+              </Text>
+            </View>
           </View>
         </View>
-      </View>
+      </Modal>
 
-      {/* Alert Modal */}
+      {/* Alert Modal - Separate from main modal to avoid nesting issues */}
       <Modal
         visible={modalVisible}
         transparent
@@ -318,7 +335,7 @@ export default function OfflineMapDownloader({
           </View>
         </View>
       </Modal>
-    </Modal>
+    </>
   );
 }
 

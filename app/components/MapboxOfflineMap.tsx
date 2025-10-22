@@ -35,7 +35,7 @@ interface MapboxOfflineMapProps {
   focusCenter?: { latitude: number; longitude: number; zoom?: number } | null;
 }
 
-export default function MapboxOfflineMap({
+function MapboxOfflineMapComponent({
   clinics,
   userLocation,
   onClinicPress,
@@ -368,3 +368,6 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
   },
 });
+
+// Export memoized component to prevent unnecessary re-renders
+export default React.memo(MapboxOfflineMapComponent);

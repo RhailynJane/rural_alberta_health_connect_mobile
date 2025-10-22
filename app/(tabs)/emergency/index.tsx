@@ -556,27 +556,32 @@ export default function Emergency() {
           </View>
         </View>
 
-        {/* Offline Map Section with Mapbox */}
-        {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 && (
-          <>
-            <View style={styles.mapHeaderContainer}>
-              <Text style={styles.sectionTitle}>Clinic Locations Map</Text>
-              <TouchableOpacity
-                style={styles.downloadMapsButton}
-                onPress={() => setShowOfflineDownloader(true)}
-              >
-                <Icon name="cloud-download" size={20} color="#2A7DE1" />
-                <Text style={styles.downloadMapsText}>Offline Maps</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.card}>
-              <View style={styles.cardContent}>
-                <Text style={styles.mapDescription}>
-                  Interactive map showing nearby clinics. Download maps for offline use.
-                </Text>
-                <MapboxOfflineMap
-                  clinics={realTimeClinics
-                    .map((clinic) => ({
+        {/* Offline Map Section with Mapbox - Always visible for offline map downloads */}
+        <>
+          <View style={styles.mapHeaderContainer}>
+            <Text style={styles.sectionTitle}>
+              {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 
+                ? "Clinic Locations Map" 
+                : "Offline Maps"}
+            </Text>
+            <TouchableOpacity
+              style={styles.downloadMapsButton}
+              onPress={() => setShowOfflineDownloader(true)}
+            >
+              <Icon name="cloud-download" size={20} color="#2A7DE1" />
+              <Text style={styles.downloadMapsText}>Download Maps</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.card}>
+            <View style={styles.cardContent}>
+              <Text style={styles.mapDescription}>
+                {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
+                  ? "Interactive map showing nearby clinics. Download maps for offline use."
+                  : "Download offline maps for areas with poor connectivity. Enable location services to see nearby clinics."}
+              </Text>
+              <MapboxOfflineMap
+                clinics={locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
+                  ? realTimeClinics.map((clinic) => ({
                       id: clinic.id,
                       name: clinic.name,
                       address: clinic.address,
@@ -585,57 +590,57 @@ export default function Emergency() {
                       longitude: Number((clinic as any)?.coordinates?.longitude),
                       distance: clinic.distance,
                       phone: clinic.phone || undefined,
-                    }))}
-                  focusCenter={mapFocus}
-                  userLocation={(() => {
-                    try {
-                      const loc = locationStatus?.location;
-                      if (!loc || typeof loc !== 'string') return null;
-                      const parts = loc.split(',');
-                      if (parts.length < 2) return null;
-                      const lat = parseFloat(parts[0]);
-                      const lng = parseFloat(parts[1]);
-                      if (!isFinite(lat) || !isFinite(lng)) return null;
-                      return { latitude: lat, longitude: lng };
-                    } catch {
-                      return null;
-                    }
-                  })()}
-                  onClinicPress={(clinic) => {
-                    setModalTitle(clinic.name);
-                    setModalMessage(`${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`);
-                    setModalButtons([
-                      { text: "Cancel", onPress: () => setModalVisible(false), variant: 'secondary' },
-                      {
-                        label: "Call",
-                        onPress: () => {
-                          setModalVisible(false);
-                          clinic.phone && handleEmergencyCall(clinic.phone);
-                        },
-                        variant: 'primary',
+                    }))
+                  : []}
+                focusCenter={mapFocus}
+                userLocation={locationStatus?.locationServicesEnabled ? (() => {
+                  try {
+                    const loc = locationStatus?.location;
+                    if (!loc || typeof loc !== 'string') return null;
+                    const parts = loc.split(',');
+                    if (parts.length < 2) return null;
+                    const lat = parseFloat(parts[0]);
+                    const lng = parseFloat(parts[1]);
+                    if (!isFinite(lat) || !isFinite(lng)) return null;
+                    return { latitude: lat, longitude: lng };
+                  } catch {
+                    return null;
+                  }
+                })() : null}
+                onClinicPress={(clinic) => {
+                  setModalTitle(clinic.name);
+                  setModalMessage(`${clinic.address}\n\nDistance: ${clinic.distance?.toFixed(1)} km`);
+                  setModalButtons([
+                    { text: "Cancel", onPress: () => setModalVisible(false), variant: 'secondary' },
+                    {
+                      label: "Call",
+                      onPress: () => {
+                        setModalVisible(false);
+                        clinic.phone && handleEmergencyCall(clinic.phone);
                       },
-                      {
-                        label: "Directions",
-                        onPress: () => {
-                          setModalVisible(false);
-                          openInMaps({
-                            name: clinic.name,
-                            coordinates: {
-                              latitude: clinic.latitude,
-                              longitude: clinic.longitude,
-                            },
-                          } as any);
-                        },
-                        variant: 'primary',
+                      variant: 'primary',
+                    },
+                    {
+                      label: "Directions",
+                      onPress: () => {
+                        setModalVisible(false);
+                        openInMaps({
+                          name: clinic.name,
+                          coordinates: {
+                            latitude: clinic.latitude,
+                            longitude: clinic.longitude,
+                          },
+                        } as any);
                       },
-                    ] as any);
-                    setModalVisible(true);
-                  }}
-                />
-              </View>
+                      variant: 'primary',
+                    },
+                  ] as any);
+                  setModalVisible(true);
+                }}
+              />
             </View>
-          </>
-        )}
+          </View>
+        </>
 
         {/* Additional Clinics Section */}
         {realTimeClinics.length > 1 && (
