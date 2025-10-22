@@ -12,7 +12,8 @@ export default function ReminderDebug() {
   const [scheduled, setScheduled] = useState<any[]>([]);
   const [wmReminders, setWmReminders] = useState<any[]>([]);
   const [reminders, setReminders] = useState<any[]>([]);
-  const convexSettings = useQuery(api.profile.reminders.getReminderSettings, {});
+  const convexSettings = useQuery((api as any)['profile/reminders'].getReminderSettings, {});
+  const convexReminders = useQuery((api as any)['profile/reminders'].getAllReminders, {});
 
   useEffect(() => {
     (async () => {
@@ -50,9 +51,11 @@ export default function ReminderDebug() {
       <Text selectable style={styles.value}>{JSON.stringify(reminders, null, 2)}</Text>
       <Text style={styles.label}>Reminders (WatermelonDB):</Text>
       <Text selectable style={styles.value}>{JSON.stringify(wmReminders, null, 2)}</Text>
-      <Text style={styles.label}>Convex Reminder Settings:</Text>
+      <Text style={styles.label}>Convex Reminder Settings (legacy):</Text>
       <Text selectable style={styles.value}>{JSON.stringify(convexSettings, null, 2)}</Text>
-  <Button title="Resync & Reschedule All Reminders" onPress={async () => { try { await scheduleAllReminderItems(); } catch (e) { console.error('❌ Error rescheduling reminders:', e); } await (async () => { try { setPermission(await Notifications.getPermissionsAsync()); } catch (e) { setPermission({ error: String(e) }); } try { if (Notifications.getAllScheduledNotificationsAsync) { setScheduled(await Notifications.getAllScheduledNotificationsAsync()); } } catch (e) { setScheduled([{ error: String(e) }]); } let loadedReminders = []; try { loadedReminders = await getReminders(); setReminders(loadedReminders); } catch (e) { setReminders([{ error: String(e) }]); } try { const userId = loadedReminders[0]?.userId || loadedReminders[0]?.id?.split('_')[0]; if (userId) { const collection = database.get('reminders'); setWmReminders(await collection.query(Q.where('user_id', userId)).fetch()); } else { setWmReminders([]); } } catch (e) { setWmReminders([{ error: String(e) }]); } })(); }} />
+      <Text style={styles.label}>Convex Reminders (all):</Text>
+      <Text selectable style={styles.value}>{JSON.stringify(convexReminders, null, 2)}</Text>
+      <Button title="Reschedule All Reminders" onPress={() => scheduleAllReminderItems()} />
     </ScrollView>
   );
 }

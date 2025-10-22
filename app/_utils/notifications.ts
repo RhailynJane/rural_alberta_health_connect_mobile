@@ -15,6 +15,12 @@ export function setReminderUserKey(ns: string | null) {
 function nk(key: string): string { return USER_NS ? `${USER_NS}:${key}` : key; }
 let handlerInitialized = false;
 
+// Convex sync callback - set by the app component that has access to useMutation
+let convexSyncCallback: ((reminders: ReminderItem[]) => Promise<void>) | null = null;
+export function setConvexSyncCallback(callback: ((reminders: ReminderItem[]) => Promise<void>) | null) {
+  convexSyncCallback = callback;
+}
+
 export type ReminderFrequency = "daily" | "weekly";
 
 export type ReminderSettings = {
@@ -57,6 +63,10 @@ async function saveReminders(list: ReminderItem[]): Promise<void> {
   try { await AsyncStorage.setItem(nk(REMINDERS_KEY), JSON.stringify(list)); } catch {}
   // Mirror to WatermelonDB for offline/local queries
   try { await syncRemindersToWatermelon(list); } catch {}
+  // Sync to Convex if callback is set
+  if (convexSyncCallback) {
+    try { await convexSyncCallback(list); } catch (e) { console.error("Failed to sync reminders to Convex:", e); }
+  }
 }
 
 export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"updatedAt">): Promise<ReminderItem[]> {

@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
-import { ReminderItem, addReminder, deleteReminder, getReminders, scheduleAllReminderItems, setReminderUserKey, updateReminder } from "../../_utils/notifications";
+import { ReminderItem, addReminder, deleteReminder, getReminders, scheduleAllReminderItems, setConvexSyncCallback, setReminderUserKey, updateReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -35,6 +35,9 @@ export default function Profile() {
   );
   const updateReminderSettings = useMutation(
     (api as any)["profile/reminders"].updateReminderSettings
+  );
+  const saveAllReminders = useMutation(
+    (api as any)["profile/reminders"].saveAllReminders
   );
   const updateEmergencyContactMutation = useMutation(
     (api as any)["emergencyContactOnboarding/update"].withNameAndPhone
@@ -200,6 +203,15 @@ export default function Profile() {
       }));
       // Set per-user namespace for reminders and bell state
       try { setReminderUserKey(String((userProfile as any)._id || '')); } catch {}
+      // Set up Convex sync callback for reminders
+      setConvexSyncCallback(async (reminders: ReminderItem[]) => {
+        try {
+          await saveAllReminders({ reminders: JSON.stringify(reminders) });
+          console.log('✅ Synced', reminders.length, 'reminders to Convex');
+        } catch (err) {
+          console.error('❌ Failed to sync reminders to Convex:', err);
+        }
+      });
       // Refresh reminders for this user namespace
       refreshReminders();
     } else if (userProfile === null && isAuthenticated && !isLoading) {
@@ -213,7 +225,7 @@ export default function Profile() {
           console.error("❌ Error creating profile:", error);
         });
     }
-  }, [userProfile, isAuthenticated, isLoading, ensureProfileExists]);
+  }, [userProfile, isAuthenticated, isLoading, ensureProfileExists, saveAllReminders]);
 
   // Load reminder settings
   useEffect(() => {
@@ -632,9 +644,9 @@ export default function Profile() {
         payload = { ...reminderForm, time: norm };
       }
       if (editingReminderId) {
-        await updateReminder(editingReminderId, { ...payload });
+        await updateReminder(editingReminderId, { ...payload, enabled: true });
       } else {
-        await addReminder(payload as any);
+        await addReminder({ ...payload, enabled: true });
       }
       // Sync backend basic reminder settings for daily/weekly (legacy field used elsewhere)
       try {
