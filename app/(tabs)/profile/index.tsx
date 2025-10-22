@@ -1278,13 +1278,22 @@ export default function Profile() {
 
           {/* App Settings Card */}
           <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("appSettings")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cardTitle}>App Settings</Text>
-            </TouchableOpacity>
+            <View style={styles.cardHeader}>
+              <TouchableOpacity
+                onPress={() => toggleSection("appSettings")}
+                activeOpacity={0.7}
+                style={{ flex: 1 }}
+              >
+                <Text style={styles.cardTitle}>App Settings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push("/profile/ReminderDebug")}
+                style={{ marginLeft: 8, padding: 4, borderRadius: 6, backgroundColor: '#f2f7ff', borderWidth: 1, borderColor: '#b3d1ff' }}
+                accessibilityLabel="Open Reminder Debug Screen"
+              >
+                <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 13 }}>Debug</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={[styles.toggleRow, userData.reminderEnabled ? { marginBottom: 12 } : null]}>
               <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>

@@ -456,25 +456,29 @@ export async function scheduleAllReminderItems(list?: ReminderItem[]) {
 async function syncRemindersToWatermelon(list: ReminderItem[]) {
   if (!USER_NS) return; // need user id to scope rows
   const userId = USER_NS;
-  await (database as any).write(async () => {
-    const collection = (database as any).get('reminders');
-    // Remove existing rows for this user
-    const existing = await collection.query(Q.where('user_id', userId)).fetch();
-    for (const row of existing) {
-      await row.destroyPermanently();
-    }
-    // Insert current list
-    for (const r of list) {
-      await collection.create((rec: any) => {
-        rec.userId = userId;
-        rec.reminderId = r.id;
-        rec.enabled = !!r.enabled;
-        rec.frequency = r.frequency;
-        rec.time = r.time || null;
-        rec.dayOfWeek = r.dayOfWeek || null;
-        rec.createdAt = new Date(r.createdAt).getTime();
-        rec.updatedAt = new Date(r.updatedAt).getTime();
-      });
-    }
-  });
+  try {
+    await (database as any).write(async () => {
+      const collection = (database as any).get('reminders');
+      // Remove existing rows for this user
+      const existing = await collection.query(Q.where('user_id', userId)).fetch();
+      for (const row of existing) {
+        await row.destroyPermanently();
+      }
+      // Insert current list
+      for (const r of list) {
+        await collection.create((rec: any) => {
+          rec.user_id = userId;
+          rec.reminder_id = r.id;
+          rec.enabled = !!r.enabled;
+          rec.frequency = r.frequency;
+          rec.time = r.time || null;
+          rec.day_of_week = r.dayOfWeek || null;
+          rec.created_at = new Date(r.createdAt).getTime();
+          rec.updated_at = new Date(r.updatedAt).getTime();
+        });
+      }
+    });
+  } catch (err) {
+    console.error('WatermelonDB syncRemindersToWatermelon error:', err);
+  }
 }
