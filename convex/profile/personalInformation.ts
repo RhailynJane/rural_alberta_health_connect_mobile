@@ -2,9 +2,9 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import {
-  checkOnboardingStatus,
-  getUserProfile,
-  updatePersonalInfoModel,
+    checkOnboardingStatus,
+    getUserProfile,
+    updatePersonalInfoModel,
 } from "../model/userProfile";
 
 export const getOnboardingStatus = query({
@@ -29,7 +29,11 @@ export const getProfile = query({
     }
     
     const profile = await getUserProfile(ctx, userId);
-    console.log("📊 getProfile query result:", profile); 
+    if (profile) {
+      console.log("📊 getProfile: returned profile", { id: String(profile._id) });
+    } else {
+      console.log("📊 getProfile: no profile found for user");
+    }
     return profile;
   },
 });

@@ -1,70 +1,80 @@
+import { useAuthActions } from "@convex-dev/auth/react";
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Yup from 'yup';
 import CurvedBackground from '../components/curvedBackground';
 import CurvedHeader from '../components/curvedHeader';
-import { FONTS } from '../constants/constants';
+import { COLORS, FONTS } from '../constants/constants';
 
-// Validation schema
-const ForgotPasswordSchema = Yup.object().shape({
+// Validation schemas for each step
+const EmailSchema = Yup.object().shape({
   email: Yup.string()
-    .email('Invalid email address')
+    .trim()
+    .email('Please enter a valid email address')
+    .required('Email is required'),
+});
+
+const ResetSchema = Yup.object().shape({
+  email: Yup.string()
+    .trim()
+    .email('Please enter a valid email address')
     .required('Email is required'),
   code: Yup.string()
-    .when('showCodeField', {
-      is: true,
-      then: (schema) => schema.required('Verification code is required'),
-      otherwise: (schema) => schema.notRequired(),
-    }),
+    .trim()
+    .required('Verification code is required'),
   newPassword: Yup.string()
-    .when('showCodeField', {
-      is: true,
-      then: (schema) => schema
-        .min(6, 'Password must be at least 6 characters')
-        .required('New password is required'),
-      otherwise: (schema) => schema.notRequired(),
-    }),
+    .min(6, 'Password must be at least 6 characters')
+    .required('New password is required'),
 });
 
 export default function ForgotPassword() {
   const router = useRouter();
+  const { signIn } = useAuthActions();
   const [isLoading, setIsLoading] = useState(false);
-  const [showCodeField, setShowCodeField] = useState(false);
+  const [step, setStep] = useState<"forgot" | { email: string }>("forgot");
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
   const handleSendCode = async (email: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call to send verification code
-      console.log('Sending verification code to:', email);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('flow', 'reset');
       
-      Alert.alert(
-        'Code Sent',
-        'A verification code has been sent to your email address.',
-        [{ text: 'OK' }]
-      );
+      await signIn("password", formData);
       
-      setShowCodeField(true);
+      setModalTitle('✉️ Verification Code Sent');
+      setModalMessage('A 6-digit verification code has been sent to your email. Please check your inbox and spam folder. The code will expire in 10 minutes.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+      
+      setStep({ email });
     } catch (error) {
       console.error('Failed to send verification code:', error);
-      Alert.alert(
-        'Error',
-        'Failed to send verification code. Please try again.',
-        [{ text: 'OK' }]
-      );
+      setModalTitle('Error');
+      setModalMessage('Failed to send verification code. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -73,27 +83,45 @@ export default function ForgotPassword() {
   const handleResetPassword = async (email: string, code: string, newPassword: string) => {
     setIsLoading(true);
     try {
-      // Simulate API call to reset password
-      console.log('Resetting password for:', email, 'with code:', code);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('code', code);
+      formData.append('newPassword', newPassword);
+      formData.append('flow', 'reset-verification');
       
-      Alert.alert(
-        'Password Reset',
-        'Your password has been successfully reset. You can now sign in with your new password.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          }
-        ]
-      );
+      await signIn("password", formData);
+      
+      setModalTitle('✅ Password Reset Successful');
+      setModalMessage('Your password has been successfully reset. You can now sign in with your new password.');
+      setModalButtons([
+        {
+          label: 'OK',
+          onPress: () => {
+            setModalVisible(false);
+            router.back();
+          },
+          variant: 'primary'
+        }
+      ]);
+      setModalVisible(true);
     } catch (error) {
       console.error('Failed to reset password:', error);
-      Alert.alert(
-        'Error',
-        'Failed to reset password. Please check the verification code and try again.',
-        [{ text: 'OK' }]
-      );
+      // Extract user-friendly message from error
+      let errorMessage = 'Failed to reset password. Please try again.';
+      
+      if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes('invalid') && (msg.includes('code') || msg.includes('verification'))) {
+          errorMessage = 'Invalid verification code. Please check and try again.';
+        } else if (msg.includes('expired')) {
+          errorMessage = 'Verification code has expired. Please request a new one.';
+        }
+      }
+      
+      setModalTitle('Error');
+      setModalMessage(errorMessage);
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     } finally {
       setIsLoading(false);
     }
@@ -121,16 +149,17 @@ export default function ForgotPassword() {
                 Forgot Password
               </Text>
               <Text style={[styles.subtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                {showCodeField
+                {step !== "forgot"
                   ? 'Enter the verification code sent to your email and set a new password'
                   : 'Enter your email address to receive a verification code'}
               </Text>
 
               <Formik
-                initialValues={{ email: '', code: '', newPassword: '', showCodeField }}
-                validationSchema={ForgotPasswordSchema}
+                initialValues={{ email: step !== "forgot" ? step.email : '', code: '', newPassword: '' }}
+                validationSchema={step !== "forgot" ? ResetSchema : EmailSchema}
+                enableReinitialize
                 onSubmit={(values) => {
-                  if (showCodeField) {
+                  if (step !== "forgot") {
                     handleResetPassword(values.email, values.code, values.newPassword);
                   } else {
                     handleSendCode(values.email);
@@ -139,29 +168,31 @@ export default function ForgotPassword() {
               >
                 {({ handleChange, handleBlur, handleSubmit, values, errors, touched }) => (
                   <View style={styles.formContainer}>
-                    <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Email
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.input,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        errors.email && touched.email && styles.inputError
-                      ]}
-                      placeholder="Enter your email"
-                      placeholderTextColor="#999"
-                      value={values.email}
-                      onChangeText={handleChange('email')}
-                      onBlur={handleBlur('email')}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      editable={!showCodeField}
-                    />
-                    {errors.email && touched.email && (
-                      <Text style={styles.errorText}>{errors.email}</Text>
-                    )}
-
-                    {showCodeField && (
+                    {step === "forgot" ? (
+                      <>
+                        <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Email
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                            errors.email && touched.email && styles.inputError
+                          ]}
+                          placeholder="Enter your email"
+                          placeholderTextColor="#999"
+                          value={values.email}
+                          onChangeText={(text) => handleChange('email')(text.trim())}
+                          onBlur={handleBlur('email')}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                        {errors.email && touched.email && (
+                          <Text style={styles.errorText}>{errors.email}</Text>
+                        )}
+                      </>
+                    ) : (
                       <>
                         <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           Verification Code
@@ -186,19 +217,31 @@ export default function ForgotPassword() {
                         <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           New Password
                         </Text>
-                        <TextInput
-                          style={[
-                            styles.input,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                            errors.newPassword && touched.newPassword && styles.inputError
-                          ]}
-                          placeholder="Enter new password"
-                          placeholderTextColor="#999"
-                          value={values.newPassword}
-                          onChangeText={handleChange('newPassword')}
-                          onBlur={handleBlur('newPassword')}
-                          secureTextEntry
-                        />
+                        <View style={styles.passwordContainer}>
+                          <TextInput
+                            style={[
+                              styles.passwordInput,
+                              { fontFamily: FONTS.BarlowSemiCondensed, color: '#1A1A1A' },
+                              errors.newPassword && touched.newPassword && styles.inputError
+                            ]}
+                            placeholder="Enter new password"
+                            placeholderTextColor="#999"
+                            value={values.newPassword}
+                            onChangeText={handleChange('newPassword')}
+                            onBlur={handleBlur('newPassword')}
+                            secureTextEntry={!showPassword}
+                          />
+                          <TouchableOpacity
+                            style={styles.eyeIcon}
+                            onPress={() => setShowPassword(!showPassword)}
+                          >
+                            <Ionicons
+                              name={showPassword ? 'eye-off' : 'eye'}
+                              size={24}
+                              color="#666"
+                            />
+                          </TouchableOpacity>
+                        </View>
                         {errors.newPassword && touched.newPassword && (
                           <Text style={styles.errorText}>{errors.newPassword}</Text>
                         )}
@@ -212,14 +255,25 @@ export default function ForgotPassword() {
                     >
                       <Text style={[styles.buttonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                         {isLoading
-                          ? showCodeField
+                          ? step !== "forgot"
                             ? 'Resetting Password...'
                             : 'Sending Code...'
-                          : showCodeField
+                          : step !== "forgot"
                             ? 'Reset Password'
                             : 'Send Verification Code'}
                       </Text>
                     </TouchableOpacity>
+
+                    {step !== "forgot" && (
+                      <TouchableOpacity
+                        style={styles.backButton}
+                        onPress={() => setStep("forgot")}
+                      >
+                        <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Request New Code
+                        </Text>
+                      </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                       style={styles.backButton}
@@ -236,6 +290,53 @@ export default function ForgotPassword() {
           </ScrollView>
         </KeyboardAvoidingView>
       </CurvedBackground>
+
+      {/* Modal for alerts and confirmations */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -290,6 +391,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    color: '#1A1A1A',
+  },
+  passwordContainer: {
+    position: 'relative',
+    width: '100%',
+    marginBottom: 8,
+  },
+  passwordInput: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 16,
+    paddingRight: 50,
+    fontSize: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 16,
+    top: 16,
+    padding: 4,
   },
   inputError: {
     borderColor: '#ff3b30',
@@ -329,5 +456,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2A7DE1',
     fontWeight: '600',
+    marginTop: 8,
   },
 });

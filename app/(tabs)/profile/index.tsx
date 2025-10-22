@@ -5,21 +5,22 @@ import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
+import { ReminderItem, addReminder, deleteReminder, getReminders, scheduleAllReminderItems, setConvexSyncCallback, setReminderUserKey, updateReminder } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
-import { MAPBOX_ACCESS_TOKEN } from "../../config/mapbox.config";
 import { COLORS, FONTS } from "../../constants/constants";
 
 export default function Profile() {
@@ -32,10 +33,26 @@ export default function Profile() {
   const ensureProfileExists = useMutation(
     (api as any)["profile/ensureProfileExists"].ensureProfileExists
   );
+  const updateReminderSettings = useMutation(
+    (api as any)["profile/reminders"].updateReminderSettings
+  );
+  const saveAllReminders = useMutation(
+    (api as any)["profile/reminders"].saveAllReminders
+  );
+  const updateEmergencyContactMutation = useMutation(
+    (api as any)["emergencyContactOnboarding/update"].withNameAndPhone
+  );
+  const updateMedicalHistoryMutation = useMutation(
+    (api as any)["medicalHistoryOnboarding/update"].withAllConditions
+  );
 
   // Skip queries if not authenticated
   const userProfile = useQuery(
     api.profile.personalInformation.getProfile,
+    isAuthenticated && !isLoading ? {} : "skip"
+  );
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
@@ -63,41 +80,48 @@ export default function Profile() {
 
   // Handler for location services toggle with permission confirmation
   const handleLocationServicesToggle = async (enabled: boolean) => {
-    // If enabling, ask for permission first (same UX as Emergency screen)
+    // If enabling, ask for permission first (same UX as Emergency screen) via custom modal
     if (enabled) {
-      Alert.alert(
-        "Enable Location Services",
-        "This app would like to access your location to provide better assistance and find nearby clinics.",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => {
-              // Ensure switch remains off if user cancels
-              setUserData((prev) => ({ ...prev, locationServices: false }));
-            },
-          },
-          {
-            text: "Enable",
-            onPress: async () => {
-              setIsPendingLocationToggle(true);
-              // Optimistically set to true
-              setUserData((prev) => ({ ...prev, locationServices: true }));
-              try {
-                await toggleLocationServices({ enabled: true });
-                console.log("📍 Location services enabled");
-              } catch (error) {
-                console.error("Error enabling location services:", error);
-                Alert.alert("Error", "Failed to enable location services");
-                // Revert on error
-                setUserData((prev) => ({ ...prev, locationServices: false }));
-              } finally {
-                setIsPendingLocationToggle(false);
-              }
-            },
-          },
-        ]
+      setModalTitle("Enable Location Services");
+      setModalMessage(
+        "This app would like to access your location to provide better assistance and find nearby clinics."
       );
+      setModalButtons([
+        {
+          label: "Cancel",
+          onPress: () => {
+            setModalVisible(false);
+            // Ensure switch remains off if user cancels
+            setUserData((prev) => ({ ...prev, locationServices: false }));
+          },
+          variant: 'secondary',
+        },
+        {
+          label: "Enable",
+          onPress: async () => {
+            setModalVisible(false);
+            setIsPendingLocationToggle(true);
+            // Optimistically set to true
+            setUserData((prev) => ({ ...prev, locationServices: true }));
+            try {
+              await toggleLocationServices({ enabled: true });
+              console.log("📍 Location services enabled");
+            } catch (error) {
+              console.error("Error enabling location services:", error);
+              setModalTitle("Error");
+              setModalMessage("Failed to enable location services");
+              setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+              setModalVisible(true);
+              // Revert on error
+              setUserData((prev) => ({ ...prev, locationServices: false }));
+            } finally {
+              setIsPendingLocationToggle(false);
+            }
+          },
+          variant: 'primary',
+        },
+      ]);
+      setModalVisible(true);
       return;
     }
 
@@ -109,7 +133,10 @@ export default function Profile() {
       console.log("📍 Location services disabled");
     } catch (error) {
       console.error("Error disabling location services:", error);
-      Alert.alert("Error", "Failed to disable location services");
+      setModalTitle("Error");
+      setModalMessage("Failed to disable location services");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
       // Revert on error
       setUserData((prev) => ({ ...prev, locationServices: true }));
     } finally {
@@ -131,7 +158,10 @@ export default function Profile() {
     emergencyContactName: "",
     emergencyContactPhone: "",
     medicalConditions: "",
-    symptomReminder: true,
+    reminderEnabled: false,
+    reminderFrequency: "daily" as "daily" | "weekly",
+    reminderTime: "09:00 AM",
+    reminderDayOfWeek: "Mon",
     dataEncryption: true,
     locationServices: true,
   });
@@ -154,7 +184,8 @@ export default function Profile() {
   // Update state when userProfile loads
   useEffect(() => {
     if (userProfile) {
-      console.log("📥 Loading user profile data:", userProfile);
+      // Log fuller profile details again for debugging clarity
+      console.log("📥 Loaded user profile", userProfile);
       setUserData((prev) => ({
         ...prev,
         age: userProfile.age || "",
@@ -170,6 +201,19 @@ export default function Profile() {
         emergencyContactPhone: userProfile.emergencyContactPhone || "",
         medicalConditions: userProfile.medicalConditions || "",
       }));
+      // Set per-user namespace for reminders and bell state
+      try { setReminderUserKey(String((userProfile as any)._id || '')); } catch {}
+      // Set up Convex sync callback for reminders
+      setConvexSyncCallback(async (reminders: ReminderItem[]) => {
+        try {
+          await saveAllReminders({ reminders: JSON.stringify(reminders) });
+          console.log('✅ Synced', reminders.length, 'reminders to Convex');
+        } catch (err) {
+          console.error('❌ Failed to sync reminders to Convex:', err);
+        }
+      });
+      // Refresh reminders for this user namespace
+      refreshReminders();
     } else if (userProfile === null && isAuthenticated && !isLoading) {
       // Profile is null but user is authenticated - create profile
       console.log("⚠️ Profile not found, creating one...");
@@ -181,7 +225,30 @@ export default function Profile() {
           console.error("❌ Error creating profile:", error);
         });
     }
-  }, [userProfile, isAuthenticated, isLoading, ensureProfileExists]);
+  }, [userProfile, isAuthenticated, isLoading, ensureProfileExists, saveAllReminders]);
+
+  // Load reminder settings
+  useEffect(() => {
+    if (reminderSettings) {
+      // Convert 24-hour time to 12-hour with AM/PM for display
+      let displayTime = reminderSettings.time || "09:00 AM";
+      if (reminderSettings.time && reminderSettings.time.includes(':') && !reminderSettings.time.includes('AM') && !reminderSettings.time.includes('PM')) {
+        // Convert from 24-hour to 12-hour format
+        const [hours24, minutes] = reminderSettings.time.split(':');
+        const h24 = parseInt(hours24, 10);
+        const isPM = h24 >= 12;
+        const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+        displayTime = `${h12}:${minutes} ${isPM ? 'PM' : 'AM'}`;
+      }
+      setUserData((prev) => ({
+        ...prev,
+        reminderEnabled: !!reminderSettings.enabled,
+        reminderFrequency: (reminderSettings.frequency === "weekly" ? "weekly" : "daily"),
+        reminderTime: displayTime,
+        reminderDayOfWeek: reminderSettings.dayOfWeek || "Mon",
+      }));
+    }
+  }, [reminderSettings]);
 
   // State for expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -191,12 +258,75 @@ export default function Profile() {
     appSettings: false,
   });
 
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalTitle, setModalTitle] = useState<string>("");
+  const [modalMessage, setModalMessage] = useState<string>("");
+  const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
+  
+  // Reminders manager (local)
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [addingReminder, setAddingReminder] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const [reminderForm, setReminderForm] = useState<{ frequency: 'hourly'|'daily'|'weekly'; time?: string; dayOfWeek?: string }>({ frequency: 'daily', time: '09:00' });
+  const [timeHour, setTimeHour] = useState<string>("09");
+  const [timeMinute, setTimeMinute] = useState<string>("00");
+  const [timeAmPm, setTimeAmPm] = useState<"AM" | "PM">("AM");
+  const [showTimeSelectModal, setShowTimeSelectModal] = useState(false);
+  const [tempHour, setTempHour] = useState<string>("09");
+  const [tempMinute, setTempMinute] = useState<string>("00");
+  const [tempAmPm, setTempAmPm] = useState<"AM"|"PM">("AM");
+  const hours12 = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+  const minutes60 = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  const normalizeTimeInput = (s: string): string | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim());
+    if (!m) return null;
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    if (Number.isNaN(h) || Number.isNaN(mm) || h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+    return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
+
+  // 24h <-> 12h helpers for the pickers
+  const to12h = (time24?: string): { hour: string; minute: string; ampm: 'AM'|'PM' } => {
+    const fallback = { hour: '09', minute: '00', ampm: 'AM' as const };
+    if (!time24 || !/^(\d{2}):(\d{2})$/.test(time24)) return fallback;
+    const [hhStr, mm] = time24.split(':');
+    let hh = parseInt(hhStr, 10);
+    const ampm: 'AM' | 'PM' = hh >= 12 ? 'PM' : 'AM';
+    hh = hh % 12;
+    if (hh === 0) hh = 12;
+    return { hour: String(hh).padStart(2, '0'), minute: mm, ampm };
+  };
+  const from12h = (hour: string, minute: string, ampm: 'AM'|'PM'): string => {
+    let h = parseInt(hour, 10);
+    if (ampm === 'AM') {
+      if (h === 12) h = 0;
+    } else {
+      if (h !== 12) h = h + 12;
+    }
+    return `${String(h).padStart(2, '0')}:${String(parseInt(minute, 10)).padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (addingReminder && reminderForm.frequency !== 'hourly') {
+      const { hour, minute, ampm } = to12h(reminderForm.time || '09:00');
+      setTimeHour(hour);
+      setTimeMinute(minute);
+      setTimeAmPm(ampm);
+    }
+  }, [addingReminder, reminderForm.frequency, reminderForm.time]);
+
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
       // Validate only personal info fields before saving
       const valid = validatePersonalInfo();
       if (!valid) {
-        Alert.alert("Fix Form Errors", "Please correct the highlighted fields in Personal Information.");
+        setModalTitle("Fix Form Errors");
+        setModalMessage("Please correct the highlighted fields in Personal Information.");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
         return false;
       }
       await updatePersonalInfo({
@@ -208,7 +338,10 @@ export default function Profile() {
         postalCode: userData.postalCode,
         location: userData.location,
       });
-      Alert.alert("Success", "Personal information updated successfully");
+      setModalTitle("Success");
+      setModalMessage("Personal information updated successfully");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
       return true;
     } catch (error) {
       let errorMessage;
@@ -220,7 +353,85 @@ export default function Profile() {
       } else {
         errorMessage = "Unexpected error occurred";
       }
-      Alert.alert("Error", errorMessage);
+      setModalTitle("Error");
+      setModalMessage(errorMessage);
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+      return false;
+    }
+  };
+
+  const handleUpdateEmergencyContact = async (): Promise<boolean> => {
+    try {
+      const valid = validateEmergencyContact();
+      if (!valid) {
+        setModalTitle("Fix Form Errors");
+        setModalMessage("Please correct the highlighted fields in Emergency Contact.");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return false;
+      }
+      await updateEmergencyContactMutation({
+        emergencyContactName: userData.emergencyContactName,
+        emergencyContactPhone: userData.emergencyContactPhone,
+      });
+      setModalTitle("Success");
+      setModalMessage("Emergency contact updated successfully");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+      return true;
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage =
+          typeof error.data === "string"
+            ? error.data
+            : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      setModalTitle("Error");
+      setModalMessage(errorMessage);
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+      return false;
+    }
+  };
+
+  const handleUpdateMedicalInfo = async (): Promise<boolean> => {
+    try {
+      const valid = validateMedicalInfo();
+      if (!valid) {
+        setModalTitle("Fix Form Errors");
+        setModalMessage("Please correct the highlighted fields in Medical Information.");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return false;
+      }
+      await updateMedicalHistoryMutation({
+        allergies: userData.allergies,
+        currentMedications: userData.currentMedications,
+        medicalConditions: userData.medicalConditions,
+      });
+      setModalTitle("Success");
+      setModalMessage("Medical information updated successfully");
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+      return true;
+    } catch (error) {
+      let errorMessage;
+      if (error instanceof ConvexError) {
+        errorMessage =
+          typeof error.data === "string"
+            ? error.data
+            : error.data?.message || "An error occurred";
+      } else {
+        errorMessage = "Unexpected error occurred";
+      }
+      setModalTitle("Error");
+      setModalMessage(errorMessage);
+      setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
       return false;
     }
   };
@@ -228,13 +439,26 @@ export default function Profile() {
   // Toggle section expansion
   const toggleSection = async (section: keyof typeof expandedSections) => {
     if (expandedSections[section]) {
-      // If we're closing the section and it's personal info, save the data
+      // If we're closing the section, save the data
       if (section === "personalInfo") {
         const ok = await handleUpdatePersonalInfo();
         if (!ok) {
           // Keep section open to show validation errors
           return;
         }
+      } else if (section === "emergencyContacts") {
+        const ok = await handleUpdateEmergencyContact();
+        if (!ok) {
+          return;
+        }
+      } else if (section === "medicalInfo") {
+        const ok = await handleUpdateMedicalInfo();
+        if (!ok) {
+          return;
+        }
+      } else if (section === "appSettings") {
+        // when closing app settings, persist reminder settings
+        await handleSaveReminderSettings();
       }
     }
     setExpandedSections((prev) => ({
@@ -244,7 +468,7 @@ export default function Profile() {
   };
 
   // Handle input changes
-  const handleInputChange = (
+  const handleInputChange = async (
     field: keyof typeof userData,
     value: string | boolean
   ) => {
@@ -285,6 +509,37 @@ export default function Profile() {
       ...prev,
       [field]: value,
     }));
+    // Immediately persist reminder toggle to backend to avoid losing state on tab switch
+    if (field === 'reminderEnabled' && typeof value === 'boolean') {
+      try {
+        // Prefer first non-hourly reminder if available to sync with backend time
+        let time24h = userData.reminderTime;
+        const firstNonHourly = reminders.find(r => r.frequency !== 'hourly');
+        if (firstNonHourly?.time) {
+          time24h = firstNonHourly.time; // already HH:mm 24h
+        } else {
+          const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = timeMatch[2];
+            const ampm = timeMatch[3].toUpperCase();
+            if (ampm === 'PM' && hours !== 12) hours += 12;
+            else if (ampm === 'AM' && hours === 12) hours = 0;
+            time24h = `${String(hours).padStart(2, '0')}:${minutes}`;
+          }
+        }
+        updateReminderSettings({
+          enabled: value,
+          frequency: userData.reminderFrequency,
+          time: time24h,
+          dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
+        }).catch(() => {});
+        if (value) {
+          // best-effort schedule all current reminders when enabling
+          try { scheduleAllReminderItems().catch(() => {}); } catch {}
+        }
+      } catch {}
+    }
     // Field-level validation
     if (typeof value === 'string') {
       validateField(field as string, value);
@@ -302,6 +557,125 @@ export default function Profile() {
           field === 'province' ? value : prev.province,
         ].filter(Boolean).join(', '),
       }));
+    }
+  };
+
+  // Load reminders when enabled
+  const refreshReminders = async () => {
+    try {
+      const list = await getReminders();
+      setReminders(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn('Failed to load reminders', e);
+      setReminders([]);
+    }
+  };
+
+  useEffect(() => {
+    if (userData.reminderEnabled) {
+      refreshReminders();
+    } else {
+      setReminders([]);
+    }
+  }, [userData.reminderEnabled]);
+
+  const handleSaveReminderSettings = async () => {
+    try {
+      // Convert 12-hour time back to 24-hour format for backend storage
+      const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      let time24h = userData.reminderTime;
+      if (timeMatch) {
+        let hours = parseInt(timeMatch[1], 10);
+        const minutes = timeMatch[2];
+        const ampm = timeMatch[3].toUpperCase();
+        
+        if (ampm === 'PM' && hours !== 12) {
+          hours += 12;
+        } else if (ampm === 'AM' && hours === 12) {
+          hours = 0;
+        }
+        time24h = `${String(hours).padStart(2, '0')}:${minutes}`;
+      }
+      
+      await updateReminderSettings({
+        enabled: userData.reminderEnabled,
+        frequency: userData.reminderFrequency,
+        time: time24h,
+        dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
+      });
+      setModalTitle("Success");
+      setModalMessage("Reminder settings saved.");
+      setModalVisible(true);
+    } catch (e) {
+      console.error(e);
+      setModalTitle("Error");
+      setModalMessage("Failed to save reminder settings.");
+      setModalVisible(true);
+    }
+  };
+
+  const handleSaveSingleReminder = async () => {
+    try {
+      if (reminderForm.frequency === 'weekly' && !reminderForm.dayOfWeek) {
+        setModalTitle('Missing Day');
+        setModalMessage('Please choose a day of the week for the weekly reminder.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+      if (reminderForm.frequency !== 'hourly' && !reminderForm.time) {
+        setModalTitle('Missing Time');
+        setModalMessage('Please choose a time for the reminder.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+      // Final time normalization check for safety
+      let payload = { ...reminderForm } as typeof reminderForm;
+      if (reminderForm.frequency !== 'hourly' && reminderForm.time) {
+        const norm = normalizeTimeInput(reminderForm.time);
+        if (!norm) {
+          setModalTitle('Invalid Time');
+          setModalMessage('Time must be in HH:mm (00-23:00-59).');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        }
+        payload = { ...reminderForm, time: norm };
+      }
+      if (editingReminderId) {
+        await updateReminder(editingReminderId, { ...payload, enabled: true });
+      } else {
+        await addReminder({ ...payload, enabled: true });
+      }
+      // Sync backend basic reminder settings for daily/weekly (legacy field used elsewhere)
+      try {
+        if (payload.frequency !== 'hourly') {
+          await updateReminderSettings({
+            enabled: true,
+            frequency: payload.frequency as 'daily'|'weekly',
+            time: payload.time!,
+            dayOfWeek: payload.frequency === 'weekly' ? payload.dayOfWeek : undefined,
+          });
+          // Also reflect in UI userData.reminderTime for consistency
+          const { hour, minute, ampm } = to12h(payload.time!);
+          setUserData((prev) => ({ ...prev, reminderTime: `${parseInt(hour,10)}:${minute} ${ampm}`, reminderFrequency: payload.frequency as any, reminderDayOfWeek: payload.dayOfWeek || prev.reminderDayOfWeek }));
+        }
+      } catch {}
+      await refreshReminders();
+      setAddingReminder(false);
+      setEditingReminderId(null);
+      setReminderForm({ frequency: 'daily', time: '09:00' });
+      setModalTitle('Saved');
+      setModalMessage('Reminder saved successfully.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } catch (e) {
+      console.error('Failed saving reminder', e);
+      setModalTitle('Error');
+      setModalMessage('Failed to save reminder.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
     }
   };
 
@@ -394,6 +768,7 @@ export default function Profile() {
     return !error;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const validateAll = (): boolean => {
     const fieldsToCheck: (keyof typeof userData)[] = [
       'age','address1','city','province','postalCode','location','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'
@@ -456,15 +831,22 @@ export default function Profile() {
         const suggestions = features.map((f: any) => {
           const label = f.place_name as string;
           const context: any[] = f.context || [];
+          const placeType: string[] = Array.isArray(f.place_type) ? f.place_type : [];
           const byId = (idStart: string) => context.find((c) => typeof c.id === 'string' && c.id.startsWith(idStart));
           const city = (byId('place')?.text || byId('locality')?.text) as string | undefined;
           const region = (byId('region')?.short_code || byId('region')?.text) as string | undefined;
           const province = region?.toUpperCase() === 'CA-AB' ? 'AB' : (region === 'Alberta' ? 'AB' : region);
           const postal = (byId('postcode')?.text || '') as string;
+          // Preserve leading house number when available for address features
+          const number: string | undefined = (f.address || f.properties?.address) as any;
+          const street: string | undefined = f.text as any;
+          const address1 = placeType.includes('address')
+            ? [number, street].filter(Boolean).join(' ')
+            : (street || label);
           return {
             id: f.id as string,
             label,
-            address1: f.text || label,
+            address1,
             city,
             province,
             postalCode: postal,
@@ -497,32 +879,33 @@ export default function Profile() {
 
   // Handle sign out
   const handleSignOut = async () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+    setModalTitle("Sign Out");
+    setModalMessage("Are you sure you want to sign out?");
+    setModalButtons([
       {
-        text: "Cancel",
-        style: "cancel",
+        label: "Cancel",
+        onPress: () => setModalVisible(false),
+        variant: 'secondary',
       },
       {
-        text: "Sign Out",
+        label: "Sign Out",
         onPress: async () => {
+          setModalVisible(false);
           try {
             console.log("🔄 Signing out...");
-
-            // Simple sign out without refreshSession
             await signOut();
+            try { setReminderUserKey(null); } catch {}
             console.log("✅ Signed out successfully");
-
-            // Navigate to signin
             router.replace("/auth/signin");
           } catch (error) {
             console.error("❌ Sign out failed:", error);
-            // Still navigate to signin even if signOut fails
             router.replace("/auth/signin");
           }
         },
-        style: "destructive",
+        variant: 'destructive',
       },
     ]);
+    setModalVisible(true);
   };
 
   // Show loading while auth is loading
@@ -617,6 +1000,24 @@ export default function Profile() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={userData.reminderEnabled}
+          reminderSettings={{
+            enabled: userData.reminderEnabled,
+            frequency: userData.reminderFrequency,
+            time: (() => {
+              // Convert 12-hour format back to 24-hour
+              const timeMatch = userData.reminderTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+              if (!timeMatch) return userData.reminderTime;
+              let hours = parseInt(timeMatch[1], 10);
+              const minutes = timeMatch[2];
+              const ampm = timeMatch[3].toUpperCase();
+              if (ampm === 'PM' && hours !== 12) hours += 12;
+              else if (ampm === 'AM' && hours === 12) hours = 0;
+              return `${String(hours).padStart(2, '0')}:${minutes}`;
+            })(),
+            dayOfWeek: userData.reminderDayOfWeek,
+          }}
         />
         <ScrollView style={styles.container}>
           {/* Privacy Notice */}
@@ -889,25 +1290,141 @@ export default function Profile() {
 
           {/* App Settings Card */}
           <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("appSettings")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cardTitle}>App Settings</Text>
-            </TouchableOpacity>
+            <View style={styles.cardHeader}>
+              <TouchableOpacity
+                onPress={() => toggleSection("appSettings")}
+                activeOpacity={0.7}
+                style={{ flex: 1 }}
+              >
+                <Text style={styles.cardTitle}>App Settings</Text>
+              </TouchableOpacity>
+            </View>
 
-            <View style={styles.toggleRow}>
+            <View style={[styles.toggleRow, userData.reminderEnabled ? { marginBottom: 12 } : null]}>
               <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
               <Switch
-                value={userData.symptomReminder}
-                onValueChange={(value) =>
-                  handleInputChange("symptomReminder", value)
-                }
+                value={userData.reminderEnabled}
+                onValueChange={(value) => handleInputChange("reminderEnabled", value)}
               />
             </View>
 
-            <View style={styles.toggleRow}>
+            {userData.reminderEnabled && (
+              <>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <Text style={styles.sectionTitle}>Reminders</Text>
+                  <TouchableOpacity onPress={() => { setAddingReminder(true); setEditingReminderId(null); setReminderForm({ frequency: 'daily', time: '09:00' }); }} style={styles.addButton}>
+                    <Icon name="add" size={20} color={COLORS.white} />
+                    <Text style={styles.addButtonText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {addingReminder && (
+                  <View style={styles.reminderCard}>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, color: COLORS.darkText, marginBottom: 8 }}>
+                      {editingReminderId ? 'Edit Reminder' : 'New Reminder'}
+                    </Text>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Frequency</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['hourly','daily','weekly'] as const).map((f) => (
+                        <TouchableOpacity
+                          key={f}
+                          onPress={() => setReminderForm((prev) => ({ ...prev, frequency: f }))}
+                          style={{
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 16,
+                            backgroundColor: reminderForm.frequency === f ? COLORS.primary : '#f1f1f1',
+                          }}
+                        >
+                          <Text style={{ color: reminderForm.frequency === f ? COLORS.white : COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>
+                            {f[0].toUpperCase() + f.slice(1)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {reminderForm.frequency === 'weekly' && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Day of week</Text>
+                        <View style={styles.dayGridRow}>
+                          {['Mon','Tue','Wed','Thu'].map((d) => (
+                            <TouchableOpacity key={d} onPress={() => setReminderForm((p) => ({ ...p, dayOfWeek: d }))} style={[styles.dayChip, reminderForm.dayOfWeek === d && styles.dayChipActive]}>
+                              <Text style={[styles.dayChipText, reminderForm.dayOfWeek === d && styles.dayChipTextActive]}>{d}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <View style={styles.dayGridRow}>
+                          {['Fri','Sat','Sun'].map((d) => (
+                            <TouchableOpacity key={d} onPress={() => setReminderForm((p) => ({ ...p, dayOfWeek: d }))} style={[styles.dayChip, reminderForm.dayOfWeek === d && styles.dayChipActive]}>
+                              <Text style={[styles.dayChipText, reminderForm.dayOfWeek === d && styles.dayChipTextActive]}>{d}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {reminderForm.frequency !== 'hourly' && (
+                      <View style={{ marginTop: 10 }}>
+                        <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray, marginBottom: 6 }}>Time</Text>
+                        <View style={styles.timeSummaryRow}>
+                          <Text style={styles.timeSummaryText}>{`${timeHour}:${timeMinute} ${timeAmPm}`}</Text>
+                          <TouchableOpacity
+                            onPress={() => {
+                              // seed temp with current values and open modal
+                              setTempHour(timeHour);
+                              setTempMinute(timeMinute);
+                              setTempAmPm(timeAmPm);
+                              setShowTimeSelectModal(true);
+                            }}
+                            style={styles.smallActionBtn}
+                          >
+                            <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Select Time</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+                      <TouchableOpacity onPress={() => { setAddingReminder(false); setEditingReminderId(null); setReminderForm({ frequency: 'daily', time: '09:00' }); }} style={[styles.smallActionBtn, { backgroundColor: COLORS.lightGray }]}>
+                        <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleSaveSingleReminder} style={[styles.smallActionBtn, { marginLeft: 8 }]}>
+                        <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Save</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {reminders.length === 0 ? (
+                  <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+                    <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, color: COLORS.darkGray }}>No reminders yet</Text>
+                  </View>
+                ) : (
+                  reminders.map(r => (
+                    <View key={r.id} style={styles.reminderCard}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Icon name="alarm" size={18} color={COLORS.primary} />
+                          <Text style={[styles.reminderTitle, { marginLeft: 8 }]}>
+                            {r.frequency === 'hourly' ? 'Hourly' : r.frequency === 'daily' ? `Daily ${r.time}` : `Weekly ${r.dayOfWeek} ${r.time}`}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row' }}>
+                          <TouchableOpacity onPress={() => { setEditingReminderId(r.id); setReminderForm({ frequency: r.frequency as any, time: r.time, dayOfWeek: r.dayOfWeek }); setAddingReminder(true); }} style={styles.smallActionBtn}>
+                            <Icon name="edit" size={18} color={COLORS.white} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={async () => { await deleteReminder(r.id); await refreshReminders(); }} style={[styles.smallActionBtn, { backgroundColor: COLORS.error, marginLeft: 8 }]}>
+                            <Icon name="delete" size={18} color={COLORS.white} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+
+            <View style={[styles.toggleRow, { marginTop: 12 }]}>
               <Text style={styles.toggleText}>Data Encryption</Text>
               <Switch
                 value={userData.dataEncryption}
@@ -917,7 +1434,7 @@ export default function Profile() {
               />
             </View>
 
-            <View style={styles.toggleRow}>
+            <View style={[styles.toggleRow, { marginTop: 12 }]}>
               <Text style={styles.toggleText}>Location Services</Text>
               <Switch
                 value={userData.locationServices}
@@ -943,6 +1460,131 @@ export default function Profile() {
         </ScrollView>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* App-wide modal (white, elevated) */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={{
+            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+          }}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
+              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
+                const isSecondary = b.variant === 'secondary';
+                const isDestructive = b.variant === 'destructive';
+                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
+                const textColor = isSecondary ? COLORS.primary : COLORS.white;
+                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    onPress={b.onPress}
+                    style={{
+                      backgroundColor,
+                      borderRadius: 8,
+                      paddingVertical: 10,
+                      alignItems: 'center',
+                      flex: modalButtons.length > 1 ? 1 : undefined,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      ...borderStyle as any,
+                    }}
+                  >
+                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Legacy reminder modals removed in favor of inline manager */}
+
+      {/* Time Selection Modal (white card, matches success modal style) */}
+      <Modal
+        visible={showTimeSelectModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTimeSelectModal(false)}
+      >
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <View style={styles.timeModalCard}>
+            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>Select Time</Text>
+            <View style={styles.timeModalGridRow}>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {hours12.map(h => (
+                    <TouchableOpacity
+                      key={h}
+                      onPress={() => setTempHour(h)}
+                      style={[styles.timeModalOption, tempHour === h && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempHour === h && styles.timeModalOptionTextActive]}>{h}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {minutes60.map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setTempMinute(m)}
+                      style={[styles.timeModalOption, tempMinute === m && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempMinute === m && styles.timeModalOptionTextActive]}>{m}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timeModalColumn}>
+                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
+                  {(['AM','PM'] as const).map(ap => (
+                    <TouchableOpacity
+                      key={ap}
+                      onPress={() => setTempAmPm(ap)}
+                      style={[styles.timeModalOption, tempAmPm === ap && styles.timeModalOptionActive]}
+                    >
+                      <Text style={[styles.timeModalOptionText, tempAmPm === ap && styles.timeModalOptionTextActive]}>{ap}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity onPress={() => setShowTimeSelectModal(false)} style={[styles.smallActionBtn, { backgroundColor: COLORS.lightGray }]}>
+                <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setTimeHour(tempHour);
+                  setTimeMinute(tempMinute);
+                  setTimeAmPm(tempAmPm);
+                  const t24 = from12h(tempHour, tempMinute, tempAmPm);
+                  setReminderForm((p) => ({ ...p, time: t24 }));
+                  setShowTimeSelectModal(false);
+                }}
+                style={[styles.smallActionBtn, { marginLeft: 8 }]}
+              >
+                <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1103,6 +1745,54 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 16,
   },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    marginBottom: 8,
+    alignSelf: 'center',
+    width: '70%',
+  },
+  timeButton: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    alignSelf: 'center',
+    width: '70%',
+    marginBottom: 8,
+  },
+  timeButtonText: {
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  customPickerButton: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    alignSelf: 'center',
+    width: '70%',
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  customPickerButtonText: {
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    flex: 1,
+    textAlign: 'center',
+  },
   privacyText: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 12,
@@ -1147,5 +1837,164 @@ const styles = StyleSheet.create({
   },
   signOutIcon: {
     marginRight: 8,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  reminderCard: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+  },
+  reminderTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 14,
+  },
+  smallActionBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+  },
+  dayChip: {
+    flexGrow: 1,
+    flexBasis: 0,
+    marginHorizontal: 4,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#f1f1f1',
+    alignItems: 'center',
+  },
+  dayChipActive: {
+    backgroundColor: COLORS.primary,
+  },
+  dayChipText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+  },
+  dayChipTextActive: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+  },
+  customTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  customTimeInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  triplePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  pickerBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  pickerSeparator: {
+    marginHorizontal: 8,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 18,
+  },
+  timeSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+  },
+  timeSummaryText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 16,
+  },
+  timeModalCard: {
+    width: '85%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  timeModalGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  timeModalColumn: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  timeModalOption: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    marginBottom: 6,
+  },
+  timeModalOptionActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#f2f7ff',
+  },
+  timeModalOptionText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+    fontSize: 16,
+  },
+  timeModalOptionTextActive: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.primary,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
   },
 });

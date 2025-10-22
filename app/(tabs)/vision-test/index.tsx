@@ -1,14 +1,24 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Link } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import { FONTS } from "../../constants/constants";
 
 export default function VisionTestStart() {
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  
+  // Get reminder settings
+  const reminderSettings = useQuery(
+    (api as any)["profile/reminders"].getReminderSettings,
+    isAuthenticated && !authLoading ? {} : "skip"
+  );
+  
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
@@ -18,6 +28,9 @@ export default function VisionTestStart() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderSettings?.enabled || false}
+          reminderSettings={reminderSettings || null}
         />
         <View style={styles.contentArea}>
           <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>

@@ -1,17 +1,17 @@
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-  DEFAULT_MAP_CONFIG,
-  MAPBOX_ACCESS_TOKEN,
-} from '../config/mapbox.config';
+    DEFAULT_MAP_CONFIG,
+    MAPBOX_ACCESS_TOKEN,
+} from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 
 // Initialize Mapbox
@@ -35,7 +35,7 @@ interface MapboxOfflineMapProps {
   focusCenter?: { latitude: number; longitude: number; zoom?: number } | null;
 }
 
-export default function MapboxOfflineMap({
+function MapboxOfflineMapComponent({
   clinics,
   userLocation,
   onClinicPress,
@@ -368,3 +368,6 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
   },
 });
+
+// Export memoized component to prevent unnecessary re-renders
+export default React.memo(MapboxOfflineMapComponent);

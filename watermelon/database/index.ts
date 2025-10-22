@@ -7,6 +7,7 @@ import schema from './schema';
 // Models
 import HealthEntry from '../models/HealthEntry';
 import MedicalFacility from '../models/MedicalFacility';
+import Reminder from '../models/Reminder';
 import User from '../models/User';
 import UserProfile from '../models/UserProfile';
 
@@ -24,7 +25,7 @@ const adapter = new SQLiteAdapter({
 // Create database instance
 export const database = new Database({
   adapter,
-  modelClasses: [User, UserProfile, HealthEntry, MedicalFacility],
+  modelClasses: [User, UserProfile, HealthEntry, MedicalFacility, Reminder],
 });
 
 export default database;
