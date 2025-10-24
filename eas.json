@@ -1,7 +1,8 @@
 {
   "cli": {
     "version": ">= 16.17.4",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "promptToConfigurePushNotifications": false // this line is generate by the build and submit command
   },
   "build": {
     "development": {
