@@ -27,10 +27,7 @@
       "autoIncrement": true,
       "distribution": "store",
       "android": {
-        "buildType": "app-bundle"  
-      },
-      "ios": {
-        "enterpriseProvisioning": "universal"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production"
