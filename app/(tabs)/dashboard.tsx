@@ -4,14 +4,14 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Linking,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -19,6 +19,7 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import HealthStatusTag from "../components/HealthStatusTag";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { COLORS, FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
@@ -147,7 +148,7 @@ export default function Dashboard() {
                     Welcome, {userName}!
                   </Text>
                   <Text style={[styles.offlineNotice, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    📴 You're currently offline. Some features may be limited.
+                    📴 You&apos;re currently offline. Some features may be limited.
                   </Text>
                 </View>
 
@@ -165,7 +166,7 @@ export default function Dashboard() {
           </View>
 
           {/* Bottom Navigation */}
-          <BottomNavigation activeTab="Home" onTabChange={() => {}} />
+          <BottomNavigation />
         </CurvedBackground>
       </SafeAreaView>
     );

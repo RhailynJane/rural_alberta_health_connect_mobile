@@ -20,8 +20,10 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
+import { OfflineBanner } from "../../components/OfflineBanner";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Define types for our component
 interface ClinicInfo {
@@ -65,6 +67,7 @@ interface RealTimeClinicResponse {
 
 export default function Emergency() {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [isLoading, setIsLoading] = useState(true);
   const [realTimeClinics, setRealTimeClinics] = useState<RealTimeClinicData[]>(
     []
@@ -78,34 +81,58 @@ export default function Emergency() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get location services status and emergency details
+  // Get location services status and emergency details (only when online)
   const locationStatus = useQuery(
-    api.locationServices.getLocationServicesStatus
+    api.locationServices.getLocationServicesStatus,
+    isOnline ? undefined : "skip"
   );
   const emergencyDetails = useQuery(
-    api.locationServices.getEmergencyLocationDetails
+    api.locationServices.getEmergencyLocationDetails,
+    isOnline ? undefined : "skip"
   );
   
-  // Get reminder settings
+  // Get reminder settings (only when online)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !authLoading ? {} : "skip"
+    isAuthenticated && !authLoading && isOnline ? {} : "skip"
   );
 
-  // Mutation to toggle location services
+  // Mutation to toggle location services (only when online)
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
   );
 
-  // Action to get real-time clinic data
+  // Action to get real-time clinic data (only when online)
   const getRealTimeClinicData = useAction(
     api.locationServices.getRealTimeClinicData
   );
 
   useEffect(() => {
     const loadRealTimeData = async () => {
-      // Only load data if location services are enabled AND we have a location
-      if (locationStatus?.locationServicesEnabled && locationStatus?.location) {
+      // If offline, try to load cached data immediately
+      if (!isOnline) {
+        console.log("📴 Offline mode: loading cached clinic data");
+        try {
+          setIsLoading(true);
+          const cached = await getCachedClinics(locationStatus?.location || "");
+          if (cached.length > 0) {
+            console.log("📦 Using cached clinic data (offline)");
+            setRealTimeClinics(cached as RealTimeClinicData[]);
+          } else {
+            console.log("⚠️ No cached data available (offline)");
+            setRealTimeClinics([]);
+          }
+        } catch (error) {
+          console.error("❌ Failed to load cached clinics:", error);
+          setRealTimeClinics([]);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Only load data if location services are enabled AND we have a location AND we're online
+      if (locationStatus?.locationServicesEnabled && locationStatus?.location && isOnline) {
         try {
           setIsLoading(true);
           
@@ -210,6 +237,7 @@ export default function Emergency() {
     locationStatus?.locationServicesEnabled,
     locationStatus?.location,
     getRealTimeClinicData,
+    isOnline,
   ]);
 
   // Function to handle emergency calls
@@ -318,6 +346,9 @@ export default function Emergency() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Offline Banner */}
+        <OfflineBanner />
+        
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
           title="Emergency"
