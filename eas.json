@@ -30,7 +30,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "production"
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNoeHp0MDlncG84bzk1ZWxjZ2djMCJ9.b8JeDGu7Abnp2Kcxp78ztQ"
       }
     }
   },
