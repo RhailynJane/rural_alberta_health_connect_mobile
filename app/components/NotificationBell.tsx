@@ -1,3 +1,5 @@
+import { api } from '@/convex/_generated/api';
+import { useQuery } from 'convex/react';
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -22,6 +24,12 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
     isDue: boolean;
   } | null>(null);
   const [unread, setUnread] = useState(false);
+  
+  // Get unread notification count from Convex
+  const unreadCount = useQuery(api.notifications.getUnreadCount) || 0;
+  
+  // Combined unread: local reminders OR server notifications
+  const hasUnread = unread || unreadCount > 0;
   // Local state just for showing due info; management moved to Profile page
 
   const loadReminderDetails = async () => {
@@ -89,12 +97,18 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
         style={styles.bellContainer}
       >
         <Icon 
-          name={unread ? "notifications-active" : "notifications-none"} 
+          name={hasUnread ? "notifications-active" : "notifications-none"} 
           size={28} 
           color={COLORS.darkText} 
         />
-        {unread && (
-          <View style={styles.badge} />
+        {hasUnread && (
+          <View style={styles.badge}>
+            {unreadCount > 0 && (
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            )}
+          </View>
         )}
       </TouchableOpacity>
 
@@ -153,10 +167,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

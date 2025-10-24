@@ -76,4 +76,29 @@ export default defineSchema({
     .index("by_email_code", ["email", "code"])
     .index("by_expiry", ["expiresAt"]),
 
+  // Notifications table
+  notifications: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    type: v.string(), // "reminder", "appointment", "assessment", "journal", etc.
+    read: v.boolean(),
+    data: v.optional(v.any()), // Additional metadata
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_read", ["userId", "read"])
+    .index("by_user_created", ["userId", "createdAt"]),
+
+  // Push tokens for push notifications
+  pushTokens: defineTable({
+    userId: v.id("users"),
+    token: v.string(),
+    platform: v.string(), // "ios", "android", "web"
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_token", ["token"]),
+
 });

@@ -1,12 +1,21 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/react';
 import { ConvexReactClient } from "convex/react";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { api } from "../convex/_generated/api";
 import { database } from '../watermelon/database';
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
+import { NotificationBanner } from "./components/NotificationBanner";
+import {
+    configureForegroundNotifications,
+    getPlatform,
+    registerForPushNotificationsAsync,
+    setupNotificationListeners,
+} from "./utils/pushNotifications";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
@@ -54,6 +63,11 @@ export const useSessionRefresh = () => {
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [notificationBanner, setNotificationBanner] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
+  const convexClientRef = useRef<ConvexReactClient | null>(null);
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
@@ -67,12 +81,78 @@ export default function RootLayout() {
     }, 500);
   };
 
+  useEffect(() => {
+    // Configure foreground notification behavior
+    configureForegroundNotifications();
+
+    // Setup notification listeners
+    const cleanup = setupNotificationListeners(
+      // On notification received in foreground
+      (notification: Notifications.Notification) => {
+        const { title, body } = notification.request.content;
+        setNotificationBanner({
+          title: title || "Notification",
+          body: body || "",
+        });
+      },
+      // On notification tapped
+      (response: Notifications.NotificationResponse) => {
+        console.log("Notification tapped:", response);
+        // Handle navigation based on notification data if needed
+      }
+    );
+
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
+    // Register for push notifications after convex client is ready
+    const registerPush = async () => {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (token && convexClientRef.current) {
+          // Register token with backend
+          const platform = getPlatform();
+          // @ts-ignore - mutation call through client
+          await convexClientRef.current.mutation(api.notifications.registerPushToken, {
+            token,
+            platform,
+          });
+          console.log("Push token registered:", token);
+        }
+      } catch (error) {
+        console.error("Failed to register push token:", error);
+      }
+    };
+
+    // Small delay to ensure convex client is initialized
+    const timer = setTimeout(registerPush, 2000);
+    return () => clearTimeout(timer);
+  }, [providerKey]); // Re-register when provider remounts
+
   return (
     <DatabaseProvider database={database}>
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+          {/* Store convex client reference */}
+          {(() => {
+            convexClientRef.current = convex;
+            return null;
+          })()}
           <SignUpFormProvider>
             <SafeAreaProvider>
+              {/* In-app notification banner */}
+              {notificationBanner && (
+                <NotificationBanner
+                  title={notificationBanner.title}
+                  body={notificationBanner.body}
+                  onDismiss={() => setNotificationBanner(null)}
+                  onPress={() => {
+                    setNotificationBanner(null);
+                    // Handle navigation based on notification type
+                  }}
+                />
+              )}
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
                 <Stack.Screen name="onboarding" />
