@@ -4,14 +4,14 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Linking,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -20,12 +20,14 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import HealthStatusTag from "../components/HealthStatusTag";
 import { COLORS, FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const queryArgs = isAuthenticated ? {} : "skip";
+  const queryArgs = isAuthenticated && isOnline ? {} : "skip";
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -33,13 +35,13 @@ export default function Dashboard() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get current user data
+  // Get current user data (only when online)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
   
-  // Get reminder settings
+  // Get reminder settings (only when online)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && isOnline ? {} : "skip"
   );
 
   // Get entries for the last 7 days to calculate health score
@@ -61,7 +63,7 @@ export default function Dashboard() {
   const dateRange = getLast7DaysDateRange();
   const weeklyEntries = useQuery(
     api.healthEntries.getEntriesByDateRange,
-    user?._id
+    user?._id && isOnline
       ? {
           userId: user._id,
           startDate: dateRange.startDate,
@@ -102,6 +104,72 @@ export default function Dashboard() {
       setHealthStatus("Poor");
     }
   }, [weeklyHealthScore, weeklyEntries]);
+
+  // Skip loading check if offline - go straight to rendering with offline mode
+  if (!isOnline) {
+    // Offline mode - render dashboard with empty/cached data
+    const userName = user?.firstName || "User";
+    const userEmail = user?.email || "";
+    
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          {/* Offline Banner */}
+          <OfflineBanner />
+          
+          {/* Fixed Header */}
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+            showNotificationBell={false}
+            reminderEnabled={false}
+            reminderSettings={null}
+          />
+
+          {/* Content Area */}
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                {/* Welcome Section */}
+                <View style={styles.welcomeContainer}>
+                  <Text
+                    style={[
+                      styles.welcomeText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Welcome, {userName}!
+                  </Text>
+                  <Text style={[styles.offlineNotice, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    📴 You're currently offline. Some features may be limited.
+                  </Text>
+                </View>
+
+                {/* Offline message */}
+                <View style={styles.offlineCard}>
+                  <Text style={[styles.offlineCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
+                    Offline Mode Active
+                  </Text>
+                  <Text style={[styles.offlineCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Connect to the internet to access all features and sync your data.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* Bottom Navigation */}
+          <BottomNavigation activeTab="Home" onTabChange={() => {}} />
+        </CurvedBackground>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
@@ -212,6 +280,9 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Offline Banner */}
+        <OfflineBanner />
+        
         {/* Fixed Header */}
         <CurvedHeader
           title="Alberta Health Connect"
@@ -775,6 +846,30 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: "#666",
+  },
+  offlineNotice: {
+    fontSize: 14,
+    color: "#FF8C00",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  offlineCard: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: "#FFB74D",
+  },
+  offlineCardTitle: {
+    fontSize: 18,
+    color: "#E65100",
+    marginBottom: 8,
+  },
+  offlineCardText: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
   },
   errorContainer: {
     flex: 1,

@@ -1,9 +1,10 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { api } from "../convex/_generated/api";
 import { useSessionRefresh } from "./_layout";
+import { useNetworkStatus } from "./hooks/useNetworkStatus";
 
 export default function Index() {
   console.log("📍 index.tsx MOUNTED");
@@ -11,10 +12,27 @@ export default function Index() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { isRefreshing } = useSessionRefresh();
+  const { isOnline, isChecking: isCheckingNetwork } = useNetworkStatus();
   const hasNavigated = useRef(false);
+  const [offlineTimeout, setOfflineTimeout] = useState(false);
 
-  // Only fetch user data if authenticated
-  const user = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
+  // Only fetch user data if authenticated AND online
+  const user = useQuery(
+    api.users.getCurrentUser, 
+    isAuthenticated && isOnline ? {} : "skip"
+  );
+
+  // Set timeout for offline mode
+  useEffect(() => {
+    if (!isOnline && !isCheckingNetwork) {
+      const timer = setTimeout(() => {
+        setOfflineTimeout(true);
+      }, 2000); // Wait 2 seconds before assuming offline
+      return () => clearTimeout(timer);
+    } else {
+      setOfflineTimeout(false);
+    }
+  }, [isOnline, isCheckingNetwork]);
 
   useEffect(() => {
     // Don't route during session refresh - the app is already on the correct route
@@ -29,13 +47,28 @@ export default function Index() {
       return;
     }
 
-    // Wait for auth to finish loading
-    if (isLoading) {
+    // Wait for network check to complete
+    if (isCheckingNetwork) {
+      console.log("⏸️  Checking network status...");
       return;
     }
 
-    // If authenticated, wait for user data to load before routing
-    if (isAuthenticated && user === undefined) {
+    // Wait for auth to finish loading (but only if online)
+    if (isOnline && isLoading) {
+      console.log("⏸️  Loading auth state...");
+      return;
+    }
+
+    // If offline for too long, navigate to dashboard (offline mode)
+    if (offlineTimeout) {
+      console.log("📴 Offline mode: navigating to dashboard");
+      hasNavigated.current = true;
+      router.replace('/(tabs)/dashboard');
+      return;
+    }
+
+    // If authenticated and online, wait for user data to load before routing
+    if (isAuthenticated && isOnline && user === undefined) {
       console.log("⏸️  Waiting for user data to load...");
       return;
     }
@@ -47,12 +80,16 @@ export default function Index() {
       // Authenticated - go to dashboard regardless of onboarding status
       console.log("🔄 Initial route: navigating to dashboard");
       router.replace('/(tabs)/dashboard');
+    } else if (isAuthenticated && !isOnline) {
+      // Authenticated but offline - go to dashboard
+      console.log("🔄 Offline mode: navigating to dashboard");
+      router.replace('/(tabs)/dashboard');
     } else {
       // Not authenticated - show onboarding flow
       console.log("🔄 Initial route: navigating to onboarding");
       router.replace('/onboarding');
     }
-  }, [router, isAuthenticated, isLoading, user, isRefreshing]);
+  }, [router, isAuthenticated, isLoading, user, isRefreshing, isOnline, isCheckingNetwork, offlineTimeout]);
   
   return (
     <View style={styles.container}>
@@ -61,6 +98,9 @@ export default function Index() {
         style={styles.logo}
         resizeMode="contain"
       />
+      {!isOnline && !isCheckingNetwork && (
+        <Text style={styles.offlineText}>📴 Offline Mode</Text>
+      )}
     </View>
   );
 }
@@ -76,5 +116,11 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     maxWidth: "80%",
+  },
+  offlineText: {
+    marginTop: 20,
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "600",
   },
 });
