@@ -28,6 +28,13 @@ const tabs: Tab[] = [
     iconNameFocused: 'eye'
   },
   {
+    name: 'RAHCTest',
+    label: 'RAHC Test',
+    route: '/rahc-test',
+    iconName: 'flask-outline',
+    iconNameFocused: 'flask'
+  },
+  {
     name: 'AIAssess',
     label: 'AI Assess',
     route: '/ai-assess',
