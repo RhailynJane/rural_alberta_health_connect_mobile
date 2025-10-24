@@ -2,6 +2,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { usePathname, useRouter } from 'expo-router';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FONTS } from '../constants/constants';
 
 interface Tab {
@@ -60,9 +61,16 @@ const tabs: Tab[] = [
 const BottomNavigation: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+
+  // Calculate dynamic height with safe area + minimal padding
+  const containerHeight = 70 + insets.bottom;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { 
+      height: containerHeight,
+      paddingBottom: insets.bottom + 4 
+    }]}>
       {tabs.map((tab) => {
         const isFocused = pathname === tab.route;
 
@@ -105,7 +113,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    height: 70,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
@@ -119,7 +126,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 2
+    paddingHorizontal: 2,
+    paddingVertical: 8,
   },
   tabFocused: {
     borderTopWidth: 2,

@@ -3,5 +3,26 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
+  },
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+      "default": true
+    }
+  ],
+  "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+  "java.import.gradle.enabled": false,
+  "java.autobuild.enabled": false,
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.gradle/**",
+    "**/build/**"
+  ],
+  "files.exclude": {
+    "**/node_modules/@react-native/gradle-plugin": true,
+    "**/node_modules/expo-dev-launcher/expo-dev-launcher-gradle-plugin": true,
+    "**/node_modules/expo-modules-autolinking/android/expo-gradle-plugin": true,
+    "**/node_modules/expo-modules-core/expo-module-gradle-plugin": true
   }
 }

@@ -21,6 +21,7 @@ import { ReminderItem, addReminder, deleteReminder, getReminders, scheduleAllRem
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import TimePickerModal from "../../components/TimePickerModal";
 import { COLORS, FONTS } from "../../constants/constants";
 
 export default function Profile() {
@@ -273,11 +274,6 @@ export default function Profile() {
   const [timeMinute, setTimeMinute] = useState<string>("00");
   const [timeAmPm, setTimeAmPm] = useState<"AM" | "PM">("AM");
   const [showTimeSelectModal, setShowTimeSelectModal] = useState(false);
-  const [tempHour, setTempHour] = useState<string>("09");
-  const [tempMinute, setTempMinute] = useState<string>("00");
-  const [tempAmPm, setTempAmPm] = useState<"AM"|"PM">("AM");
-  const hours12 = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
-  const minutes60 = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
   const normalizeTimeInput = (s: string): string | null => {
     const m = /^(\d{1,2}):(\d{2})$/.exec((s || '').trim());
@@ -1369,13 +1365,7 @@ export default function Profile() {
                         <View style={styles.timeSummaryRow}>
                           <Text style={styles.timeSummaryText}>{`${timeHour}:${timeMinute} ${timeAmPm}`}</Text>
                           <TouchableOpacity
-                            onPress={() => {
-                              // seed temp with current values and open modal
-                              setTempHour(timeHour);
-                              setTempMinute(timeMinute);
-                              setTempAmPm(timeAmPm);
-                              setShowTimeSelectModal(true);
-                            }}
+                            onPress={() => setShowTimeSelectModal(true)}
                             style={styles.smallActionBtn}
                           >
                             <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Select Time</Text>
@@ -1510,81 +1500,22 @@ export default function Profile() {
 
       {/* Legacy reminder modals removed in favor of inline manager */}
 
-      {/* Time Selection Modal (white card, matches success modal style) */}
-      <Modal
+      {/* Time Selection Modal - New Curved Design */}
+      <TimePickerModal
         visible={showTimeSelectModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowTimeSelectModal(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={styles.timeModalCard}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>Select Time</Text>
-            <View style={styles.timeModalGridRow}>
-              <View style={styles.timeModalColumn}>
-                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
-                  {hours12.map(h => (
-                    <TouchableOpacity
-                      key={h}
-                      onPress={() => setTempHour(h)}
-                      style={[styles.timeModalOption, tempHour === h && styles.timeModalOptionActive]}
-                    >
-                      <Text style={[styles.timeModalOptionText, tempHour === h && styles.timeModalOptionTextActive]}>{h}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.timeModalColumn}>
-                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
-                  {minutes60.map(m => (
-                    <TouchableOpacity
-                      key={m}
-                      onPress={() => setTempMinute(m)}
-                      style={[styles.timeModalOption, tempMinute === m && styles.timeModalOptionActive]}
-                    >
-                      <Text style={[styles.timeModalOptionText, tempMinute === m && styles.timeModalOptionTextActive]}>{m}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.timeModalColumn}>
-                <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 4 }}>
-                  {(['AM','PM'] as const).map(ap => (
-                    <TouchableOpacity
-                      key={ap}
-                      onPress={() => setTempAmPm(ap)}
-                      style={[styles.timeModalOption, tempAmPm === ap && styles.timeModalOptionActive]}
-                    >
-                      <Text style={[styles.timeModalOptionText, tempAmPm === ap && styles.timeModalOptionTextActive]}>{ap}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-            <View style={styles.modalActionsRow}>
-              <TouchableOpacity onPress={() => setShowTimeSelectModal(false)} style={[styles.smallActionBtn, { backgroundColor: COLORS.lightGray }]}>
-                <Text style={{ color: COLORS.darkText, fontFamily: FONTS.BarlowSemiCondensedBold }}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setTimeHour(tempHour);
-                  setTimeMinute(tempMinute);
-                  setTimeAmPm(tempAmPm);
-                  const t24 = from12h(tempHour, tempMinute, tempAmPm);
-                  setReminderForm((p) => ({ ...p, time: t24 }));
-                  setShowTimeSelectModal(false);
-                }}
-                style={[styles.smallActionBtn, { marginLeft: 8 }]}
-              >
-                <Text style={{ color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold }}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        value={reminderForm.time || '09:00'}
+        onSelect={(time24h) => {
+          // time24h is in HH:MM format (24-hour)
+          const { hour, minute, ampm } = to12h(time24h);
+          setTimeHour(hour);
+          setTimeMinute(minute);
+          setTimeAmPm(ampm);
+          setReminderForm((p) => ({ ...p, time: time24h }));
+          setShowTimeSelectModal(false);
+        }}
+        onCancel={() => setShowTimeSelectModal(false)}
+        title="Select Time"
+      />
     </SafeAreaView>
   );
 }
@@ -1949,52 +1880,5 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensedBold,
     color: COLORS.darkText,
     fontSize: 16,
-  },
-  timeModalCard: {
-    width: '85%',
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  timeModalGridRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  timeModalColumn: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  timeModalOption: {
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    marginBottom: 6,
-  },
-  timeModalOptionActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: '#f2f7ff',
-  },
-  timeModalOptionText: {
-    fontFamily: FONTS.BarlowSemiCondensed,
-    color: COLORS.darkText,
-    fontSize: 16,
-  },
-  timeModalOptionTextActive: {
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    color: COLORS.primary,
-  },
-  modalActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 12,
   },
 });

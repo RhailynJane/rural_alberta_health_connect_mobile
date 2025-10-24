@@ -3,22 +3,22 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    LLAMA3_2_1B_SPINQUANT,
-    Message,
-    useLLM,
+  LLAMA3_2_1B_SPINQUANT,
+  Message,
+  useLLM,
 } from "react-native-executorch";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -234,6 +234,7 @@ export default function VisionReviewScreen() {
   const [userDescription, setUserDescription] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [llmResponse, setLlmResponse] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(true);
 
   const { capturedImage, capturedDetections, frameDimensions, reset } =
     useVisionSession();
@@ -246,6 +247,7 @@ export default function VisionReviewScreen() {
   // Configure LLM for longer responses
   useEffect(() => {
     if (llm.isReady) {
+      setIsDownloading(false);
       llm.configure({
         generationConfig: {
           outputTokenBatchSize: 100, // Generate more tokens per batch
@@ -271,7 +273,9 @@ export default function VisionReviewScreen() {
   }, [llm]);
 
   const handleStartOver = () => {
-    if (llm.isGenerating || isAnalyzing) {
+    // Prevent start over during model download or generation
+    if (isDownloading || llm.isGenerating || isAnalyzing) {
+      console.log("Cannot start over: Model is downloading or generating");
       return;
     }
     reset();
@@ -665,18 +669,26 @@ Begin your response with "SUMMARY:" and nothing else.`;
 
                 <View style={styles.actionButtons}>
                   <TouchableOpacity
-                    style={styles.resetButton}
+                    style={[
+                      styles.resetButton,
+                      (isDownloading || llm.isGenerating || isAnalyzing) && styles.resetButtonDisabled
+                    ]}
                     onPress={handleStartOver}
-                    disabled={llm.isGenerating || isAnalyzing}
+                    disabled={isDownloading || llm.isGenerating || isAnalyzing}
                   >
-                    <Ionicons name="trash-outline" size={20} color="#DC3545" />
+                    <Ionicons 
+                      name="trash-outline" 
+                      size={20} 
+                      color={isDownloading || llm.isGenerating || isAnalyzing ? "#999" : "#DC3545"} 
+                    />
                     <Text
                       style={[
                         styles.resetButtonText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
+                        (isDownloading || llm.isGenerating || isAnalyzing) && { color: "#999" }
                       ]}
                     >
-                      Start Over
+                      {isDownloading ? "Loading Model..." : "Start Over"}
                     </Text>
                   </TouchableOpacity>
 
@@ -779,17 +791,22 @@ Begin your response with "SUMMARY:" and nothing else.`;
                       </Text>
                     </View>
                     <TouchableOpacity
-                      style={styles.newAssessmentButton}
+                      style={[
+                        styles.newAssessmentButton,
+                        isDownloading && styles.newAssessmentButtonDisabled
+                      ]}
                       onPress={handleStartOver}
+                      disabled={isDownloading}
                     >
-                      <Ionicons name="refresh" size={20} color="#2A7DE1" />
+                      <Ionicons name="refresh" size={20} color={isDownloading ? "#999" : "#2A7DE1"} />
                       <Text
                         style={[
                           styles.newAssessmentButtonText,
                           { fontFamily: FONTS.BarlowSemiCondensed },
+                          isDownloading && { color: "#999" }
                         ]}
                       >
-                        New Assessment
+                        {isDownloading ? "Loading Model..." : "New Assessment"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -940,6 +957,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
   },
+  resetButtonDisabled: {
+    borderColor: "#CCC",
+    backgroundColor: "#F5F5F5",
+  },
   resetButtonText: { color: "#DC3545", fontSize: 16, fontWeight: "600" },
   analyzeButton: {
     flex: 2,
@@ -1050,6 +1071,10 @@ const styles = StyleSheet.create({
     borderColor: "#2A7DE1",
     paddingVertical: 14,
     borderRadius: 12,
+  },
+  newAssessmentButtonDisabled: {
+    borderColor: "#CCC",
+    backgroundColor: "#F5F5F5",
   },
   newAssessmentButtonText: {
     color: "#2A7DE1",
