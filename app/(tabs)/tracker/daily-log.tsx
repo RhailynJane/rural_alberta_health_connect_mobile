@@ -3,12 +3,12 @@ import { useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -16,6 +16,7 @@ import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 
 const styles = StyleSheet.create({
@@ -258,6 +259,7 @@ export default function DailyLog() {
           bottomSpacing={0}
           showNotificationBell={true}
         />
+        <DueReminderBanner topOffset={120} />
 
         <View style={styles.contentSection}>
           <View

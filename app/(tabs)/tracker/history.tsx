@@ -18,6 +18,7 @@ import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser);
@@ -206,6 +207,7 @@ export default function History() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        <DueReminderBanner topOffset={120} />
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
           title="History"

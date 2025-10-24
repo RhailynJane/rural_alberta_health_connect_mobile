@@ -295,15 +295,6 @@ export default function Profile() {
     if (hh === 0) hh = 12;
     return { hour: String(hh).padStart(2, '0'), minute: mm, ampm };
   };
-  const from12h = (hour: string, minute: string, ampm: 'AM'|'PM'): string => {
-    let h = parseInt(hour, 10);
-    if (ampm === 'AM') {
-      if (h === 12) h = 0;
-    } else {
-      if (h !== 12) h = h + 12;
-    }
-    return `${String(h).padStart(2, '0')}:${String(parseInt(minute, 10)).padStart(2, '0')}`;
-  };
 
   useEffect(() => {
     if (addingReminder && reminderForm.frequency !== 'hourly') {
@@ -639,12 +630,18 @@ export default function Profile() {
         }
         payload = { ...reminderForm, time: norm };
       }
+      
+      // Save locally first (works offline)
       if (editingReminderId) {
         await updateReminder(editingReminderId, { ...payload, enabled: true });
       } else {
         await addReminder({ ...payload, enabled: true });
       }
-      // Sync backend basic reminder settings for daily/weekly (legacy field used elsewhere)
+      
+      // Refresh local reminders
+      await refreshReminders();
+      
+      // Try to sync to backend (may fail if offline, but that's okay)
       try {
         if (payload.frequency !== 'hourly') {
           await updateReminderSettings({
@@ -657,19 +654,23 @@ export default function Profile() {
           const { hour, minute, ampm } = to12h(payload.time!);
           setUserData((prev) => ({ ...prev, reminderTime: `${parseInt(hour,10)}:${minute} ${ampm}`, reminderFrequency: payload.frequency as any, reminderDayOfWeek: payload.dayOfWeek || prev.reminderDayOfWeek }));
         }
-      } catch {}
-      await refreshReminders();
+      } catch (syncError) {
+        console.log('Could not sync to backend (may be offline)', syncError);
+        // Don't show error, local save was successful
+      }
+      
+      // Clear form and show success
       setAddingReminder(false);
       setEditingReminderId(null);
       setReminderForm({ frequency: 'daily', time: '09:00' });
       setModalTitle('Saved');
-      setModalMessage('Reminder saved successfully.');
+      setModalMessage('Reminder saved successfully!');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
     } catch (e) {
       console.error('Failed saving reminder', e);
       setModalTitle('Error');
-      setModalMessage('Failed to save reminder.');
+      setModalMessage('Failed to save reminder. Please try again.');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
     }
@@ -1300,7 +1301,32 @@ export default function Profile() {
               <Text style={styles.toggleText}>Symptom Assessment Reminder</Text>
               <Switch
                 value={userData.reminderEnabled}
-                onValueChange={(value) => handleInputChange("reminderEnabled", value)}
+                onValueChange={(value) => {
+                  if (value) {
+                    // Ask for permission before enabling
+                    setModalTitle("Enable Reminders");
+                    setModalMessage("Allow this app to send you reminders for symptom assessments? You can customize the frequency and time after enabling.");
+                    setModalButtons([
+                      {
+                        label: "Cancel",
+                        onPress: () => setModalVisible(false),
+                        variant: 'secondary',
+                      },
+                      {
+                        label: "Allow",
+                        onPress: () => {
+                          setModalVisible(false);
+                          handleInputChange("reminderEnabled", true);
+                        },
+                        variant: 'primary',
+                      },
+                    ]);
+                    setModalVisible(true);
+                  } else {
+                    // Disable without prompt
+                    handleInputChange("reminderEnabled", false);
+                  }
+                }}
               />
             </View>
 
@@ -1451,7 +1477,7 @@ export default function Profile() {
       </CurvedBackground>
       <BottomNavigation />
 
-      {/* App-wide modal (white, elevated) */}
+      {/* App-wide modal (white, elevated with smooth edges) */}
       <Modal
         visible={modalVisible}
         transparent
@@ -1463,33 +1489,60 @@ export default function Profile() {
           backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
         }}>
           <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
+            width: '85%', 
+            maxWidth: 400,
+            backgroundColor: COLORS.white, 
+            borderRadius: 24, 
+            padding: 24,
+            shadowColor: '#000', 
+            shadowOffset: { width: 0, height: 8 }, 
+            shadowOpacity: 0.25, 
+            shadowRadius: 16, 
+            elevation: 12
           }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
+            <Text style={{ 
+              fontFamily: FONTS.BarlowSemiCondensedBold, 
+              fontSize: 20, 
+              color: COLORS.darkText, 
+              marginBottom: 12,
+              textAlign: 'center'
+            }}>{modalTitle}</Text>
+            <Text style={{ 
+              fontFamily: FONTS.BarlowSemiCondensed, 
+              fontSize: 15, 
+              color: COLORS.darkGray, 
+              marginBottom: 20,
+              textAlign: 'center',
+              lineHeight: 22
+            }}>{modalMessage}</Text>
             <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
               {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
                 const isSecondary = b.variant === 'secondary';
                 const isDestructive = b.variant === 'destructive';
                 const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
                 const textColor = isSecondary ? COLORS.primary : COLORS.white;
-                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
+                const borderStyle = isSecondary ? { borderWidth: 2, borderColor: COLORS.primary } : {};
                 return (
                   <TouchableOpacity
                     key={idx}
                     onPress={b.onPress}
+                    activeOpacity={0.8}
                     style={{
                       backgroundColor,
-                      borderRadius: 8,
-                      paddingVertical: 10,
+                      borderRadius: 16,
+                      paddingVertical: 14,
                       alignItems: 'center',
                       flex: modalButtons.length > 1 ? 1 : undefined,
-                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
+                      paddingHorizontal: modalButtons.length > 1 ? 0 : 24,
                       ...borderStyle as any,
                     }}
                   >
-                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
+                    <Text style={{ 
+                      color: textColor, 
+                      fontFamily: FONTS.BarlowSemiCondensedBold, 
+                      fontSize: 16,
+                      letterSpacing: 0.5
+                    }}>{b.label}</Text>
                   </TouchableOpacity>
                 );
               })}

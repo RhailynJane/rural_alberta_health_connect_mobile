@@ -18,6 +18,7 @@ import { api } from "../../convex/_generated/api";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import DueReminderBanner from "../components/DueReminderBanner";
 import HealthStatusTag from "../components/HealthStatusTag";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { COLORS, FONTS } from "../constants/constants";
@@ -115,6 +116,8 @@ export default function Dashboard() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <CurvedBackground style={{ flex: 1 }}>
+          {/* Due reminder banner (offline-capable) */}
+          <DueReminderBanner topOffset={120} />
           {/* Offline Banner */}
           <OfflineBanner />
           
@@ -281,6 +284,8 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
         {/* Offline Banner */}
         <OfflineBanner />
         

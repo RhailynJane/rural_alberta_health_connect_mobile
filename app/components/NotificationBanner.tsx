@@ -13,6 +13,7 @@ interface NotificationBannerProps {
   onPress?: () => void;
   onDismiss?: () => void;
   duration?: number; // Auto-dismiss after this many ms (0 = manual dismiss only)
+  topOffset?: number; // Distance from top, defaults to 50
 }
 
 export function NotificationBanner({
@@ -21,6 +22,7 @@ export function NotificationBanner({
   onPress,
   onDismiss,
   duration = 5000,
+  topOffset = 50,
 }: NotificationBannerProps) {
   const [visible, setVisible] = useState(true);
   const slideAnim = useRef(new Animated.Value(-100)).current;
@@ -82,6 +84,7 @@ export function NotificationBanner({
       style={[
         styles.container,
         {
+          top: topOffset,
           transform: [{ translateY: slideAnim }],
           opacity: opacityAnim,
         },
@@ -114,7 +117,6 @@ export function NotificationBanner({
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 50,
     left: 16,
     right: 16,
     zIndex: 9999,

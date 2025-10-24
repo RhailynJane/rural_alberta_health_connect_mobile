@@ -3,15 +3,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -19,6 +19,7 @@ import { cacheClinics, getCachedClinics } from "../../../watermelon/hooks/useCac
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
 import { OfflineBanner } from "../../components/OfflineBanner";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
@@ -346,6 +347,8 @@ export default function Emergency() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
         {/* Offline Banner */}
         <OfflineBanner />
         

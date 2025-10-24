@@ -22,6 +22,7 @@ import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 
 export default function AddHealthEntry() {
@@ -345,6 +346,7 @@ export default function AddHealthEntry() {
           bottomSpacing={0}
           showNotificationBell={true}
         />
+        <DueReminderBanner topOffset={120} />
 
         {/* Scrollable content under header */}
         <View style={styles.contentArea}>

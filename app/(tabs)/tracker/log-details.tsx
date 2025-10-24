@@ -8,6 +8,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 
 // Renders AI assessment text into separate cards (mirrors assessment-results)
@@ -184,6 +185,7 @@ export default function LogDetails() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <CurvedBackground style={{ flex: 1 }}>
+          <DueReminderBanner topOffset={120} />
           <CurvedHeader
             title="Tracker - Entry Details"
             height={150}
@@ -211,6 +213,7 @@ export default function LogDetails() {
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Fixed Header (not scrollable) */}
+        <DueReminderBanner topOffset={120} />
         <CurvedHeader
           title="Tracker - Entry Details"
           height={150}
