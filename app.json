@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Rural Alberta Health Connect",
+    "name": "RAHC (Dev)",
     "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rahc.app",
+      "bundleIdentifier": "com.rahc.app.dev",
       "infoPlist": {
         "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone.",
