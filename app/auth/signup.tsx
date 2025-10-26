@@ -5,15 +5,15 @@ import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
 import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
@@ -21,7 +21,6 @@ import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
-import { normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
 import { useSignUpForm } from "./_context/SignUpFormContext";
 
 // Validation schema
@@ -31,14 +30,6 @@ const SignUpSchema = Yup.object().shape({
   email: Yup.string()
     .email("Invalid email address")
     .required("Email is required"),
-  phone: Yup.string()
-    .required("Phone number is required")
-    .test("is-valid-phone", "Enter a valid phone number", (value) => {
-      if (!value) return false;
-      const digits = value.replace(/\D+/g, "");
-      // Accept 10 digits or 11 starting with 1 (NANP)
-      return digits.length === 10 || (digits.length === 11 && digits.startsWith("1"));
-    }),
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
@@ -55,7 +46,7 @@ interface SignUpFormValues {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
+  phone: string; // kept for persisted form values compatibility; not collected here
   password: string;
   confirmPassword: string;
   agreeToTerms: boolean;
@@ -75,7 +66,7 @@ export default function SignUp() {
   const { values: persistedValues, setValues: setPersistedValues } =
     useSignUpForm();
   const ensureProfileExists = useMutation((api as any)["profile/ensureProfileExists"].ensureProfileExists);
-  const updatePhone = useMutation(api.users.updatePhone);
+  
 
   const handleSignUp = async (values: SignUpFormValues) => {
     const { password, confirmPassword, ...safeValues } = values;
@@ -92,14 +83,6 @@ export default function SignUp() {
       });
       // Ensure profile exists in Convex
       await ensureProfileExists();
-      // Save phone (server) and store securely on device (Android)
-      const normalizedPhone = normalizeNanpToE164(values.phone);
-      try {
-        await updatePhone({ phone: normalizedPhone });
-      } catch (e) {
-        console.log("⚠️ Could not sync phone to server immediately:", e);
-      }
-      await savePhoneSecurely(normalizedPhone);
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
@@ -303,31 +286,6 @@ export default function SignUp() {
                         <Text style={styles.errorText}>{errors.email}</Text>
                       )}
 
-                      <Text
-                        style={[
-                          styles.label,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Phone Number
-                      </Text>
-                      <TextInput
-                        style={[
-                          styles.input,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                          errors.phone && touched.phone && styles.inputError,
-                        ]}
-                        placeholder="(403) 555-0123"
-                        placeholderTextColor="#999"
-                        value={values.phone}
-                        onChangeText={(text) => persistField("phone", text)}
-                        onBlur={handleBlur("phone")}
-                        keyboardType="phone-pad"
-                        autoCapitalize="none"
-                      />
-                      {errors.phone && touched.phone && (
-                        <Text style={styles.errorText}>{errors.phone}</Text>
-                      )}
 
                       <Text
                         style={[

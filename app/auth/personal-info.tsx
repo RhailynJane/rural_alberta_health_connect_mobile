@@ -20,12 +20,14 @@ import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
-import { normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
+import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
 
 export default function PersonalInfo() {
   const router = useRouter();
   const database = useDatabase();
   const { isAuthenticated } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
     api.users.getCurrentUser,
     isAuthenticated ? {} : "skip"
@@ -62,12 +64,40 @@ export default function PersonalInfo() {
   );
   const updatePhone = useMutation(api.users.updatePhone);
 
+  // Format phone as (XXX) XXX-XXXX with a hard cap of 10 digits (display only)
+  const formatPhoneInput = (input: string) => {
+    let digits = (input || "").replace(/\D/g, "");
+    if (digits.length > 10) digits = digits.slice(-10);
+    const len = digits.length;
+    if (len === 0) return "";
+    if (len < 4) return `(${digits}`;
+    if (len < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  };
+
   // Prefill phone if available from server
   React.useEffect(() => {
     if (currentUser?.phone && !phone) {
-      setPhone(currentUser.phone);
+      setPhone(formatPhoneInput(currentUser.phone));
     }
   }, [currentUser?.phone, phone]);
+
+  // Prefill from secure storage when offline or when server has no phone
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (phone) return;
+      const shouldTrySecure = !isOnline || !currentUser?.phone;
+      if (!shouldTrySecure) return;
+      try {
+        const stored = await getPhoneSecurely();
+        if (!cancelled && stored && !phone) {
+          setPhone(formatPhoneInput(stored));
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [isOnline, currentUser?.phone, phone]);
 
   // Validation logic
   const validateField = (field: string, raw: string): boolean => {
@@ -80,8 +110,8 @@ export default function PersonalInfo() {
           break;
         }
         const digits = value.replace(/\D+/g, '');
-        if (!(digits.length === 10 || (digits.length === 11 && digits.startsWith('1')))) {
-          error = 'Enter a valid phone number';
+        if (digits.length !== 10) {
+          error = 'Enter a valid 10-digit phone number';
         }
         break;
       }
@@ -142,7 +172,12 @@ export default function PersonalInfo() {
 
   const handleInputChange = (field: string, value: string) => {
     switch (field) {
-      case 'phone': setPhone(value); break;
+      case 'phone': {
+        const formatted = formatPhoneInput(value);
+        setPhone(formatted);
+        validateField('phone', formatted);
+        return;
+      }
       case 'age': setAge(value); break;
       case 'address1': 
         setAddress1(value); 
@@ -410,6 +445,7 @@ export default function PersonalInfo() {
                   onChangeText={(val) => handleInputChange('phone', val)}
                   keyboardType="phone-pad"
                   autoCapitalize="none"
+                  maxLength={14}
                 />
                 {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
                 <Text

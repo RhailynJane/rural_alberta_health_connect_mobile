@@ -5,14 +5,14 @@ import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -23,6 +23,7 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import TimePickerModal from "../../components/TimePickerModal";
 import { COLORS, FONTS } from "../../constants/constants";
+import { normalizeNanpToE164, savePhoneSecurely } from "../../utils/securePhone";
 
 export default function Profile() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -45,6 +46,11 @@ export default function Profile() {
   );
   const updateMedicalHistoryMutation = useMutation(
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
+  );
+  const updatePhone = useMutation(api.users.updatePhone);
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isAuthenticated && !isLoading ? {} : "skip"
   );
 
   // Skip queries if not authenticated
@@ -147,6 +153,7 @@ export default function Profile() {
 
   // State for user data
   const [userData, setUserData] = useState({
+    phone: "",
     age: "",
     address1: "",
     address2: "",
@@ -189,6 +196,7 @@ export default function Profile() {
       console.log("📥 Loaded user profile", userProfile);
       setUserData((prev) => ({
         ...prev,
+        // Phone is managed on users table, set from currentUser in separate effect
         age: userProfile.age || "",
         address1: userProfile.address1 || "",
         address2: userProfile.address2 || "",
@@ -227,6 +235,13 @@ export default function Profile() {
         });
     }
   }, [userProfile, isAuthenticated, isLoading, ensureProfileExists, saveAllReminders]);
+
+  // Prefill phone from current user when available
+  useEffect(() => {
+    if (currentUser?.phone !== undefined) {
+      setUserData((prev) => ({ ...prev, phone: currentUser?.phone || "" }));
+    }
+  }, [currentUser?.phone]);
 
   // Load reminder settings
   useEffect(() => {
@@ -316,6 +331,17 @@ export default function Profile() {
         setModalVisible(true);
         return false;
       }
+      // Update phone on users table and secure store (best-effort)
+      try {
+        const normalized = normalizeNanpToE164(userData.phone || "");
+        if (normalized) {
+          await updatePhone({ phone: normalized });
+          await savePhoneSecurely(normalized);
+        }
+      } catch (e) {
+        console.log("⚠️ Phone update skipped (possibly offline):", e);
+      }
+
       await updatePersonalInfo({
         age: userData.age,
         address1: userData.address1,
@@ -681,6 +707,14 @@ export default function Profile() {
     const value = (raw || '').trim();
     let error = '';
     switch (field) {
+      case 'phone': {
+        if (value.length === 0) { error = 'Phone number is required'; break; }
+        const digits = value.replace(/\D/g, '');
+        if (!(digits.length === 10 || (digits.length === 11 && digits.startsWith('1')))) {
+          error = 'Enter a valid phone number';
+        }
+        break;
+      }
       case 'age': {
         if (value.length === 0) {
           error = 'Age is required';
@@ -777,7 +811,7 @@ export default function Profile() {
   // Validate only personal info fields
   const validatePersonalInfo = (): boolean => {
     const fieldsToCheck: (keyof typeof userData)[] = [
-      'age','address1','city','province','postalCode','location'
+      'phone','age','address1','city','province','postalCode','location'
     ];
     const results = fieldsToCheck.map((f) => validateField(f, String((userData as any)[f] ?? '')));
     return results.every(Boolean);
@@ -1046,6 +1080,17 @@ export default function Profile() {
 
             {expandedSections.personalInfo ? (
               <>
+                <Text style={styles.sectionTitle}>Phone Number</Text>
+                <TextInput
+                  style={[styles.input, errors.phone ? styles.inputError : null]}
+                  value={userData.phone}
+                  onChangeText={(text) => handleInputChange("phone", text)}
+                  placeholder="(403) 555-0123"
+                  placeholderTextColor={COLORS.lightGray}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                />
+                {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
                 <Text style={styles.sectionTitle}>Age</Text>
                 <TextInput
                   style={[styles.input, errors.age ? styles.inputError : null]}
@@ -1132,6 +1177,10 @@ export default function Profile() {
               </>
             ) : (
               <>
+                <Text style={styles.text}>
+                  <Text style={{ fontWeight: "bold" }}>Phone:</Text>{" "}
+                  {userData.phone || "Not set"}
+                </Text>
                 <Text style={styles.text}>
                   <Text style={{ fontWeight: "bold" }}>Age:</Text>{" "}
                   {userData.age || "Not set"}
