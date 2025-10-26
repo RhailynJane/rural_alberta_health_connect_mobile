@@ -39,6 +39,16 @@ export default function StatusModal({
   icon,
 }: StatusModalProps) {
   
+  const defaultButtons: StatusModalButton[] = buttons || [
+    {
+      label: 'OK',
+      onPress: onClose || (() => {}),
+      variant: 'primary',
+    },
+  ];
+
+  const isManyButtons = defaultButtons.length > 2;
+
   const getIconName = () => {
     if (icon) return icon;
     switch (type) {
@@ -72,14 +82,6 @@ export default function StatusModal({
     }
   };
 
-  const defaultButtons: StatusModalButton[] = buttons || [
-    {
-      label: 'OK',
-      onPress: onClose || (() => {}),
-      variant: 'primary',
-    },
-  ];
-
   return (
     <Modal
       visible={visible}
@@ -96,10 +98,13 @@ export default function StatusModal({
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
 
-          <View style={[
-            styles.buttonContainer,
-            defaultButtons.length > 1 && styles.buttonContainerRow
-          ]}>
+          <View
+            style={[
+              styles.buttonContainer,
+              defaultButtons.length > 1 && !isManyButtons && styles.buttonContainerRow,
+              isManyButtons && styles.buttonContainerColumn,
+            ]}
+          >
             {defaultButtons.map((button, index) => {
               const isSecondary = button.variant === 'secondary';
               const isDestructive = button.variant === 'destructive';
@@ -118,7 +123,8 @@ export default function StatusModal({
                     styles.button,
                     { backgroundColor },
                     borderStyle,
-                    defaultButtons.length > 1 && styles.buttonFlex,
+                    defaultButtons.length > 1 && !isManyButtons && styles.buttonFlex,
+                    isManyButtons && styles.buttonFullWidth,
                   ]}
                   onPress={button.onPress}
                   activeOpacity={0.8}
@@ -185,11 +191,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  buttonContainerColumn: {
+    flexDirection: 'column',
+  },
   button: {
     borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
-    minWidth: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -198,6 +206,9 @@ const styles = StyleSheet.create({
   },
   buttonFlex: {
     flex: 1,
+  },
+  buttonFullWidth: {
+    width: '100%',
   },
   buttonText: {
     fontSize: 16,

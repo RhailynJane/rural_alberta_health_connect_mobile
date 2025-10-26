@@ -1,8 +1,9 @@
 import { api } from "@/convex/_generated/api";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+    Alert,
     ScrollView,
     StyleSheet,
     Switch,
@@ -17,6 +18,7 @@ import {
     deleteReminder,
     getReminders,
     ReminderItem,
+    requestNotificationPermissions,
     scheduleAllReminderItems,
     setConvexSyncCallback,
     setReminderUserKey,
@@ -24,6 +26,7 @@ import {
 } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import StatusModal from "../../components/StatusModal";
 import TimePickerModal from "../../components/TimePickerModal";
 import { COLORS, FONTS } from "../../constants/constants";
 
@@ -36,8 +39,9 @@ export default function AppSettings() {
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
-  const reminderSettings = useQuery(
-    (api as any)["profile/reminders"].getReminderSettings,
+  // Fetch server-stored list of reminders (array form)
+  const serverReminders = useQuery(
+    (api as any)["profile/reminders"].getAllReminders,
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
@@ -59,6 +63,17 @@ export default function AppSettings() {
   const [isTimePickerVisible, setTimePickerVisible] = useState(false);
   const [selectedReminderIndex, setSelectedReminderIndex] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("09:00");
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  // When user toggles ON with no reminders, keep switch visually ON while prompting for time
+  const [pendingEnable, setPendingEnable] = useState(false);
+  // Choose frequency for new reminders
+  const [frequencyPickerVisible, setFrequencyPickerVisible] = useState(false);
+  const [nextFrequency, setNextFrequency] = useState<"hourly" | "daily" | "weekly" | null>(null);
+  // Weekly custom scheduler
+  const [weeklyModalVisible, setWeeklyModalVisible] = useState(false);
+  const daysOfWeek: ("Sun"|"Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat")[] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const [weeklyTimes, setWeeklyTimes] = useState<Record<string, string | null>>({ Sun:null, Mon:null, Tue:null, Wed:null, Thu:null, Fri:null, Sat:null });
+  const [weeklyEditingDay, setWeeklyEditingDay] = useState<null | (typeof daysOfWeek)[number]>(null);
 
   // Load location services status
   useEffect(() => {
@@ -67,81 +82,108 @@ export default function AppSettings() {
     }
   }, [locationStatus]);
 
+  // Memoize the sync callback to prevent infinite loops
+  const syncCallback = useCallback(async (items: ReminderItem[]) => {
+    try {
+      await saveAllReminders({ reminders: JSON.stringify(items) });
+    } catch (err) {
+      console.error("⚠️ Convex sync failed:", err);
+    }
+  }, [saveAllReminders]);
+
   // Load reminders
   useEffect(() => {
     if (!currentUser?._id) return;
     const uid = String(currentUser._id);
     setReminderUserKey(uid);
-
-    setConvexSyncCallback(async (items: ReminderItem[]) => {
-      try {
-        await saveAllReminders({ items });
-      } catch (err) {
-        console.error("⚠️ Convex sync failed:", err);
-      }
-    });
+    setConvexSyncCallback(syncCallback);
 
     (async () => {
       const stored = await getReminders();
       setReminders(stored);
       await scheduleAllReminderItems(stored);
     })();
-  }, [currentUser?._id, saveAllReminders]);
+  }, [currentUser?._id, syncCallback]);
 
-  // Sync reminders from Convex on settings load
+  // Sync reminders from Convex (array) -> local AsyncStorage/state, without thrashing
   useEffect(() => {
-    if (!reminderSettings || !currentUser?._id) return;
-
-    const serverItems: ReminderItem[] = (reminderSettings.reminders || []).map(
-      (r: any) => ({
-        id: r.id,
-        time: r.timeString,
-        enabled: r.enabled,
-        frequency: r.frequency || "daily",
-        createdAt: r.createdAt || new Date().toISOString(),
-        updatedAt: r.updatedAt || new Date().toISOString(),
-        dayOfWeek: r.dayOfWeek,
-      })
-    );
+    if (!serverReminders || !currentUser?._id) return;
 
     (async () => {
-      const localItems = await getReminders();
-      const needUpdate =
-        JSON.stringify(serverItems) !== JSON.stringify(localItems);
-      if (needUpdate) {
-        setReminders(serverItems);
-        await scheduleAllReminderItems(serverItems);
+      try {
+        const localItems = await getReminders();
+        // Only update if different to avoid flicker
+        const needUpdate = JSON.stringify(serverReminders) !== JSON.stringify(localItems);
+        if (needUpdate) {
+          setReminders(serverReminders as ReminderItem[]);
+          await scheduleAllReminderItems(serverReminders as ReminderItem[]);
+        }
+      } catch {
+        // no-op
       }
     })();
-  }, [reminderSettings, currentUser?._id]);
+  }, [serverReminders, currentUser?._id]);
 
   const handleToggleReminder = async (value: boolean) => {
+    // Prevent multiple simultaneous requests
+    if (isRequestingPermission) return;
+
+    if (value) {
+      // Request permission first
+      setIsRequestingPermission(true);
+      try {
+        console.log("🔔 Requesting notification permissions...");
+        const granted = await requestNotificationPermissions();
+        console.log("🔔 Permission result:", granted);
+        
+        if (!granted) {
+          Alert.alert(
+            "Permission Required",
+            "Please enable notifications in your device settings to receive symptom assessment reminders.",
+            [{ text: "OK" }]
+          );
+          return;
+        }
+      } catch (error) {
+        console.error("❌ Permission request error:", error);
+        Alert.alert(
+          "Error",
+          "Failed to request notification permissions. Please try again.",
+          [{ text: "OK" }]
+        );
+        return;
+      } finally {
+        setIsRequestingPermission(false);
+      }
+
+      // If enabling and there are no reminders, just show the section with an Add Reminder button
+      if (reminders.length === 0) {
+        setPendingEnable(true);
+        return;
+      }
+    }
+
     if (!value && reminders.length > 0) {
       // Disable all reminders
       const updated = reminders.map((r) => ({ ...r, enabled: false }));
       setReminders(updated);
       await scheduleAllReminderItems(updated);
-    } else if (value && reminders.length === 0) {
-      // Enable with default reminder
-      await addReminder({
-        enabled: true,
-        frequency: "daily",
-        time: "09:00",
-      });
-      const updated = await getReminders();
-      setReminders(updated);
     } else if (value) {
       // Enable existing reminders
       const updated = reminders.map((r) => ({ ...r, enabled: true }));
       setReminders(updated);
       await scheduleAllReminderItems(updated);
+    } else if (!value) {
+      // Toggling OFF with no reminders
+      setPendingEnable(false);
     }
   };
 
   const handleAddReminder = () => {
+    // Open frequency chooser first
     setSelectedReminderIndex(null);
-    setSelectedTime("09:00");
-    setTimePickerVisible(true);
+    setNextFrequency(null);
+    setFrequencyPickerVisible(true);
   };
 
   const handleEditReminder = (index: number) => {
@@ -158,21 +200,35 @@ export default function AppSettings() {
   };
 
   const handleConfirmTime = async (time: string) => {
+    if (weeklyEditingDay) {
+      // In weekly custom mode, assign time to the editing day
+      setWeeklyTimes((prev) => ({ ...prev, [weeklyEditingDay]: time }));
+      setWeeklyEditingDay(null);
+      setTimePickerVisible(false);
+      return;
+    }
+
     if (selectedReminderIndex !== null) {
       // Update existing
       const item = reminders[selectedReminderIndex];
       await updateReminder(item.id, { time });
     } else {
-      // Add new
+      // Add new reminder with the selected frequency
+      // nextFrequency is set when user picks "Hourly" or "Daily" from frequency chooser
+      // (Custom weekly reminders are created directly in Save button handler)
+      const freq = nextFrequency === "hourly" ? "hourly" : "daily";
       await addReminder({
         enabled: true,
-        frequency: "daily",
-        time,
+        frequency: freq as any,
+        time: freq === "daily" ? time : undefined,
       });
     }
     const updated = await getReminders();
     setReminders(updated);
+    setPendingEnable(false);
     setTimePickerVisible(false);
+    setNextFrequency(null);
+    await scheduleAllReminderItems(updated);
   };
 
   const handleToggleLocationServices = async (value: boolean) => {
@@ -203,37 +259,58 @@ export default function AppSettings() {
             <View style={styles.toggleRow}>
               <Text style={styles.text}>Enable Reminder</Text>
               <Switch
-                value={reminderEnabled}
+                value={pendingEnable || reminderEnabled}
                 onValueChange={handleToggleReminder}
                 trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
                 thumbColor={COLORS.white}
               />
             </View>
 
-            {reminderEnabled && (
+            {(pendingEnable || reminderEnabled) && (
               <>
                 <Text style={styles.text}>Reminder Times:</Text>
-                {reminders.filter((r) => r.enabled).map((reminder, i) => (
-                  <View key={reminder.id} style={styles.reminderItem}>
-                    <TouchableOpacity
-                      style={styles.reminderTimeButton}
-                      onPress={() => handleEditReminder(reminders.indexOf(reminder))}
-                    >
-                      <Icon name="schedule" size={20} color={COLORS.primary} />
-                      <Text style={styles.reminderTimeText}>{reminder.time || "09:00"}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteReminder(reminders.indexOf(reminder))}>
-                      <Icon name="delete" size={20} color={COLORS.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                {reminders.filter((r) => r.enabled).length === 0 && (
+                  <Text style={[styles.text, { color: COLORS.darkGray, marginTop: 8 }]}>No reminders yet. Tap &quot;Add Reminder&quot; to create one.</Text>
+                )}
+                {reminders
+                  .filter((r) => r.enabled)
+                  .map((reminder) => (
+                    <View key={reminder.id} style={styles.reminderItem}>
+                      <TouchableOpacity
+                        style={styles.reminderTimeButton}
+                        onPress={() => handleEditReminder(reminders.indexOf(reminder))}
+                      >
+                        <Icon name="schedule" size={20} color={COLORS.primary} />
+                        <View>
+                          <Text style={styles.reminderTimeText}>
+                            {reminder.frequency === "hourly"
+                              ? "Every hour"
+                              : reminder.time || "09:00"}
+                          </Text>
+                          {reminder.frequency === "daily" && (
+                            <Text style={[styles.reminderFrequencyText]}>Daily reminder</Text>
+                          )}
+                          {reminder.frequency === "weekly" && reminder.dayOfWeek && (
+                            <Text style={[styles.reminderFrequencyText]}>Weekly on {reminder.dayOfWeek}</Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleDeleteReminder(reminders.indexOf(reminder))
+                        }
+                      >
+                        <Icon name="delete" size={20} color={COLORS.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
 
                 <TouchableOpacity
                   style={styles.addReminderButton}
                   onPress={handleAddReminder}
                 >
                   <Icon name="add-circle" size={20} color={COLORS.primary} />
-                  <Text style={styles.addReminderText}>Add Another Reminder</Text>
+                  <Text style={styles.addReminderText}>Add Reminder</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -258,7 +335,12 @@ export default function AppSettings() {
             onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Icon name="arrow-back" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
+            <Icon
+              name="arrow-back"
+              size={20}
+              color={COLORS.white}
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.backButtonText}>Back to Profile</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -267,8 +349,223 @@ export default function AppSettings() {
           visible={isTimePickerVisible}
           value={selectedTime}
           onSelect={handleConfirmTime}
-          onCancel={() => setTimePickerVisible(false)}
+          onCancel={() => {
+            setPendingEnable(false);
+            setTimePickerVisible(false);
+            setWeeklyEditingDay(null);
+          }}
         />
+
+        {/* Frequency chooser */}
+        <StatusModal
+          visible={frequencyPickerVisible}
+          type="info"
+          title="Choose reminder type"
+          message="How often should we remind you?"
+          onClose={() => setFrequencyPickerVisible(false)}
+          buttons={[
+            {
+              label: "Hourly",
+              variant: "primary",
+              onPress: async () => {
+                setFrequencyPickerVisible(false);
+                setNextFrequency("hourly");
+                await addReminder({ enabled: true, frequency: "hourly" as any });
+                const updated = await getReminders();
+                setReminders(updated);
+                setPendingEnable(false);
+                await scheduleAllReminderItems(updated);
+              },
+            },
+            {
+              label: "Daily",
+              variant: "secondary",
+              onPress: () => {
+                setFrequencyPickerVisible(false);
+                setNextFrequency("daily");
+                setSelectedReminderIndex(null);
+                setSelectedTime("09:00");
+                setTimePickerVisible(true);
+              },
+            },
+            {
+              label: "Custom",
+              variant: "secondary",
+              onPress: () => {
+                setFrequencyPickerVisible(false);
+                setWeeklyTimes({
+                  Sun: null,
+                  Mon: null,
+                  Tue: null,
+                  Wed: null,
+                  Thu: null,
+                  Fri: null,
+                  Sat: null,
+                });
+                setWeeklyModalVisible(true);
+              },
+            },
+          ]}
+        />
+
+        {/* Weekly custom modal */}
+        {weeklyModalVisible && (
+          <View
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              top: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 20,
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: 24,
+                padding: 24,
+                width: "90%",
+                maxWidth: 500,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: FONTS.BarlowSemiCondensedBold,
+                  fontSize: 20,
+                  marginBottom: 16,
+                  color: COLORS.darkText,
+                  textAlign: "center",
+                }}
+              >
+                Custom schedule
+              </Text>
+              {daysOfWeek.map((d) => (
+                <View
+                  key={d}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingVertical: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: FONTS.BarlowSemiCondensed,
+                      fontSize: 16,
+                      color: COLORS.darkText,
+                    }}
+                  >
+                    {d}
+                  </Text>
+                  <View
+                    style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+                  >
+                    <Text
+                      style={{
+                        fontFamily: FONTS.BarlowSemiCondensed,
+                        fontSize: 14,
+                        color: COLORS.darkGray,
+                      }}
+                    >
+                      {weeklyTimes[d] || "Not set"}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setWeeklyEditingDay(d);
+                        setSelectedTime(weeklyTimes[d] || "09:00");
+                        setTimePickerVisible(true);
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: COLORS.primary,
+                          fontFamily: FONTS.BarlowSemiCondensedBold,
+                        }}
+                      >
+                        Set
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+              <View
+                style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 12 }}
+              >
+                <TouchableOpacity
+                  onPress={() =>
+                    setWeeklyTimes({
+                      Sun: null,
+                      Mon: null,
+                      Tue: null,
+                      Wed: null,
+                      Thu: null,
+                      Fri: null,
+                      Sat: null,
+                    })
+                  }
+                >
+                  <Text
+                    style={{
+                      color: COLORS.error,
+                      fontFamily: FONTS.BarlowSemiCondensedBold,
+                    }}
+                  >
+                    Clear all
+                  </Text>
+                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 16 }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setWeeklyModalVisible(false);
+                      setPendingEnable(false);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: COLORS.darkGray,
+                        fontFamily: FONTS.BarlowSemiCondensedBold,
+                      }}
+                    >
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      const entries = Object.entries(weeklyTimes).filter(([, t]) => !!t) as [string, string][];
+                      for (const [day, t] of entries) {
+                        await addReminder({
+                          enabled: true,
+                          frequency: "weekly" as any,
+                          time: t,
+                          dayOfWeek: day,
+                        });
+                      }
+                      const updated = await getReminders();
+                      setReminders(updated);
+                      setPendingEnable(false);
+                      setWeeklyModalVisible(false);
+                      await scheduleAllReminderItems(updated);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: COLORS.primary,
+                        fontFamily: FONTS.BarlowSemiCondensedBold,
+                      }}
+                    >
+                      Save
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
       </CurvedBackground>
     </SafeAreaView>
   );
@@ -299,13 +596,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 18,
+    fontSize: 20,
     color: COLORS.darkText,
     marginBottom: 12,
   },
   text: {
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 14,
+    fontSize: 16,
     color: COLORS.darkText,
   },
   toggleRow: {
@@ -330,8 +627,14 @@ const styles = StyleSheet.create({
   },
   reminderTimeText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
+    fontSize: 18,
     color: COLORS.darkText,
+  },
+  reminderFrequencyText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkGray,
+    marginTop: 2,
   },
   addReminderButton: {
     flexDirection: "row",

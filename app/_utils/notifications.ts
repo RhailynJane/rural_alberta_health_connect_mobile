@@ -1,6 +1,5 @@
 import { Q } from '@nozbe/watermelondb';
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NativeModules, Platform } from "react-native";
 import { database } from "../../watermelon/database";
 
 const STORAGE_KEY = "symptomReminderNotificationId";
@@ -112,18 +111,12 @@ async function getNotificationsModule() {
     IosAuthorizationStatus: { PROVISIONAL: 1 },
   };
 
-  // Never attempt to load on web
-  if (Platform.OS === "web") return stub;
-
-  // If the native module isn't available (e.g., Expo Go without this module), bail out
-  const hasNative = !!(NativeModules as any)?.ExpoNotifications || !!(NativeModules as any)?.ExpoPushTokenManager;
-  if (!hasNative) return stub;
-
-  // Dynamically import to avoid requiring native module on startup and to catch load errors
+  // Prefer dynamic import first; fall back to stub on any error or unsupported platform
   try {
     const Notifications = await import("expo-notifications");
     return Notifications as any;
   } catch {
+    // As a fallback for platforms where the module isn't available (web or missing native), return stub
     return stub;
   }
 }
@@ -160,23 +153,45 @@ export async function initializeNotificationsOnce() {
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   const Notifications = await getNotificationsModule();
+  
+  console.log("🔔 [requestNotificationPermissions] Module loaded:", {
+    hasGetPermissions: typeof (Notifications as any).getPermissionsAsync === 'function',
+    hasRequestPermissions: typeof (Notifications as any).requestPermissionsAsync === 'function',
+  });
+  
   try {
-    if (typeof (Notifications as any).getPermissionsAsync !== 'function') return false;
+    if (typeof (Notifications as any).getPermissionsAsync !== 'function') {
+      console.log("⚠️ getPermissionsAsync not available - likely web or missing module");
+      return false;
+    }
+    
     const settings = await (Notifications as any).getPermissionsAsync();
+    console.log("🔔 Current permission status:", settings);
+    
     if (
       (settings as any)?.granted ||
       (settings as any)?.ios?.status === (Notifications as any).IosAuthorizationStatus?.PROVISIONAL
     ) {
+      console.log("✅ Permissions already granted");
       return true;
     }
-    if (typeof (Notifications as any).requestPermissionsAsync !== 'function') return false;
+    
+    if (typeof (Notifications as any).requestPermissionsAsync !== 'function') {
+      console.log("⚠️ requestPermissionsAsync not available");
+      return false;
+    }
+    
+    console.log("🔔 Requesting permissions...");
     const req = await (Notifications as any).requestPermissionsAsync();
+    console.log("🔔 Permission request result:", req);
+    
     return (
       (req as any)?.granted ||
       (req as any)?.ios?.status === (Notifications as any).IosAuthorizationStatus?.PROVISIONAL ||
       false
     );
-  } catch {
+  } catch (err) {
+    console.error("❌ Error requesting permissions:", err);
     return false;
   }
 }
