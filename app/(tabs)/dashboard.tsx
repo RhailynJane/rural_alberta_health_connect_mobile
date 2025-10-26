@@ -4,14 +4,13 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -21,7 +20,8 @@ import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
 import HealthStatusTag from "../components/HealthStatusTag";
 import { OfflineBanner } from "../components/OfflineBanner";
-import { COLORS, FONTS } from "../constants/constants";
+import StatusModal from "../components/StatusModal";
+import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function Dashboard() {
@@ -541,52 +541,15 @@ export default function Dashboard() {
       </CurvedBackground>
       <BottomNavigation />
 
-      {/* Modal for alerts and confirmations */}
-      <Modal
+      {/* StatusModal for alerts and confirmations */}
+      <StatusModal
         visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
-            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
-              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
-                const isSecondary = b.variant === 'secondary';
-                const isDestructive = b.variant === 'destructive';
-                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
-                const textColor = isSecondary ? COLORS.primary : COLORS.white;
-                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={b.onPress}
-                    style={{
-                      backgroundColor,
-                      borderRadius: 8,
-                      paddingVertical: 10,
-                      alignItems: 'center',
-                      flex: modalButtons.length > 1 ? 1 : undefined,
-                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
-                      ...borderStyle as any,
-                    }}
-                  >
-                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
+        type={modalTitle === 'Success' ? 'success' : modalTitle === 'Error' ? 'error' : 'confirm'}
+        title={modalTitle}
+        message={modalMessage}
+        onClose={() => setModalVisible(false)}
+        buttons={modalButtons.length > 0 ? modalButtons : undefined}
+      />
     </SafeAreaView>
   );
 }
