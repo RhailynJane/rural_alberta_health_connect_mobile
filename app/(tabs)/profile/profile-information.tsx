@@ -63,7 +63,6 @@ export default function ProfileInformation() {
 
   // Validation state
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [successMessage, setSuccessMessage] = useState<string>("");
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -141,7 +140,6 @@ export default function ProfileInformation() {
     try {
       const valid = validatePersonalInfo();
       if (!valid) {
-        setSuccessMessage("");
         setModalType('error');
         setModalTitle('Validation Error');
         setModalMessage('Please correct the highlighted fields in Personal Information.');
@@ -175,8 +173,6 @@ export default function ProfileInformation() {
       setModalTitle('Success');
       setModalMessage('Personal information updated successfully');
       setModalVisible(true);
-      setSuccessMessage("Personal information updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
       return true;
     } catch (error) {
       console.error(error);
@@ -192,7 +188,6 @@ export default function ProfileInformation() {
     try {
       const valid = validateEmergencyContact();
       if (!valid) {
-        setSuccessMessage("");
         setModalType('error');
         setModalTitle('Validation Error');
         setModalMessage('Please correct the highlighted fields in Emergency Contact.');
@@ -209,8 +204,6 @@ export default function ProfileInformation() {
       setModalTitle('Success');
       setModalMessage('Emergency contact updated successfully');
       setModalVisible(true);
-      setSuccessMessage("Emergency contact updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
       return true;
     } catch (error) {
       console.error(error);
@@ -226,7 +219,6 @@ export default function ProfileInformation() {
     try {
       const valid = validateMedicalInfo();
       if (!valid) {
-        setSuccessMessage("");
         setModalType('error');
         setModalTitle('Validation Error');
         setModalMessage('Please correct the highlighted fields in Medical Information.');
@@ -244,8 +236,6 @@ export default function ProfileInformation() {
       setModalTitle('Success');
       setModalMessage('Medical information updated successfully');
       setModalVisible(true);
-      setSuccessMessage("Medical information updated successfully");
-      setTimeout(() => setSuccessMessage(""), 3000);
       return true;
     } catch (error) {
       console.error(error);
@@ -476,13 +466,6 @@ export default function ProfileInformation() {
           bottomSpacing={0}
         />
         <ScrollView style={styles.container}>
-          {successMessage ? (
-            <View style={styles.successBanner}>
-              <Icon name="check-circle" size={20} color={COLORS.white} />
-              <Text style={styles.successText}>{successMessage}</Text>
-            </View>
-          ) : null}
-
           {/* Personal Information */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -875,21 +858,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 14,
-  },
-  successBanner: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  successText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 14,
-    marginLeft: 8,
-    flex: 1,
   },
   backButton: {
     backgroundColor: COLORS.primary,
