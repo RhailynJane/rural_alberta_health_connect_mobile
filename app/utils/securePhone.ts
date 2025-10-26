@@ -3,15 +3,21 @@ import { Platform } from "react-native";
 
 const PHONE_KEY = "user_phone_number";
 
-export async function savePhoneSecurely(phone: string): Promise<void> {
+// Compose a per-user storage key to avoid cross-account leakage on shared devices
+function keyFor(userId?: string | null): string {
+  return userId ? `${PHONE_KEY}:${userId}` : PHONE_KEY; // legacy fallback when userId is not provided
+}
+
+export async function savePhoneSecurely(phone: string, userId?: string | null): Promise<void> {
   try {
+    const storageKey = keyFor(userId);
     if (Platform.OS === "android") {
-      await SecureStore.setItemAsync(PHONE_KEY, phone, {
+      await SecureStore.setItemAsync(storageKey, phone, {
         requireAuthentication: false,
       });
     } else {
       // For iOS/web, no-op or store without requirement; adjust as needed
-      await SecureStore.setItemAsync(PHONE_KEY, phone);
+      await SecureStore.setItemAsync(storageKey, phone);
     }
   } catch (e) {
     // Swallow errors to avoid blocking UX
@@ -19,18 +25,20 @@ export async function savePhoneSecurely(phone: string): Promise<void> {
   }
 }
 
-export async function getPhoneSecurely(): Promise<string | null> {
+export async function getPhoneSecurely(userId?: string | null): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(PHONE_KEY);
+    const storageKey = keyFor(userId);
+    return await SecureStore.getItemAsync(storageKey);
   } catch (e) {
     console.warn("Failed to retrieve secure phone number", e);
     return null;
   }
 }
 
-export async function clearPhoneSecurely(): Promise<void> {
+export async function clearPhoneSecurely(userId?: string | null): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(PHONE_KEY);
+    const storageKey = keyFor(userId);
+    await SecureStore.deleteItemAsync(storageKey);
   } catch (e) {
     console.warn("Failed to clear secure phone number", e);
   }

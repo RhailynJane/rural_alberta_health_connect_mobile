@@ -336,7 +336,8 @@ export default function Profile() {
         const normalized = normalizeNanpToE164(userData.phone || "");
         if (normalized) {
           await updatePhone({ phone: normalized });
-          await savePhoneSecurely(normalized);
+          const uid = currentUser?._id ? String(currentUser._id) : undefined;
+          await savePhoneSecurely(normalized, uid);
         }
       } catch (e) {
         console.log("⚠️ Phone update skipped (possibly offline):", e);

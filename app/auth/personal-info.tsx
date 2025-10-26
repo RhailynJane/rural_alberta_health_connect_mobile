@@ -90,14 +90,16 @@ export default function PersonalInfo() {
       const shouldTrySecure = !isOnline || !currentUser?.phone;
       if (!shouldTrySecure) return;
       try {
-        const stored = await getPhoneSecurely();
+        const uid = currentUser?._id ? String(currentUser._id) : undefined;
+        if (!uid) return; // don't read legacy/global entry to avoid cross-account prefill
+        const stored = await getPhoneSecurely(uid);
         if (!cancelled && stored && !phone) {
           setPhone(formatPhoneInput(stored));
         }
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [isOnline, currentUser?.phone, phone]);
+  }, [isOnline, currentUser?._id, currentUser?.phone, phone]);
 
   // Validation logic
   const validateField = (field: string, raw: string): boolean => {
@@ -292,7 +294,8 @@ export default function PersonalInfo() {
     try {
       // Save phone securely (Android) and sync to server
       const normalizedPhone = normalizeNanpToE164(phone);
-      await savePhoneSecurely(normalizedPhone);
+      const uid = currentUser?._id ? String(currentUser._id) : undefined;
+      await savePhoneSecurely(normalizedPhone, uid);
       try {
         await updatePhone({ phone: normalizedPhone });
       } catch (e) {
