@@ -20,6 +20,7 @@ import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+import { normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
 
 export default function PersonalInfo() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function PersonalInfo() {
     api.users.getCurrentUser,
     isAuthenticated ? {} : "skip"
   );
+  const [phone, setPhone] = useState("");
   const [age, setAge] = useState("");
   const [address1, setAddress1] = useState("");
   const [address2, setAddress2] = useState("");
@@ -58,12 +60,31 @@ export default function PersonalInfo() {
   const updatePersonalInfo = useMutation(
     api.personalInfoOnboarding.update.withAgeRangeAndLocation
   );
+  const updatePhone = useMutation(api.users.updatePhone);
+
+  // Prefill phone if available from server
+  React.useEffect(() => {
+    if (currentUser?.phone && !phone) {
+      setPhone(currentUser.phone);
+    }
+  }, [currentUser?.phone, phone]);
 
   // Validation logic
   const validateField = (field: string, raw: string): boolean => {
     const value = (raw || '').trim();
     let error = '';
     switch (field) {
+      case 'phone': {
+        if (value.length === 0) {
+          error = 'Phone number is required';
+          break;
+        }
+        const digits = value.replace(/\D+/g, '');
+        if (!(digits.length === 10 || (digits.length === 11 && digits.startsWith('1')))) {
+          error = 'Enter a valid phone number';
+        }
+        break;
+      }
       case 'age': {
         if (value.length === 0) {
           error = 'Age is required';
@@ -109,6 +130,7 @@ export default function PersonalInfo() {
 
   const validateAll = (): boolean => {
     const results = [
+      validateField('phone', phone),
       validateField('age', age),
       validateField('address1', address1),
       validateField('city', city),
@@ -120,6 +142,7 @@ export default function PersonalInfo() {
 
   const handleInputChange = (field: string, value: string) => {
     switch (field) {
+      case 'phone': setPhone(value); break;
       case 'age': setAge(value); break;
       case 'address1': 
         setAddress1(value); 
@@ -232,6 +255,15 @@ export default function PersonalInfo() {
     setIsSubmitting(true);
 
     try {
+      // Save phone securely (Android) and sync to server
+      const normalizedPhone = normalizeNanpToE164(phone);
+      await savePhoneSecurely(normalizedPhone);
+      try {
+        await updatePhone({ phone: normalizedPhone });
+      } catch (e) {
+        console.log('⚠️ Personal Info - Could not sync phone immediately:', e);
+      }
+
       // Save to WatermelonDB first (offline)
       await database.write(async () => {
         const userProfilesCollection = database.get("user_profiles");
@@ -358,6 +390,28 @@ export default function PersonalInfo() {
               </Text>
 
               <View style={styles.formContainer}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Phone Number *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.phone ? styles.inputError : null,
+                  ]}
+                  placeholder="(403) 555-0123"
+                  placeholderTextColor="#999"
+                  value={phone}
+                  onChangeText={(val) => handleInputChange('phone', val)}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                />
+                {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
                 <Text
                   style={[
                     styles.fieldLabel,

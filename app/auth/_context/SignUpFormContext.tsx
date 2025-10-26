@@ -4,6 +4,7 @@ export interface SignUpFormValues {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   password: string;
   confirmPassword: string;
   agreeToTerms: boolean;
@@ -13,6 +14,7 @@ const defaultValues: SignUpFormValues = {
   firstName: "",
   lastName: "",
   email: "",
+  phone: "",
   password: "",
   confirmPassword: "",
   agreeToTerms: false,
