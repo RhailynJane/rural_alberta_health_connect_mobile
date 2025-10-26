@@ -67,40 +67,50 @@ export default function TimePickerModal({
         theme: "light",
         backgroundColor: COLORS.white,
         pickerItem: {
-          fontSize: 32,
+          fontSize: 28,
           fontWeight: '600',
         },
         pickerLabel: {
-          fontSize: 24,
+          fontSize: 20,
           fontWeight: '600',
         },
         pickerItemContainer: {
-          width: 100,
+          width: 90,
         },
         pickerLabelContainer: {
-          width: 60,
+          width: 50,
         },
         confirmButton: {
           color: COLORS.primary,
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: '700',
         },
         cancelButton: {
           color: COLORS.darkGray,
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: '600',
         },
         modalTitle: {
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: '700',
           color: COLORS.darkText,
         },
         contentContainer: {
-          paddingVertical: 20,
+          paddingVertical: 16,
+        },
+        container: {
+          alignItems: 'center',
+          justifyContent: 'center',
         },
       }}
       modalProps={{
-        overlayOpacity: 0.3,
+        overlayOpacity: 0.7,
+      }}
+      containerProps={{
+        style: {
+          zIndex: 10000,
+          elevation: 10000,
+        },
       }}
     />
   );

@@ -74,8 +74,7 @@ export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"upd
   const newItem: ReminderItem = { id: genId(), createdAt: now, updatedAt: now, ...item };
   const updated = [...list, newItem];
   await saveReminders(updated);
-  // Optionally schedule
-  try { await scheduleReminderItem(newItem); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return updated;
 }
 
@@ -84,8 +83,7 @@ export async function updateReminder(id: string, patch: Partial<ReminderItem>): 
   const now = new Date().toISOString();
   const updated = list.map(r => r.id === id ? { ...r, ...patch, updatedAt: now } : r);
   await saveReminders(updated);
-  // Re-schedule this reminder
-  try { const r = updated.find(x => x.id === id); if (r) await scheduleReminderItem(r); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return updated;
 }
 
@@ -93,8 +91,7 @@ export async function deleteReminder(id: string): Promise<ReminderItem[]> {
   const list = await getReminders();
   const remaining = list.filter(r => r.id !== id);
   await saveReminders(remaining);
-  // We don't track per-reminder scheduled id here; best-effort: cancel all and re-schedule
-  try { await cancelSymptomReminder(); await scheduleAllReminderItems(remaining); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return remaining;
 }
 
@@ -129,11 +126,11 @@ export async function initializeNotificationsOnce() {
   if (typeof (Notifications as any).setNotificationHandler === 'function') {
     (Notifications as any).setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowAlert: false, // Don't show alert when app is in foreground
         shouldPlaySound: false,
         shouldSetBadge: false,
-        shouldShowBanner: true as any,
-        shouldShowList: true as any,
+        shouldShowBanner: false, // Don't show banner when app is in foreground
+        shouldShowList: false, // Don't add to notification list when app is in foreground
       } as any),
     });
   }
@@ -446,10 +443,16 @@ export async function scheduleReminderItem(item: ReminderItem) {
     if (!ok) return;
 
     if (item.frequency === "hourly") {
-      // Use time interval trigger every 3600 seconds
+      // Calculate seconds until next full hour to avoid immediate notification
+      const now = new Date();
+      const nextHour = new Date(now);
+      nextHour.setHours(now.getHours() + 1, 0, 0, 0);
+      const secondsUntilNextHour = Math.floor((nextHour.getTime() - now.getTime()) / 1000);
+      
+      // Schedule first notification for next full hour, then repeat every hour
       await (Notifications as any).scheduleNotificationAsync({
         content: { title: "Symptom assessment reminder", body: "Hourly reminder.", sound: undefined },
-        trigger: { seconds: 3600, repeats: true } as any,
+        trigger: { seconds: secondsUntilNextHour, repeats: true } as any,
       });
       return;
     }

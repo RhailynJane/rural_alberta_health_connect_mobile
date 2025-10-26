@@ -101,7 +101,8 @@ export default function AppSettings() {
     (async () => {
       const stored = await getReminders();
       setReminders(stored);
-      await scheduleAllReminderItems(stored);
+      // Don't schedule on page load - reminders are already scheduled from when they were created
+      // await scheduleAllReminderItems(stored);
     })();
   }, [currentUser?._id, syncCallback]);
 
@@ -116,7 +117,8 @@ export default function AppSettings() {
         const needUpdate = JSON.stringify(serverReminders) !== JSON.stringify(localItems);
         if (needUpdate) {
           setReminders(serverReminders as ReminderItem[]);
-          await scheduleAllReminderItems(serverReminders as ReminderItem[]);
+          // Don't schedule on sync - reminders are already scheduled from when they were created
+          // await scheduleAllReminderItems(serverReminders as ReminderItem[]);
         }
       } catch {
         // no-op
@@ -197,6 +199,8 @@ export default function AppSettings() {
     await deleteReminder(item.id);
     const updated = await getReminders();
     setReminders(updated);
+    // Re-schedule all remaining reminders
+    await scheduleAllReminderItems(updated);
   };
 
   const handleConfirmTime = async (time: string) => {
@@ -242,6 +246,16 @@ export default function AppSettings() {
 
   const reminderEnabled = reminders.some((r) => r.enabled);
 
+  // Create reminder settings object for notification bell
+  // Use first daily or weekly reminder (skip hourly for the bell settings)
+  const firstNonHourly = reminders.find((r) => r.enabled && r.frequency !== "hourly");
+  const reminderSettings = firstNonHourly ? {
+    enabled: true,
+    time: firstNonHourly.time || "09:00",
+    frequency: firstNonHourly.frequency as "daily" | "weekly",
+    dayOfWeek: firstNonHourly.dayOfWeek,
+  } : null;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
@@ -251,6 +265,9 @@ export default function AppSettings() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminderEnabled}
+          reminderSettings={reminderSettings}
         />
         <ScrollView style={styles.container}>
           {/* Symptom Assessment Reminder */}
@@ -417,10 +434,12 @@ export default function AppSettings() {
               right: 0,
               bottom: 0,
               top: 0,
-              backgroundColor: "rgba(0,0,0,0.5)",
+              backgroundColor: "rgba(0,0,0,0.7)",
               justifyContent: "center",
               alignItems: "center",
               padding: 20,
+              zIndex: 9998,
+              elevation: 9998,
             }}
           >
             <View
@@ -430,6 +449,11 @@ export default function AppSettings() {
                 padding: 24,
                 width: "90%",
                 maxWidth: 500,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 16,
+                elevation: 10,
               }}
             >
               <Text

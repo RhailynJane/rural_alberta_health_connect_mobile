@@ -1,7 +1,7 @@
 import { api } from "@/convex/_generated/api";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
+import { getReminders, ReminderItem } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import StatusModal from "../../components/StatusModal";
@@ -43,6 +44,18 @@ export default function ProfileInformation() {
   const updateMedicalHistoryMutation = useMutation(
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
+
+  // State for reminders (for notification bell)
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+
+  // Load reminders for notification bell
+  useEffect(() => {
+    if (!currentUser?._id) return;
+    (async () => {
+      const stored = await getReminders();
+      setReminders(stored);
+    })();
+  }, [currentUser]);
 
   // State for user data
   const [userData, setUserData] = useState({
@@ -464,6 +477,18 @@ export default function ProfileInformation() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showNotificationBell={true}
+          reminderEnabled={reminders.some((r) => r.enabled)}
+          reminderSettings={
+            reminders.find((r) => r.enabled && r.frequency !== "hourly")
+              ? {
+                  enabled: true,
+                  time: reminders.find((r) => r.enabled && r.frequency !== "hourly")?.time || "09:00",
+                  frequency: reminders.find((r) => r.enabled && r.frequency !== "hourly")?.frequency as "daily" | "weekly",
+                  dayOfWeek: reminders.find((r) => r.enabled && r.frequency !== "hourly")?.dayOfWeek,
+                }
+              : null
+          }
         />
         <ScrollView style={styles.container}>
           {/* Personal Information */}
