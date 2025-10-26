@@ -1,0 +1,68 @@
+{
+  "$schema": "https://demotime.show/demo-time.schema.json",
+  "title": "RAHC - Sprint 2",
+  "description": "what's the formular of a.description",
+  "version": 1,
+  "demos": [
+    {
+      "title": "Intro",
+      "description": "Demo the overview of sprint 2",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/00-intro/00-intro.md"
+        }
+      ]
+    },
+    {
+      "title": "Sprint 2 Overview",
+      "description": "Sprint 2 title and numbers",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/00-intro/01-sprint2-title.md"
+        }
+      ]
+    },
+    {
+      "title": "What We Delivered",
+      "description": "Overview of features and improvements",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/00-intro/02-sprint2-delivered.md"
+        }
+      ]
+    },
+    {
+      "title": "What's Next",
+      "description": "Future plans and timeline",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/00-intro/03-sprint2-next.md"
+        }
+      ]
+    },
+    {
+      "title": "Offline first & WatermelonDB",
+      "description": " - ",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/01-offline-first-watermelondb.md"
+        }
+      ]
+    },
+    {
+      "title": "Mapbox Integration",
+      "description": " - ",
+      "steps": [
+        {
+          "action": "openSlide",
+          "path": ".demo/slides/02-mapbox-address-autocomplete.md"
+        }
+      ]
+    }
+  ]
+}

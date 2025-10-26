@@ -41,6 +41,8 @@ npx convex deploy      # Deploy backend to production
 - **Routing**: Expo Router (file-based) with typed routes enabled
 - **Language**: TypeScript with strict mode
 - **State Management**: Local state + Convex realtime subscriptions
+- **Offline Database**: WatermelonDB v0.28.0 with SQLite adapter for local persistence
+- **Data Sync**: Bidirectional sync between WatermelonDB and Convex (see `/watermelon` directory)
 - **UI**: Custom curved components with react-native-svg
 - **Form Handling**: Formik + Yup validation
 - **ML/AI**:
@@ -53,6 +55,7 @@ npx convex deploy      # Deploy backend to production
 - **Authentication**: Convex Auth with Password provider + Expo SecureStore
 - **Database**: Convex's built-in datastore with realtime sync
 - **Key Schemas**: users, userProfiles, healthEntries
+- **Sync Layer**: `convex/sync.ts` handles WatermelonDB synchronization
 
 ### Navigation Structure
 ```
@@ -73,6 +76,27 @@ npx convex deploy      # Deploy backend to production
   ├── vision-test                # TFLite object detection demo
   └── ai-test                    # AI testing features
 ```
+
+## Offline-First Architecture with WatermelonDB
+
+RAHC implements a robust offline-first architecture critical for rural areas with intermittent connectivity:
+
+### WatermelonDB Structure (`/watermelon` directory)
+- **database/**: SQLite adapter configuration and database initialization
+- **models/**: Local data models mirroring Convex schemas
+- **sync/**: Synchronization logic for bidirectional sync with Convex
+- **hooks/**: React hooks for WatermelonDB operations
+
+### Sync Strategy
+- **Local-First**: All data operations happen on WatermelonDB first
+- **Background Sync**: When online, changes sync bidirectionally with Convex
+- **Conflict Resolution**: Convex `sync.ts` handles merge conflicts
+- **Queued Operations**: Offline mutations queue and execute when connectivity returns
+
+### Key Integration Points
+- `convex/sync.ts`: Server-side sync endpoint
+- `watermelon/sync/`: Client-side sync implementation
+- Network state monitoring via `@react-native-community/netinfo`
 
 ## Convex Backend Architecture
 
@@ -125,11 +149,19 @@ convex/
 EXPO_PUBLIC_CONVEX_URL=<your-convex-deployment-url>
 CONVEX_DEPLOYMENT=<convex-deployment-id>
 FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
+MAPBOX_ACCESS_TOKEN=<mapbox-api-key>
 ```
 
 ### Convex Deployment
 - Development: `npx convex dev` (uses dev deployment from .env.local)
+  - Dev URL: `https://judicious-pony-253.convex.cloud`
 - Production: Configure via Convex dashboard and `npx convex deploy`
+  - Production URL: `https://energized-cormorant-495.convex.cloud`
+
+### Mapbox Setup
+- Required for offline maps and location services
+- Configure in `@rnmapbox/maps` plugin
+- Supports offline tile downloads for rural areas without connectivity
 
 ## Key Configuration Files
 
@@ -147,7 +179,8 @@ FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
 - **React Compiler**: Experimental feature enabled
 - **Typed Routes**: Enabled for type-safe navigation
 - **Platform Support**: iOS (tablet), Android (edge-to-edge), Web (static)
-- **EAS Project ID**: d37c258e-54b3-4dc4-83d2-1422379e9f4a
+- **EAS Project ID**: 15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6
+- **EAS Owner**: rahcapp
 
 ### EAS Build (eas.json)
 ```
@@ -208,18 +241,38 @@ FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
 
 ## Common Development Patterns
 
-### Using Convex Hooks
+### Using WatermelonDB (Offline-First)
+```typescript
+// For offline-first operations, use WatermelonDB hooks
+import { useDatabase } from '@nozbe/watermelondb/hooks';
+import { Q } from '@nozbe/watermelondb';
+
+// Local database operations (work offline)
+const database = useDatabase();
+const healthEntries = await database.get('health_entries')
+  .query(Q.where('user_id', userId))
+  .fetch();
+
+// Changes sync automatically when online
+```
+
+### Using Convex Hooks (Online Operations)
 ```typescript
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-// Query
+// Query (requires connection)
 const profile = useQuery(api.profile.getProfile);
 
-// Mutation
+// Mutation (requires connection)
 const updateInfo = useMutation(api.personalInfoOnboarding.updateInfo);
 await updateInfo({ ageRange: "25-34", location: "Calgary" });
 ```
+
+### Hybrid Pattern (Recommended for Rural Use)
+- Use WatermelonDB for read/write operations requiring offline support
+- Use Convex directly for operations requiring real-time data or server processing (e.g., AI assessment)
+- Background sync handles bidirectional synchronization
 
 ### Session Refresh Pattern
 ```typescript
@@ -273,26 +326,57 @@ Currently no automated testing framework configured. Future considerations:
 ## Development Workflow Best Practices
 
 1. **Start Convex First**: Run `npx convex dev` before starting Expo
-2. **Check Auth State**: Use session refresh context for auth-dependent screens
-3. **Type Safety**: Leverage Convex generated types in `convex/_generated/`
-4. **Path Aliases**: Use `@/*` imports for cleaner code
-5. **Asset Management**: Place ML models in `assets/models/`, images in `assets/images/`
-6. **Screen Options**: Configure in `_layout.tsx` files per route group
+2. **Offline-First Mindset**: Design features to work offline using WatermelonDB, then sync when online
+3. **Check Auth State**: Use session refresh context for auth-dependent screens
+4. **Type Safety**: Leverage Convex generated types in `convex/_generated/`
+5. **Path Aliases**: Use `@/*` imports for cleaner code
+6. **Asset Management**: Place ML models in `assets/models/`, images in `assets/images/`
+7. **Screen Options**: Configure in `_layout.tsx` files per route group
+8. **Test Offline**: Regularly test with airplane mode to ensure offline functionality works
 
 ## Known Issues & Limitations
 
 - AI assessment requires active internet connection (Gemini API)
-- TFLite integration is demo/foundation (not yet integrated with health assessment)
+- TFLite integration is demo/foundation (vision-test screen shows capability but not integrated with health assessment)
 - ExecutorCH integration is in progress
-- No offline-first sync strategy implemented yet
-- Testing infrastructure needs setup
+- WatermelonDB sync implementation in development (offline-first capability exists but sync layer needs refinement)
+- Testing infrastructure needs setup (no Jest, Detox, or automated tests currently configured)
+- Location services require Mapbox API key configuration
+
+## Troubleshooting & Common Issues
+
+### Build Issues
+- **Metro bundler cache**: Run `npx expo start -c` to clear cache
+- **Native modules**: Run `npx expo prebuild --clean` to regenerate native folders
+- **Android build failures**: Ensure Android SDK 26+ and check `android/` for gradle issues
+
+### WatermelonDB Issues
+- **Database not initialized**: Check `watermelon/database/` initialization
+- **Sync conflicts**: Review `convex/sync.ts` and `watermelon/sync/` logs
+- **Schema mismatches**: Ensure WatermelonDB models match Convex schemas
+
+### Convex Connection Issues
+- **Auth failures**: Verify `.env.local` has correct `EXPO_PUBLIC_CONVEX_URL`
+- **Deployment mismatch**: Ensure dev uses `judicious-pony-253`, prod uses `energized-cormorant-495`
+- **Session expiry**: Use session refresh context (`useSessionRefresh`)
+
+### Camera/Vision Issues
+- **Permissions**: Check camera permissions in `app.json` and device settings
+- **TFLite model not loading**: Verify `.tflite` files in `assets/models/`
+- **Vision Camera errors**: Ensure `react-native-vision-camera` native setup is correct
+
+### Location/Mapbox Issues
+- **Maps not loading**: Verify `MAPBOX_ACCESS_TOKEN` in environment
+- **Offline maps**: Ensure tiles are downloaded for target regions
+- **Permission errors**: Check location permissions in `app.json`
 
 ## Future Development Areas
 
 - Complete ExecutorCH integration for edge AI models
 - Integrate vision analysis with symptom assessment
-- Implement offline-first data sync
+- Complete WatermelonDB bidirectional sync with Convex
 - Add push notifications for health reminders
 - Enhance location-based healthcare facility search
-- Build comprehensive testing suite
+- Build comprehensive testing suite (Jest + Detox)
 - Add accessibility improvements (screen reader support, etc.)
+- Implement proper error boundaries and crash reporting

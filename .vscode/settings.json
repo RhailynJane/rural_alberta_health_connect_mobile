@@ -20,5 +20,8 @@
     "**/node_modules/**",
     "**/.meteor/**",
     "**/build/**"
-  ]
+  ],
+  "demoTime.insertTypingMode": "character-by-character",
+  "demoTime.api.enabled": true,
+  "demoTime.defaultFileType": "json"
 }
