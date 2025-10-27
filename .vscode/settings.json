@@ -3,5 +3,22 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+      "default": true
+    }
+  ],
+  "java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+  "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+  "java.import.gradle.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
+  "java.import.gradle.enabled": true,
+  "java.autobuild.enabled": true,
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.meteor/**",
+    "**/build/**"
+  ]
 }

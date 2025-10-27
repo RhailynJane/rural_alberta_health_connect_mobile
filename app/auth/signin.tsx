@@ -4,21 +4,20 @@ import { useRouter } from "expo-router";
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from 'yup';
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 
 // Validation schema
@@ -197,29 +196,13 @@ export default function SignIn() {
       </CurvedBackground>
 
       {/* Error Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
+      <StatusModal
         visible={errorModalVisible}
-        onRequestClose={() => setErrorModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={[styles.modalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Sign In Error
-            </Text>
-            <Text style={[styles.modalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {errorMessage}
-            </Text>
-            <Pressable
-              style={styles.modalButton}
-              onPress={() => setErrorModalVisible(false)}
-            >
-              <Text style={[styles.modalButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>OK</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+        type="error"
+        title="Sign In Error"
+        message={errorMessage}
+        onClose={() => setErrorModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

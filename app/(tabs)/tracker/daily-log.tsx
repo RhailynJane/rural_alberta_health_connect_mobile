@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+ 
+import { Q } from "@nozbe/watermelondb";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ScrollView,
     StyleSheet,
@@ -13,10 +14,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 const styles = StyleSheet.create({
   contentArea: {
@@ -182,8 +186,11 @@ const styles = StyleSheet.create({
 });
 
 export default function DailyLog() {
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const database = useWatermelonDatabase();
+  const { isOnline } = useNetworkStatus();
+  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
+  const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
 
   // Get today's date in local timezone - computed fresh on each render
   const now = new Date();
@@ -192,14 +199,55 @@ export default function DailyLog() {
   const day = String(now.getDate()).padStart(2, "0");
   const todayLocalDate = `${year}-${month}-${day}`;
 
-  const todaysEntries = useQuery(
+  // Online query
+  const todaysEntriesOnline = useQuery(
     api.healthEntries.getTodaysEntries,
-    currentUser?._id
+    currentUser?._id && isOnline
       ? {
           userId: currentUser._id,
           localDate: todayLocalDate,
         }
       : "skip"
+  );
+
+  // Offline query from WatermelonDB
+  useEffect(() => {
+    if (!isOnline) {
+      const fetchOfflineEntries = async () => {
+        try {
+          const collection = database.get("health_entries");
+          const entries = await collection
+            .query(
+              Q.where("local_date", todayLocalDate),
+              Q.sortBy("timestamp", Q.desc)
+            )
+            .fetch();
+
+          // Map WatermelonDB entries to match Convex format
+          const mapped = entries.map((entry: any) => ({
+            _id: entry.id,
+            symptoms: entry.symptoms || "",
+            severity: entry.severity || 0,
+            category: entry.category || "",
+            notes: entry.notes || "",
+            timestamp: entry.timestamp || Date.now(),
+            createdBy: entry.createdBy || "User",
+            type: entry.type || "manual_entry",
+          }));
+          setOfflineEntries(mapped);
+        } catch (error) {
+          console.error("Error fetching offline entries:", error);
+          setOfflineEntries([]);
+        }
+      };
+      fetchOfflineEntries();
+    }
+  }, [isOnline, todayLocalDate, database]);
+
+  // Use online or offline data
+  const todaysEntries = useMemo(
+    () => (isOnline ? todaysEntriesOnline : offlineEntries),
+    [isOnline, todaysEntriesOnline, offlineEntries]
   );
 
   // Filter entries based on search query (case-insensitive)
@@ -213,10 +261,6 @@ export default function DailyLog() {
       entry.createdBy.toLowerCase().includes(query)
     );
   });
-
-  const handleAddLogEntry = () => {
-    router.push("/tracker/add-health-entry");
-  };
 
   const handleViewEntryDetails = (entryId: string) => {
     router.push({ pathname: "/tracker/log-details", params: { entryId } });
@@ -258,6 +302,7 @@ export default function DailyLog() {
           bottomSpacing={0}
           showNotificationBell={true}
         />
+        <DueReminderBanner topOffset={120} />
 
         <View style={styles.contentSection}>
           <View

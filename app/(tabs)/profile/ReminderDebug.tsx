@@ -55,6 +55,32 @@ export default function ReminderDebug() {
       <Text selectable style={styles.value}>{JSON.stringify(convexSettings, null, 2)}</Text>
       <Text style={styles.label}>Convex Reminders (all):</Text>
       <Text selectable style={styles.value}>{JSON.stringify(convexReminders, null, 2)}</Text>
+      <Button title="Request Permission" onPress={async () => {
+        try { await Notifications.requestPermissionsAsync(); } catch {}
+      }} />
+      <Button title="Send Test Notification Now" onPress={async () => {
+        try {
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'Default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+            sound: 'default',
+          });
+        } catch {}
+        try {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Test notification',
+              body: 'If you see this, banners are working ✅',
+              sound: 'default',
+              priority: 'max',
+              data: { type: 'test', timestamp: Date.now() },
+            },
+            trigger: null,
+          });
+        } catch (e) { console.log('Failed to send test notification', e); }
+      }} />
       <Button title="Reschedule All Reminders" onPress={() => scheduleAllReminderItems()} />
     </ScrollView>
   );

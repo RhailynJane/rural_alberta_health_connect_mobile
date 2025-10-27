@@ -1,21 +1,23 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-  ALBERTA_REGIONS,
-  DEFAULT_MAP_CONFIG,
-  OFFLINE_PACK_CONFIG,
+    ALBERTA_REGIONS,
+    DEFAULT_MAP_CONFIG,
+    OFFLINE_PACK_CONFIG,
 } from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
+import StatusModal from './StatusModal';
 
 interface OfflineRegion {
   id: string;
@@ -40,6 +42,7 @@ export default function OfflineMapDownloader({
   const [regions, setRegions] = useState<OfflineRegion[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [verifying, setVerifying] = useState<boolean>(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -56,13 +59,17 @@ export default function OfflineMapDownloader({
   const loadOfflineRegions = async () => {
     try {
       const offlinePacks = await Mapbox.offlineManager.getPacks();
-      const downloadedIds = offlinePacks.map((pack) => pack.name);
+      const downloadedIds = new Set<string>((offlinePacks || []).map((pack: any) => pack?.name).filter(Boolean));
+      // Merge with locally persisted record to avoid false negatives when the pack list momentarily fails
+      const persistedRaw = await AsyncStorage.getItem('offline_regions_installed');
+      const persisted: string[] = persistedRaw ? JSON.parse(persistedRaw) : [];
+      for (const id of persisted) downloadedIds.add(id);
 
       const regionStatus = ALBERTA_REGIONS.map((region) => ({
         id: region.id,
         name: region.name,
-        downloaded: downloadedIds.includes(region.id),
-        progress: downloadedIds.includes(region.id) ? 100 : 0,
+        downloaded: downloadedIds.has(region.id),
+        progress: downloadedIds.has(region.id) ? 100 : 0,
         size: region.estimatedSize || '10-50MB',
         description: region.description || '',
       }));
@@ -74,6 +81,71 @@ export default function OfflineMapDownloader({
       setModalMessage('Failed to load offline regions');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
+    }
+  };
+
+  const verifyPacks = async () => {
+    try {
+      setVerifying(true);
+      // Load previously persisted list as baseline
+      const persistedRaw = await AsyncStorage.getItem('offline_regions_installed');
+      const persisted: string[] = persistedRaw ? JSON.parse(persistedRaw) : [];
+
+      const packs = await Mapbox.offlineManager.getPacks();
+      const names = Array.isArray(packs) ? packs.map((p: any) => p?.name).filter(Boolean) : null;
+      const validIds = new Set(ALBERTA_REGIONS.map(r => r.id));
+
+      if (!names) {
+        // Inconclusive result (API not available). Keep current persisted state.
+        await loadOfflineRegions();
+        setModalTitle('Verification inconclusive');
+        setModalMessage('Could not fetch installed packs right now. Kept your current installed list. Try again later.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+
+      if (names.length === 0) {
+        if (persisted.length > 0) {
+          // Don’t aggressively clear if Mapbox returns empty; keep previous state
+          await loadOfflineRegions();
+          setModalTitle('No packs detected');
+          setModalMessage('No offline packs were reported at this time. Your previous installed list was kept to avoid accidental clearing.');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        } else {
+          // Persist empty if we already had none
+          await AsyncStorage.setItem('offline_regions_installed', JSON.stringify([]));
+          await loadOfflineRegions();
+          setModalTitle('Verified');
+          setModalMessage('No offline packs installed.');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        }
+      }
+
+      // Merge strategy: union of persisted + what Mapbox reports (both filtered to valid IDs)
+      // This preserves your existing downloads even if Mapbox doesn't report them all
+      const fromMapbox = names.filter((id: string) => validIds.has(id));
+      const reconciledSet = new Set([...persisted, ...fromMapbox].filter(id => validIds.has(id)));
+      const reconciled = Array.from(reconciledSet);
+      
+      await AsyncStorage.setItem('offline_regions_installed', JSON.stringify(reconciled));
+      await loadOfflineRegions();
+      setModalTitle('Verified');
+      setModalMessage(`Reconciled offline packs. Total installed: ${reconciled.length}.\n\nMapbox reported: ${fromMapbox.length} | Previously tracked: ${persisted.length}`);
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } catch (e) {
+      console.error('Error verifying packs:', e);
+      setModalTitle('Error');
+      setModalMessage('Failed to verify offline packs.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -103,13 +175,27 @@ export default function OfflineMapDownloader({
         maxZoom: OFFLINE_PACK_CONFIG.maxZoom,
       };
 
+      // If pack already exists, treat as success and avoid duplicate downloads
+      try {
+        const packs = await Mapbox.offlineManager.getPacks();
+        const exists = (packs || []).some((p: any) => p?.name === regionId);
+        if (exists) {
+          await persistInstalled(regionId, true);
+          setRegions((prev) => prev.map((r) => r.id === regionId ? { ...r, downloaded: true, progress: 100 } : r));
+          setModalTitle('Already downloaded');
+          setModalMessage(`${region.name} is already available offline.`);
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        }
+      } catch {}
+
       await Mapbox.offlineManager.createPack(
         packOptions as any,
         (progressUpdate: any) => {
-          const progress =
-            (progressUpdate.completedResourceCount /
-              progressUpdate.requiredResourceCount) *
-            100;
+          const completed = progressUpdate?.completedResourceCount ?? 0;
+          const required = progressUpdate?.requiredResourceCount ?? 0;
+          const progress = required > 0 ? (completed / required) * 100 : 0;
           setDownloadProgress(progress);
           
           // Update region status
@@ -127,6 +213,7 @@ export default function OfflineMapDownloader({
           r.id === regionId ? { ...r, downloaded: true, progress: 100 } : r
         )
       );
+      await persistInstalled(regionId, true);
 
       setModalTitle('Success');
       setModalMessage(`${region.name} has been downloaded for offline use!`);
@@ -140,8 +227,18 @@ export default function OfflineMapDownloader({
           onRegionDownloaded({ latitude: lat, longitude: lon, zoom: region.zoom ?? 10 });
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error downloading region:', error);
+      // If the pack already exists, treat as success
+      const msg = String(error?.message || error || '');
+      if (/exists/i.test(msg)) {
+        await persistInstalled(regionId, true);
+        setRegions((prev) => prev.map((r) => r.id === regionId ? { ...r, downloaded: true, progress: 100 } : r));
+        setModalTitle('Already downloaded');
+        setModalMessage(`${region.name} is already available offline.`);
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+      } else {
       
       // Reset region progress on error
       setRegions((prev) =>
@@ -154,6 +251,7 @@ export default function OfflineMapDownloader({
       setModalMessage('Failed to download map region. Please try again.');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
+      }
     } finally {
       setDownloading(null);
       setDownloadProgress(0);
@@ -174,6 +272,7 @@ export default function OfflineMapDownloader({
           setModalVisible(false);
           try {
             await Mapbox.offlineManager.deletePack(regionId);
+            await persistInstalled(regionId, false);
             setRegions((prev) =>
               prev.map((r) =>
                 r.id === regionId
@@ -220,6 +319,24 @@ export default function OfflineMapDownloader({
             <Text style={styles.subtitle}>
               Download maps for offline use in areas with poor connectivity
             </Text>
+
+            {/* Actions */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[styles.verifyButton, verifying && styles.verifyButtonDisabled]}
+                onPress={verifyPacks}
+                disabled={verifying}
+              >
+                {verifying ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <Icon name="refresh" size={16} color={COLORS.primary} />
+                )}
+                <Text style={styles.verifyButtonText}>
+                  {verifying ? 'Verifying…' : 'Verify packs'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Regions List */}
             <ScrollView style={styles.regionsList}>
@@ -283,60 +400,35 @@ export default function OfflineMapDownloader({
               <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
               <Text style={styles.footerText}>
                 Each region is approximately 10-50 MB. Download on WiFi recommended.
+                {'\n'}{'\n'}Downloaded tiles are used automatically when you are offline on the Emergency screen. Clinic markers come from your last saved results, and you can still view them on the map without connectivity. Opening turn-by-turn directions may require an internet connection unless your maps app has cached routes.
               </Text>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Alert Modal - Separate from main modal to avoid nesting issues */}
-      <Modal
+      {/* StatusModal for alerts */}
+      <StatusModal
         visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
-            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
-              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
-                const isSecondary = b.variant === 'secondary';
-                const isDestructive = b.variant === 'destructive';
-                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
-                const textColor = isSecondary ? COLORS.primary : COLORS.white;
-                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={b.onPress}
-                    style={{
-                      backgroundColor,
-                      borderRadius: 8,
-                      paddingVertical: 10,
-                      alignItems: 'center',
-                      flex: modalButtons.length > 1 ? 1 : undefined,
-                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
-                      ...borderStyle as any,
-                    }}
-                  >
-                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
+        type={modalTitle === 'Success' ? 'success' : modalTitle === 'Error' ? 'error' : 'confirm'}
+        title={modalTitle}
+        message={modalMessage}
+        onClose={() => setModalVisible(false)}
+        buttons={modalButtons.length > 0 ? modalButtons : undefined}
+      />
     </>
   );
+}
+
+// Persist installed flag in AsyncStorage to make detection resilient across sessions/dev reloads
+async function persistInstalled(regionId: string, installed: boolean) {
+  try {
+    const raw = await AsyncStorage.getItem('offline_regions_installed');
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    const set = new Set<string>(list);
+    if (installed) set.add(regionId); else set.delete(regionId);
+    await AsyncStorage.setItem('offline_regions_installed', JSON.stringify(Array.from(set)));
+  } catch {}
 }
 
 const styles = StyleSheet.create({
@@ -374,6 +466,32 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
     paddingHorizontal: 20,
     marginBottom: 20,
+  },
+  actionsRow: {
+    paddingHorizontal: 20,
+    marginBottom: 8,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  verifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#cfe3ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  verifyButtonDisabled: {
+    opacity: 0.7,
+  },
+  verifyButtonText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+    color: COLORS.primary,
   },
   regionsList: {
     paddingHorizontal: 20,

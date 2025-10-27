@@ -1,142 +1,11 @@
+/* Deprecated: vision-test removed. File contents commented out.
 // Robust LLM output cleaning: remove markdown, echoed prompt, and fallback if cleaning strips all content
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-    ActivityIndicator,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
-import {
-    LLAMA3_2_1B_SPINQUANT,
-    Message,
-    useLLM,
-} from "react-native-executorch";
-import { SafeAreaView } from "react-native-safe-area-context";
-import BottomNavigation from "../../components/bottomNavigation";
-import CurvedBackground from "../../components/curvedBackground";
-import CurvedHeader from "../../components/curvedHeader";
-import { FONTS } from "../../constants/constants";
-import { useVisionSession } from "./VisionSessionContext";
-function cleanLLMResponse(text: string): string {
-  // Remove echoed prompt, markdown, and extra whitespace
-  let cleaned = text
-    .replace(/```[\s\S]*?```/g, "") // Remove code blocks
-    .replace(/\*\*|__|\*|#/g, "") // Remove markdown bold/italic/headers
-    .replace(/^(Prompt:|System:)[\s\S]*?\n/gi, "") // Remove echoed prompt/system
-    .replace(/\n{3,}/g, "\n\n") // Collapse multiple newlines
-    .replace(/\s+$/g, "") // Trim trailing whitespace
-    .trim();
-  
-  // If cleaning strips everything but raw is not empty, fallback to raw
-  if (!cleaned && text.trim().length > 0) {
-    return text.trim();
-  }
-  return cleaned;
+// Deprecated: vision-test removed. Keeping stub to avoid route exposure.
+export default function ReviewScreen() {
+  return null;
 }
-
-// Medical AI System Prompt (detailed clinical context from backend prompt)
-const MEDICAL_SYSTEM_PROMPT = `You are an emergency medicine physician in rural Alberta providing medical triage.
-
-Your job: Assess the patient's condition and provide structured medical guidance.
-
-Rules:
-- Be direct and clinical
-- Use plain language
-- Follow the exact output format requested
-- Do NOT repeat the user's prompt or instructions
-- Start your response immediately with "SUMMARY:"
-
-Assess burns, wounds, injuries, rashes, infections, trauma, and any visible medical conditions.`;
-
-function getDurationDescription(duration: string): string {
-  const d = (duration || "").trim();
-  if (!d) return "Duration not specified.";
-  return d;
-}
-
-function extractSymptomsFromDescription(desc: string): string[] {
-  const text = (desc || "").toLowerCase();
-  const keywords = [
-    "pain",
-    "swelling",
-    "redness",
-    "bleeding",
-    "itching",
-    "burning",
-    "numbness",
-    "tingling",
-    "fever",
-    "pus",
-    "tenderness",
-    "bruising",
-  ];
-  const found = keywords.filter((k) => text.includes(k));
-  return found.slice(0, 5);
-}
-
-// Format detections for LLM prompt
-function formatDetectionsForLLM(
-  detections:
-    | {
-        label: string;
-        confidence: number;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }[]
-    | null
-): string {
-  if (!detections || detections.length === 0) {
-    return "No objects detected in the captured image";
-  }
-  return detections
-    .map((d) => `${d.label} (${Math.round(d.confidence * 100)}% confidence)`)
-    .join(", ");
-}
-
-// Render assessment as separate cards: Summary, Visual Assessment, First Aid, Red Flags, What's Next
-function renderAssessmentCards(text: string | null) {
-  if (!text) return null;
-
-  const lines = text.split(/\r?\n/).map((l) => l.trim());
-  type SectionKey =
-    | "SUMMARY"
-    | "VISUAL ASSESSMENT"
-    | "FIRST AID"
-    | "RED FLAGS"
-    | "WHAT NEXT"
-    | "OTHER";
-  const wantedOrder: SectionKey[] = [
-    "SUMMARY",
-    "VISUAL ASSESSMENT",
-    "FIRST AID",
-    "RED FLAGS",
-    "WHAT NEXT",
-  ];
-  const sections: Record<SectionKey, string[]> = {
-    SUMMARY: [],
-    "VISUAL ASSESSMENT": [],
-    "FIRST AID": [],
-    "RED FLAGS": [],
-    "WHAT NEXT": [],
-    OTHER: [],
-  };
-  let current: SectionKey = "SUMMARY";
-
-  const isHeader = (l: string): SectionKey | null => {
-    const lower = l.toLowerCase().trim();
-
-    if (/^summary\s*:?$/i.test(lower)) {
       return "SUMMARY";
     }
     if (/^visual\s+assessment\s*:?$/i.test(lower)) {
@@ -234,6 +103,7 @@ export default function VisionReviewScreen() {
   const [userDescription, setUserDescription] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [llmResponse, setLlmResponse] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(true);
 
   const { capturedImage, capturedDetections, frameDimensions, reset } =
     useVisionSession();
@@ -246,6 +116,7 @@ export default function VisionReviewScreen() {
   // Configure LLM for longer responses
   useEffect(() => {
     if (llm.isReady) {
+      setIsDownloading(false);
       llm.configure({
         generationConfig: {
           outputTokenBatchSize: 100, // Generate more tokens per batch
@@ -271,7 +142,9 @@ export default function VisionReviewScreen() {
   }, [llm]);
 
   const handleStartOver = () => {
-    if (llm.isGenerating || isAnalyzing) {
+    // Prevent start over during model download or generation
+    if (isDownloading || llm.isGenerating || isAnalyzing) {
+      console.log("Cannot start over: Model is downloading or generating");
       return;
     }
     reset();
@@ -665,18 +538,26 @@ Begin your response with "SUMMARY:" and nothing else.`;
 
                 <View style={styles.actionButtons}>
                   <TouchableOpacity
-                    style={styles.resetButton}
+                    style={[
+                      styles.resetButton,
+                      (isDownloading || llm.isGenerating || isAnalyzing) && styles.resetButtonDisabled
+                    ]}
                     onPress={handleStartOver}
-                    disabled={llm.isGenerating || isAnalyzing}
+                    disabled={isDownloading || llm.isGenerating || isAnalyzing}
                   >
-                    <Ionicons name="trash-outline" size={20} color="#DC3545" />
+                    <Ionicons 
+                      name="trash-outline" 
+                      size={20} 
+                      color={isDownloading || llm.isGenerating || isAnalyzing ? "#999" : "#DC3545"} 
+                    />
                     <Text
                       style={[
                         styles.resetButtonText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
+                        (isDownloading || llm.isGenerating || isAnalyzing) && { color: "#999" }
                       ]}
                     >
-                      Start Over
+                      {isDownloading ? "Loading Model..." : "Start Over"}
                     </Text>
                   </TouchableOpacity>
 
@@ -779,17 +660,22 @@ Begin your response with "SUMMARY:" and nothing else.`;
                       </Text>
                     </View>
                     <TouchableOpacity
-                      style={styles.newAssessmentButton}
+                      style={[
+                        styles.newAssessmentButton,
+                        isDownloading && styles.newAssessmentButtonDisabled
+                      ]}
                       onPress={handleStartOver}
+                      disabled={isDownloading}
                     >
-                      <Ionicons name="refresh" size={20} color="#2A7DE1" />
+                      <Ionicons name="refresh" size={20} color={isDownloading ? "#999" : "#2A7DE1"} />
                       <Text
                         style={[
                           styles.newAssessmentButtonText,
                           { fontFamily: FONTS.BarlowSemiCondensed },
+                          isDownloading && { color: "#999" }
                         ]}
                       >
-                        New Assessment
+                        {isDownloading ? "Loading Model..." : "New Assessment"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -940,6 +826,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
   },
+  resetButtonDisabled: {
+    borderColor: "#CCC",
+    backgroundColor: "#F5F5F5",
+  },
   resetButtonText: { color: "#DC3545", fontSize: 16, fontWeight: "600" },
   analyzeButton: {
     flex: 2,
@@ -1051,9 +941,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
+  newAssessmentButtonDisabled: {
+    borderColor: "#CCC",
+    backgroundColor: "#F5F5F5",
+  },
   newAssessmentButtonText: {
     color: "#2A7DE1",
     fontSize: 16,
     fontWeight: "600",
   },
 });
+*/
+export default function ReviewScreen(){ return null; }

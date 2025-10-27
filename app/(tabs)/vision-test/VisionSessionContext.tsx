@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+// Deprecated: vision-test removed. Provide no-op stubs to satisfy any lingering imports.
+import React from 'react';
 
 export type Detection = {
   label: string;
@@ -9,48 +10,16 @@ export type Detection = {
   height: number;
 };
 
-type FrameDim = { width: number; height: number };
+export const VisionSessionProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
+  <>{children}</>
+);
 
-type VisionSessionState = {
-  capturedImage: string | null;
-  capturedDetections: Detection[] | null;
-  frameDimensions: FrameDim;
-  setCapturedImage: (p: string | null) => void;
-  setCapturedDetections: (d: Detection[] | null) => void;
-  setFrameDimensions: (fd: FrameDim) => void;
-  reset: () => void;
-};
-
-const VisionSessionContext = createContext<VisionSessionState | undefined>(undefined);
-
-export const VisionSessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [capturedDetections, setCapturedDetections] = useState<Detection[] | null>(null);
-  const [frameDimensions, setFrameDimensions] = useState<FrameDim>({ width: 0, height: 0 });
-
-  const reset = useCallback(() => {
-    setCapturedImage(null);
-    setCapturedDetections(null);
-    setFrameDimensions({ width: 0, height: 0 });
-  }, []);
-
-  const value = useMemo(() => ({
-    capturedImage,
-    capturedDetections,
-    frameDimensions,
-    setCapturedImage,
-    setCapturedDetections,
-    setFrameDimensions,
-    reset,
-  }), [capturedImage, capturedDetections, frameDimensions, reset]);
-
-  return (
-    <VisionSessionContext.Provider value={value}>{children}</VisionSessionContext.Provider>
-  );
-};
-
-export const useVisionSession = () => {
-  const ctx = useContext(VisionSessionContext);
-  if (!ctx) throw new Error('useVisionSession must be used within VisionSessionProvider');
-  return ctx;
-};
+export const useVisionSession = () => ({
+  capturedImage: null as string | null,
+  capturedDetections: [] as Detection[],
+  frameDimensions: { width: 0, height: 0 },
+  setCapturedImage: (_p: string | null) => {},
+  setCapturedDetections: (_d: Detection[] | null) => {},
+  setFrameDimensions: (_fd: { width: number; height: number }) => {},
+  reset: () => {},
+});

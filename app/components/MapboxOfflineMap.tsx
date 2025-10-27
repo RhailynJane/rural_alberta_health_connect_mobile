@@ -13,6 +13,7 @@ import {
     MAPBOX_ACCESS_TOKEN,
 } from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 // Initialize Mapbox
 Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
@@ -45,6 +46,17 @@ function MapboxOfflineMapComponent({
   const mapRef = useRef<Mapbox.MapView>(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [followUserLocation, setFollowUserLocation] = useState(true);
+  const { isOnline } = useNetworkStatus();
+
+  // Set map as ready after timeout if offline (tiles may be cached)
+  useEffect(() => {
+    if (!isOnline) {
+      const timer = setTimeout(() => {
+        setIsMapReady(true);
+      }, 3000); // Wait 3 seconds then assume offline tiles loaded
+      return () => clearTimeout(timer);
+    }
+  }, [isOnline]);
 
   // Filter clinics to only those with valid numeric coordinates
   const sanitizedClinics = (clinics || []).filter((c) =>
@@ -181,8 +193,10 @@ function MapboxOfflineMapComponent({
       {/* Loading Indicator */}
       {!isMapReady && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <ActivityIndicator size="large" color="#2A7DE1" />
+          <Text style={styles.loadingText}>
+            {isOnline ? 'Loading map...' : 'Loading offline map...'}
+          </Text>
         </View>
       )}
 

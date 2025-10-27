@@ -33,6 +33,9 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+# Ignore all env variants (development, production, etc.)
+.env.*
+!
 !.env.example
 
 # typescript
