@@ -1,40 +1,44 @@
 import { api } from "@/convex/_generated/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import {
-    addReminder,
-    deleteReminder,
-    dismissAllNotifications,
-    forceRescheduleAllReminders,
-    getReminders,
-    ReminderItem,
-    requestNotificationPermissions,
-    scheduleAllReminderItems,
-    setConvexSyncCallback,
-    setReminderUserKey,
-    updateReminder,
+  addReminder,
+  deleteReminder,
+  dismissAllNotifications,
+  getReminders,
+  ReminderItem,
+  requestNotificationPermissions,
+  scheduleAllReminderItems,
+  setConvexSyncCallback,
+  setReminderUserKey,
+  updateReminder
 } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import TimePickerModal from "../../components/TimePickerModal";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 export default function AppSettings() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
+  const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
 
   const currentUser = useQuery(
     api.users.getCurrentUser,
@@ -76,12 +80,25 @@ export default function AppSettings() {
   const daysOfWeek: ("Sun"|"Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat")[] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const [weeklyTimes, setWeeklyTimes] = useState<Record<string, string | null>>({ Sun:null, Mon:null, Tue:null, Wed:null, Thu:null, Fri:null, Sat:null });
   const [weeklyEditingDay, setWeeklyEditingDay] = useState<null | (typeof daysOfWeek)[number]>(null);
-  const [isRescheduling, setIsRescheduling] = useState(false);
 
-  // Load location services status
+  // Load cached location status immediately for offline UX
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
+        if (v !== null) {
+          setLocationServicesEnabled(v === "1");
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // Apply server location status when available and persist cache
   useEffect(() => {
     if (locationStatus !== undefined) {
-      setLocationServicesEnabled(locationStatus.locationServicesEnabled || false);
+      const val = !!locationStatus.locationServicesEnabled;
+      setLocationServicesEnabled(val);
+      AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, val ? "1" : "0").catch(() => {});
     }
   }, [locationStatus]);
 
@@ -242,12 +259,27 @@ export default function AppSettings() {
 
   const handleToggleLocationServices = async (value: boolean) => {
     setLocationServicesEnabled(value);
+    // Persist locally for offline access
+    try { await AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, value ? "1" : "0"); } catch {}
     try {
       await toggleLocationServices({ enabled: value });
     } catch (error) {
       console.error("Failed to update location services:", error);
     }
   };
+
+  // Best-effort background sync: when back online and server differs, push local setting
+  useEffect(() => {
+    if (!isAuthenticated || isLoading) return;
+    if (!isOnline) return;
+    if (locationStatus === undefined) return;
+    const serverVal = !!locationStatus.locationServicesEnabled;
+    if (serverVal !== locationServicesEnabled) {
+      toggleLocationServices({ enabled: locationServicesEnabled }).catch((e) =>
+        console.error("Location setting resync failed:", e)
+      );
+    }
+  }, [isOnline, locationServicesEnabled, locationStatus, isAuthenticated, isLoading, toggleLocationServices]);
 
   const reminderEnabled = reminders.some((r) => r.enabled);
 
@@ -274,6 +306,7 @@ export default function AppSettings() {
           reminderEnabled={reminderEnabled}
           reminderSettings={reminderSettings}
         />
+        <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container}>
           {/* Symptom Assessment Reminder */}
           <View style={styles.card}>
@@ -333,30 +366,6 @@ export default function AppSettings() {
                 >
                   <Icon name="add-circle" size={20} color={COLORS.primary} />
                   <Text style={styles.addReminderText}>Add Reminder</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.addReminderButton, { marginTop: 8, backgroundColor: '#eef6ff' }]}
-                  onPress={async () => {
-                    if (isRescheduling) return;
-                    try {
-                      setIsRescheduling(true);
-                      const count = await forceRescheduleAllReminders();
-                      Alert.alert(
-                        'Reminders rescheduled',
-                        `Re-applied ${count} reminder(s) to the high-importance channel.`
-                      );
-                    } catch {
-                      Alert.alert('Error', 'Failed to reschedule reminders.');
-                    } finally {
-                      setIsRescheduling(false);
-                    }
-                  }}
-                >
-                  <Icon name="refresh" size={20} color={COLORS.primary} />
-                  <Text style={styles.addReminderText}>
-                    {isRescheduling ? 'Rescheduling…' : 'Force re-schedule reminders'}
-                  </Text>
                 </TouchableOpacity>
               </>
             )}

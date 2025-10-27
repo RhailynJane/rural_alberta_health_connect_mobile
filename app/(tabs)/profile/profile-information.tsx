@@ -3,12 +3,12 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -16,6 +16,7 @@ import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import { COLORS, FONTS } from "../../constants/constants";
 import { normalizeNanpToE164, savePhoneSecurely } from "../../utils/securePhone";
@@ -490,6 +491,7 @@ export default function ProfileInformation() {
               : null
           }
         />
+        <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container}>
           {/* Personal Information */}
           <View style={styles.card}>

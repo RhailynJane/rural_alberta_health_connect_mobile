@@ -77,8 +77,8 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
       setUnread(false);
     });
 
-    // Poll every minute to check if it's reminder time
-    const interval = setInterval(checkReminder, 60000);
+  // Poll more frequently to reduce perceived delay
+  const interval = setInterval(checkReminder, 15000);
 
     return () => {
       clearInterval(interval);

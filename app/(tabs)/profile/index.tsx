@@ -19,6 +19,7 @@ import { ReminderItem, setConvexSyncCallback, setReminderUserKey } from "../../_
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
@@ -960,6 +961,7 @@ export default function Profile() {
             dayOfWeek: userData.reminderDayOfWeek,
           }}
         />
+        <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container}>
           {/* Privacy Notice */}
           <View style={styles.card}>

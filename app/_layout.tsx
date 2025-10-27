@@ -7,7 +7,7 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { database } from '../watermelon/database';
-import { initializeNotificationsOnce } from "./_utils/notifications";
+import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
 import {
@@ -81,6 +81,8 @@ export default function RootLayout() {
   useEffect(() => {
     // Ensure local notifications are initialized (channels, handlers, migration)
     initializeNotificationsOnce().catch(() => {});
+    // Proactively request OS notification permission on first launch
+    requestNotificationPermissions().catch(() => {});
     // Configure foreground notification behavior
     configureForegroundNotifications();
 
