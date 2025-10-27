@@ -59,17 +59,22 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     }
   }, [visible, fadeAnim]);
 
-  const handlePress = () => {
-    router.push('/(tabs)/tracker');
-  };
-
-  const handleDismiss = async () => {
+  const handleDismiss = async (e?: any) => {
+    // Prevent event bubbling
+    if (e) {
+      e.stopPropagation();
+    }
     try {
       await markBellRead();
       NotificationBellEvent.emit('read');
     } catch (error) {
       console.error('Error marking reminder as read:', error);
     }
+  };
+
+  const handleBannerPress = () => {
+    // Navigate to tracker when banner body is clicked
+    router.push('/(tabs)/tracker');
   };
 
   if (!visible) return null;
@@ -95,20 +100,20 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
         },
       ]}
     >
-      <TouchableOpacity 
-        style={styles.banner}
-        onPress={handlePress}
-        activeOpacity={0.9}
-      >
+      <View style={styles.banner}>
         <Icon 
           name="notifications-active" 
           size={24} 
           color={COLORS.white} 
         />
-        <View style={styles.textContainer}>
+        <TouchableOpacity 
+          style={styles.textContainer}
+          onPress={handleBannerPress}
+          activeOpacity={0.7}
+        >
           <Text style={styles.title}>Symptom Check Reminder</Text>
           <Text style={styles.body}>Time to log your symptoms</Text>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity 
           style={styles.closeButton}
           onPress={handleDismiss}
@@ -116,7 +121,7 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
         >
           <Icon name="close" size={20} color={COLORS.white} />
         </TouchableOpacity>
-      </TouchableOpacity>
+      </View>
     </Animated.View>
   );
 }
