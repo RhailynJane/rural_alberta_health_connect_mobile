@@ -140,6 +140,7 @@
         "simulator": true
       }
     },
+
     "production": {
       "autoIncrement": true,
       "distribution": "store",
@@ -149,9 +150,6 @@
       },
       "android": {
         "buildType": "app-bundle"
-      },
-      "ios": {
-        "enterpriseProvisioning": "universal"
       }
     }
   },
