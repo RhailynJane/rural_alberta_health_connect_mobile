@@ -1,0 +1,4 @@
+# EAS Build ignore file
+# Ensure android folder is included (override .gitignore)
+!android/
+!android/**
