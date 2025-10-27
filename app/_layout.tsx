@@ -7,11 +7,12 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { database } from '../watermelon/database';
+import { initializeNotificationsOnce } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
 import {
-  configureForegroundNotifications,
-  setupNotificationListeners,
+    configureForegroundNotifications,
+    setupNotificationListeners,
 } from "./utils/pushNotifications";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -78,6 +79,8 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
+    // Ensure local notifications are initialized (channels, handlers, migration)
+    initializeNotificationsOnce().catch(() => {});
     // Configure foreground notification behavior
     configureForegroundNotifications();
 

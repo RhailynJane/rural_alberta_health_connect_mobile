@@ -133,6 +133,8 @@ export async function initializeNotificationsOnce() {
         const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
         // For reminders: show banner and play sound even in foreground. For others: keep silent.
         const result = {
+          // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
+          shouldShowAlert: !!isReminder,
           shouldShowBanner: !!isReminder,
           shouldShowList: true,
           shouldPlaySound: !!isReminder,
@@ -313,8 +315,6 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
       body: "It's time to complete your daily symptoms check.",
       sound: 'default',
       priority: 'max', // Android: request highest priority
-      sticky: true, // Android: make notification persistent
-      autoDismiss: false, // Don't auto-dismiss
       data: {
         type: 'symptom_reminder',
         timestamp: Date.now(),
@@ -539,7 +539,7 @@ export async function scheduleReminderItem(item: ReminderItem) {
     } else {
       trigger = { type: "calendar", weekday: weekdayStringToNumber(item.dayOfWeek), hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
     }
-    await (Notifications as any).scheduleNotificationAsync({
+    const schedId = await (Notifications as any).scheduleNotificationAsync({
       content: {
         title: "Symptom Assessment Reminder",
         body: "It's time to complete your symptoms check.",
@@ -554,6 +554,7 @@ export async function scheduleReminderItem(item: ReminderItem) {
       },
       trigger,
     });
+    console.log('🗓️ Scheduled notification id:', schedId, 'trigger:', JSON.stringify(trigger));
   } catch {}
 }
 
@@ -581,7 +582,7 @@ export async function scheduleAllReminderItems(list?: ReminderItem[]) {
   for (const r of enabledReminders) {
     try { 
       await scheduleReminderItem(r);
-      console.log(`✅ Scheduled ${r.frequency} reminder`);
+      console.log(`✅ Scheduled ${r.frequency} reminder on channel ${REMINDER_CHANNEL_ID}`);
     } catch (e) {
       console.error(`❌ Failed to schedule ${r.frequency} reminder:`, e);
     }
