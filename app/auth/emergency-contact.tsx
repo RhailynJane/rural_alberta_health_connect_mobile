@@ -1,5 +1,5 @@
 import { useDatabase } from "@nozbe/watermelondb/hooks";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -23,7 +23,6 @@ import { FONTS } from "../constants/constants";
 export default function EmergencyContact() {
   const router = useRouter();
   const database = useDatabase();
-  const { isAuthenticated } = useConvexAuth();
   const currentUser = useQuery(api.users.getCurrentUser);
   
   const [contactName, setContactName] = useState('');
@@ -165,18 +164,46 @@ export default function EmergencyContact() {
         );
 
         if (existingProfile) {
-          await existingProfile.update((profile: any) => {
-            profile.emergencyContactName = contactName;
-            profile.emergencyContactPhone = contactPhone;
-          });
-          console.log("✅ Emergency Contact - Updated existing local profile");
+          // Update fields individually to avoid aborting if a column is missing on this device
+          try {
+            await existingProfile.update((profile: any) => {
+              profile.emergencyContactName = contactName;
+            });
+          } catch (e) {
+            console.warn('⚠️ Could not set emergencyContactName locally:', e);
+          }
+          try {
+            await existingProfile.update((profile: any) => {
+              profile.emergencyContactPhone = contactPhone;
+            });
+          } catch (e) {
+            console.warn('⚠️ Could not set emergencyContactPhone locally:', e);
+          }
+          console.log("✅ Emergency Contact - Updated existing local profile (best-effort)");
         } else {
-          await userProfilesCollection.create((profile: any) => {
-            profile.userId = currentUser._id;
-            profile.emergencyContactName = contactName;
-            profile.emergencyContactPhone = contactPhone;
-          });
-          console.log("✅ Emergency Contact - Created new local profile");
+          // Create minimal row first, then set optional fields individually
+          let created: any = null;
+          try {
+            created = await userProfilesCollection.create((profile: any) => {
+              profile.userId = String(currentUser._id);
+              profile.onboardingCompleted = false;
+            });
+          } catch (createErr) {
+            console.warn('⚠️ Could not create local profile record:', createErr);
+          }
+          if (created) {
+            try {
+              await created.update((p: any) => { p.emergencyContactName = contactName; });
+            } catch (e) {
+              console.warn('⚠️ Could not set emergencyContactName on new record:', e);
+            }
+            try {
+              await created.update((p: any) => { p.emergencyContactPhone = contactPhone; });
+            } catch (e) {
+              console.warn('⚠️ Could not set emergencyContactPhone on new record:', e);
+            }
+            console.log("✅ Emergency Contact - Created/updated new local profile (best-effort)");
+          }
         }
       });
 

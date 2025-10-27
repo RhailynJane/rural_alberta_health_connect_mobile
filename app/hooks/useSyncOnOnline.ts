@@ -1,6 +1,6 @@
-import { Q } from '@nozbe/watermelondb';
-import { useMutation } from 'convex/react';
-import { useEffect } from 'react';
+// No direct Watermelon query operators needed; using in-memory filtering
+import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
 import { useWatermelonDatabase } from '../../watermelon/hooks/useDatabase';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -9,68 +9,260 @@ import { useNetworkStatus } from './useNetworkStatus';
  * Hook that automatically syncs offline data to Convex when coming online
  */
 export function useSyncOnOnline() {
+  const hasSyncedProfilesRef = useRef(false);
   const { isOnline } = useNetworkStatus();
   const database = useWatermelonDatabase();
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(
+    api.users.getCurrentUser,
+    isAuthenticated && isOnline ? {} : 'skip'
+  );
   
   // Get mutations for syncing
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
-  const updatePersonalInfo = useMutation((api as any).users.updatePersonalInfo);
+  // Use the correct Convex mutation path for updating personal info
+  const updatePersonalInfo = useMutation(
+    (api as any)["profile/personalInformation"].updatePersonalInfo
+  );
+
+  // Wait for WatermelonDB to finish setting up/migrating before syncing
+  const waitForDatabaseReady = async (retries = 5, delayMs = 400): Promise<void> => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        // Try a harmless query on a small table
+        await database.get('user_profiles').query().fetch();
+        return; // DB is ready
+      } catch (err) {
+        if (attempt === retries) {
+          console.warn('⚠️ Database not ready after retries, proceeding anyway:', err);
+          return;
+        }
+        const wait = delayMs * attempt; // linear backoff
+        console.log(`⏳ Waiting for DB (attempt ${attempt}/${retries}) for ${wait}ms...`);
+        await new Promise((res) => setTimeout(res, wait));
+      }
+    }
+  };
 
   const syncHealthEntries = async () => {
     try {
       const healthEntriesCollection = database.get('health_entries');
-      const unsyncedEntries = await healthEntriesCollection
-        .query(Q.where('is_synced', false))
-        .fetch();
+      
+      // First, log ALL health entries in the database
+      const allEntries = await healthEntriesCollection.query().fetch();
+      console.log(`📋 Total health entries in WatermelonDB: ${allEntries.length}`);
+      
+      if (allEntries.length > 0) {
+        allEntries.forEach((entry, index) => {
+          const e = entry as any;
+          const raw = e._raw || {};
+          console.log(`📄 Entry ${index + 1}:`, {
+            id: entry.id,
+            userId: e.userId || raw.userId || raw.user_id,
+            date: e.date || raw.date,
+            symptoms: e.symptoms || raw.symptoms,
+            severity: e.severity ?? raw.severity,
+            isSynced: e.isSynced ?? raw.isSynced ?? raw.is_synced,
+            syncError: e.syncError || raw.syncError || raw.sync_error,
+            rawPhotos: raw.photos ? (typeof raw.photos === 'string' ? raw.photos.substring(0, 50) : 'not-string') : 'none',
+          });
+        });
+      } else {
+        console.log('⚠️ No health entries found in WatermelonDB at all!');
+      }
+      
+      // Backfill legacy snake_case columns to new camelCase columns if needed (no skipping)
+      for (const entry of allEntries as any[]) {
+        const raw = entry._raw || {};
+        let changed = false;
+        await database.write(async () => {
+          // Apply per-field updates with isolated try/catch to avoid aborting the whole record
+          const safeUpdate = async (setter: (e: any) => void) => {
+            try { await entry.update(setter); } catch { /* continue with other fields */ }
+          };
 
-      console.log(`📊 Found ${unsyncedEntries.length} unsynced health entries`);
+          if ((!entry.userId || (entry as any).userId === undefined) && raw.user_id) {
+            await safeUpdate((e: any) => { e.userId = raw.user_id; }); changed = true;
+          }
+          if (!(entry as any).convexId && raw.convex_id) {
+            await safeUpdate((e: any) => { e.convexId = raw.convex_id; }); changed = true;
+          }
+          if (!(entry as any).aiContext && raw.ai_context) {
+            await safeUpdate((e: any) => { e.aiContext = raw.ai_context; }); changed = true;
+          }
+          if (!(entry as any).createdBy && raw.created_by) {
+            await safeUpdate((e: any) => { e.createdBy = raw.created_by; }); changed = true;
+          }
+          if ((entry as any).isSynced === undefined && raw.is_synced !== undefined) {
+            await safeUpdate((e: any) => { e.isSynced = raw.is_synced; }); changed = true;
+          }
+          if (!(entry as any).syncError && raw.sync_error) {
+            await safeUpdate((e: any) => { e.syncError = raw.sync_error; }); changed = true;
+          }
+          // Ensure type field is set for all entries (default to manual_entry if missing)
+          if (!(entry as any).type && !raw.type) {
+            await safeUpdate((e: any) => { e.type = 'manual_entry'; }); changed = true;
+          }
+        });
+        if (changed) {
+          console.log(`🔁 Backfilled legacy health entry fields for id=${entry.id}`);
+        }
+      }
+
+      // Now find unsynced entries
+      // Build unsynced list considering both camelCase and legacy flags
+      // ONLY sync entries for the currently authenticated user
+      const authUserId = currentUser?._id ? String(currentUser._id) : '';
+      
+      // First, clean up: delete or mark as synced any entries that belong to other users
+      if (authUserId) {
+        for (const entry of allEntries as any[]) {
+          const raw = entry._raw || {};
+          const entryUserId = entry.userId || raw.userId || raw.user_id || '';
+          const isSynced = entry.isSynced ?? raw.isSynced ?? raw.is_synced;
+          
+          // If entry has a userId that's NOT the current user AND it's already synced,
+          // it was synced by a previous user - mark it to skip future syncs
+          if (entryUserId && entryUserId !== authUserId && isSynced) {
+            try {
+              await database.write(async () => {
+                // Ensure type field exists before updating syncError
+                const safeUpdate = async (setter: (e: any) => void) => {
+                  try { await entry.update(setter); } catch { /* ignore */ }
+                };
+                if (!entry.type && !raw.type) {
+                  await safeUpdate((e: any) => { e.type = 'manual_entry'; });
+                }
+                await safeUpdate((e: any) => { e.syncError = 'Synced by different user - skipping'; });
+              });
+              console.log(`🗑️ Marked entry ${entry.id} (userId: ${entryUserId}) as belonging to different user`);
+            } catch (err) {
+              console.warn(`⚠️ Could not mark entry ${entry.id}:`, err);
+            }
+          }
+        }
+      }
+      
+      const unsyncedEntries = (allEntries as any[]).filter((entry: any) => {
+        const raw = entry._raw || {};
+        const camel = entry.isSynced;
+        const legacy = raw.is_synced;
+        const isUnsynced = camel === false || (camel === undefined && legacy === false);
+        
+        // Only include if unsynced AND belongs to current authenticated user
+        if (!isUnsynced) return false;
+        
+        const entryUserId = entry.userId || raw.userId || raw.user_id || '';
+        // Include entries with no userId (we'll backfill from authUserId) or matching authUserId
+        return !entryUserId || entryUserId === authUserId;
+      });
+
+      console.log(`📊 Found ${unsyncedEntries.length} unsynced health entries (including legacy is_synced=false)`);
 
       for (const entry of unsyncedEntries) {
         try {
           const entryData = (entry as any);
+          const raw = entryData._raw || {};
           
-          // Parse photos if stored as JSON string
+          // Get userId from entry - DO NOT backfill from currentUser
+          // Entries without userId are orphaned and should be skipped
+          let entryUserId = entryData.userId || raw.userId || raw.user_id || '';
+          
+          // Skip entries with no userId or invalid userId
+          if (!entryUserId || entryUserId === 'offline_user') {
+            console.warn(`⚠️ Skipping entry ${entry.id}: no valid userId (orphaned entry from different session)`);
+            // Mark as synced with error so it doesn't keep retrying
+            await database.write(async () => {
+              const safeUpdate = async (setter: (e: any) => void) => {
+                try { await entry.update(setter); } catch { /* ignore */ }
+              };
+              if (!entry.type && !raw.type) {
+                await safeUpdate((e: any) => { e.type = 'manual_entry'; });
+              }
+              await safeUpdate((e: any) => { e.isSynced = true; });
+              await safeUpdate((e: any) => { e.syncError = 'No valid userId - orphaned entry'; });
+            });
+            continue;
+          }
+          
+          // Access raw column data directly to avoid @json decorator parsing issues
+          const rawPhotos = raw.photos || entryData.photos;
+          
+          // Safely parse photos if stored as JSON string
           let photos: string[] = [];
-          if (entryData.photos) {
+          if (rawPhotos) {
             try {
-              photos = typeof entryData.photos === 'string' 
-                ? JSON.parse(entryData.photos) 
-                : entryData.photos;
-            } catch (e) {
-              console.warn('Could not parse photos:', e);
+              if (typeof rawPhotos === 'string') {
+                photos = JSON.parse(rawPhotos);
+              } else if (Array.isArray(rawPhotos)) {
+                photos = rawPhotos;
+              }
+            } catch (parseError) {
+              console.warn('Could not parse photos, using empty array:', parseError);
+              photos = [];
             }
           }
 
-          console.log(`📤 Syncing health entry: ${entryData.symptoms}`);
+          // Safely parse symptoms if stored as JSON string
+          let symptomsData = entryData.symptoms || '';
+          if (typeof symptomsData === 'string' && symptomsData.startsWith('[')) {
+            try {
+              symptomsData = JSON.parse(symptomsData);
+            } catch {
+              // Keep as string if parse fails
+            }
+          }
+
+          console.log(`📤 Syncing health entry:`, {
+            symptoms: typeof symptomsData === 'string' ? symptomsData : JSON.stringify(symptomsData),
+            userId: entryUserId,
+            photoCount: photos.length,
+          });
 
           // Call Convex mutation to save
           await logManualEntry({
-            userId: entryData.userId,
+            userId: entryUserId,
             date: entryData.date,
             timestamp: entryData.timestamp,
-            symptoms: entryData.symptoms,
+            symptoms: symptomsData,
             severity: entryData.severity,
             notes: entryData.notes || '',
             photos: photos,
-            createdBy: entryData.createdBy || 'User',
+            createdBy: entryData.createdBy || entryData.created_by || 'User',
           });
 
           // Mark as synced locally
           await database.write(async () => {
-            await entry.update((e: any) => {
-              e.is_synced = true;
-            });
+            const safeUpdate = async (setter: (e: any) => void) => {
+              try { await entry.update(setter); } catch { /* ignore */ }
+            };
+            if (!entry.type && !raw.type) {
+              await safeUpdate((e: any) => { e.type = 'manual_entry'; });
+            }
+            await safeUpdate((e: any) => { e.isSynced = true; });
           });
 
           console.log(`✅ Synced entry: ${entryData.symptoms}`);
-        } catch (error) {
-          console.error(`Failed to sync entry:`, error);
-          // Store error but continue with next entry
-          await database.write(async () => {
-            await entry.update((e: any) => {
-              e.sync_error = error instanceof Error ? error.message : 'Unknown error';
+        } catch (syncError) {
+          console.error(`Failed to sync entry:`, syncError);
+          // Store error message but continue with next entry
+          try {
+            const entryData = (entry as any);
+            const raw = entryData._raw || {};
+            await database.write(async () => {
+              const safeUpdate = async (setter: (e: any) => void) => {
+                try { await entry.update(setter); } catch { /* ignore */ }
+              };
+              if (!entry.type && !raw.type) {
+                await safeUpdate((e: any) => { e.type = 'manual_entry'; });
+              }
+              await safeUpdate((e: any) => {
+                e.syncError = syncError instanceof Error ? syncError.message : String(syncError);
+              });
             });
-          });
+          } catch (updateError) {
+            console.error('Failed to update sync error status:', updateError);
+          }
         }
       }
     } catch (error) {
@@ -81,35 +273,175 @@ export function useSyncOnOnline() {
   const syncPersonalInfo = async () => {
     try {
       const userProfilesCollection = database.get('user_profiles');
-      const unsyncedProfiles = await userProfilesCollection
-        .query(Q.where('onboarding_completed', false))
-        .fetch();
+      const usersCollection = database.get('users');
+      
+      // First, log ALL profiles in the database
+      const allProfiles = await userProfilesCollection.query().fetch();
+      console.log(`📋 Total profiles in WatermelonDB: ${allProfiles.length}`);
+      
+      if (allProfiles.length > 0) {
+        allProfiles.forEach((profile, index) => {
+          const p = profile as any;
+          const rawData = p._raw || {};
+          console.log(`📄 Profile ${index + 1}:`, {
+            id: profile.id,
+            userId: p.userId || rawData.userId,
+            age: p.age || rawData.age,
+            ageRange: p.ageRange || rawData.ageRange,
+            location: p.location || rawData.location,
+            onboardingCompleted: p.onboardingCompleted ?? rawData.onboardingCompleted,
+          });
+        });
+      } else {
+        console.log('⚠️ No profiles found in WatermelonDB at all!');
+      }
+      
+      // Backfill users table camelCase from legacy snake_case (v6) - do not skip on errors
+      try {
+        const allUsers = await usersCollection.query().fetch();
+        for (const user of allUsers as any[]) {
+          const raw = user._raw || {};
+          let changed = false;
+          await database.write(async () => {
+            const safeUpdate = async (setter: (u: any) => void) => { try { await user.update(setter); } catch {} };
+            if (!(user as any).convexUserId && raw.convex_user_id) { await safeUpdate((u: any) => { u.convexUserId = raw.convex_user_id; }); changed = true; }
+            if (!(user as any).firstName && raw.first_name) { await safeUpdate((u: any) => { u.firstName = raw.first_name; }); changed = true; }
+            if (!(user as any).lastName && raw.last_name) { await safeUpdate((u: any) => { u.lastName = raw.last_name; }); changed = true; }
+            if ((user as any).hasCompletedOnboarding === undefined && raw.has_completed_onboarding !== undefined) { await safeUpdate((u: any) => { u.hasCompletedOnboarding = raw.has_completed_onboarding; }); changed = true; }
+            if ((user as any).emailVerificationTime === undefined && raw.email_verification_time !== undefined) { await safeUpdate((u: any) => { u.emailVerificationTime = raw.email_verification_time; }); changed = true; }
+            if ((user as any).phoneVerificationTime === undefined && raw.phone_verification_time !== undefined) { await safeUpdate((u: any) => { u.phoneVerificationTime = raw.phone_verification_time; }); changed = true; }
+            if ((user as any).isAnonymous === undefined && raw.is_anonymous !== undefined) { await safeUpdate((u: any) => { u.isAnonymous = raw.is_anonymous; }); changed = true; }
+          });
+          if (changed) {
+            console.log(`🔁 Backfilled legacy user fields for id=${user.id}`);
+          }
+        }
+      } catch (uErr) {
+        console.warn('⚠️ User backfill encountered errors but continued:', uErr);
+      }
 
-      console.log(`👤 Found ${unsyncedProfiles.length} unsynced profiles`);
+      // Find profiles that need syncing: onboarding_completed is false OR undefined (never completed)
+      // We need to check the raw data because the model might not have all fields mapped
+  const allProfilesForSync = await userProfilesCollection.query().fetch();
 
-      for (const profile of unsyncedProfiles) {
+      // Backfill legacy snake_case fields into new camelCase fields if needed (no skipping)
+      for (const profile of allProfilesForSync as any[]) {
+        const raw = profile._raw || {};
+        let changed = false;
+        await database.write(async () => {
+          const safeUpdate = async (setter: (p: any) => void) => { try { await profile.update(setter); } catch {} };
+          if (!(profile as any).userId && raw.user_id) { await safeUpdate((p: any) => { p.userId = raw.user_id; }); changed = true; }
+          if (!(profile as any).ageRange && raw.age_range) { await safeUpdate((p: any) => { p.ageRange = raw.age_range; }); changed = true; }
+          if (!(profile as any).age && raw.age) { await safeUpdate((p: any) => { p.age = raw.age; }); changed = true; }
+          if (!(profile as any).location && raw.location) { await safeUpdate((p: any) => { p.location = raw.location; }); changed = true; }
+          if ((profile as any).onboardingCompleted === undefined && raw.onboarding_completed !== undefined) { await safeUpdate((p: any) => { p.onboardingCompleted = raw.onboarding_completed; }); changed = true; }
+          if (!(profile as any).emergencyContactName && raw.emergency_contact_name) { await safeUpdate((p: any) => { p.emergencyContactName = raw.emergency_contact_name; }); changed = true; }
+          if (!(profile as any).emergencyContactPhone && raw.emergency_contact_phone) { await safeUpdate((p: any) => { p.emergencyContactPhone = raw.emergency_contact_phone; }); changed = true; }
+          if (!(profile as any).medicalConditions && raw.medical_conditions) { await safeUpdate((p: any) => { p.medicalConditions = raw.medical_conditions; }); changed = true; }
+          if (!(profile as any).currentMedications && raw.current_medications) { await safeUpdate((p: any) => { p.currentMedications = raw.current_medications; }); changed = true; }
+          if ((profile as any).locationServicesEnabled === undefined && raw.location_services_enabled !== undefined) { await safeUpdate((p: any) => { p.locationServicesEnabled = raw.location_services_enabled; }); changed = true; }
+          if (!(profile as any).postalCode && raw.postal_code) { await safeUpdate((p: any) => { p.postalCode = raw.postal_code; }); changed = true; }
+          if (!(profile as any).province && raw.province) { await safeUpdate((p: any) => { p.province = raw.province; }); changed = true; }
+          if (!(profile as any).address1 && raw.address1) { await safeUpdate((p: any) => { p.address1 = raw.address1; }); changed = true; }
+          if (!(profile as any).address2 && raw.address2) { await safeUpdate((p: any) => { p.address2 = raw.address2; }); changed = true; }
+          if (!(profile as any).city && raw.city) { await safeUpdate((p: any) => { p.city = raw.city; }); changed = true; }
+        });
+        if (changed) {
+          console.log(`🔁 Backfilled legacy profile fields for id=${profile.id}`);
+        }
+      }
+      const unsyncedProfiles = allProfilesForSync.filter((profile: any) => {
+        const raw = profile._raw || {};
+        const completed = profile.onboardingCompleted ?? raw.onboardingCompleted ?? raw.onboarding_completed;
+        const profileType = profile.type ?? raw.type;
+        // Only sync profiles where onboarding is explicitly TRUE AND type is defined
+        return completed === true && profileType !== undefined && profileType !== null && profileType !== '';
+      });
+
+      // Scope to the currently logged-in user only (and assign unknowns to them)
+      const authUserId = currentUser?._id ? String(currentUser._id) : '';
+      const scopedProfiles = (unsyncedProfiles as any[]).filter((p) => {
+        if (!authUserId) return true; // if we somehow don't have auth user yet, fall back to all
+        const r = p._raw || {};
+        const uid = p.userId || r.userId || r.user_id || '';
+        return uid === authUserId || !uid;
+      });
+
+      // Group by userId and merge the best fields to avoid partial duplicate updates
+      const groups = new Map<string, any[]>();
+      for (const p of scopedProfiles as any[]) {
+        const raw = p._raw || {};
+        // If userId is missing and we know the auth user, group under auth user id
+        const computedUid = (p.userId || raw.userId || raw.user_id || (authUserId || '')) as string;
+        const key = computedUid || `unknown-${p.id}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(p);
+      }
+      // If we have auth user id, keep only that group
+      if (authUserId) {
+        for (const k of Array.from(groups.keys())) {
+          if (k !== authUserId) groups.delete(k);
+        }
+      }
+      console.log(`👤 Found ${scopedProfiles.length} unsynced profiles scoped to ${authUserId ? authUserId : 'all users'} across ${groups.size} group(s)`);
+
+      for (const [userKey, profiles] of groups) {
         try {
-          const profileData = (profile as any);
-          
-          console.log(`📤 Syncing personal info for user: ${profileData.userId}`);
+          // Ensure each profile has userId set where we can
+          for (const pr of profiles) {
+            if ((!pr.userId || pr.userId === '') && userKey && userKey.startsWith('k')) { // looks like a Convex id
+              try {
+                await database.write(async () => {
+                  await pr.update((p: any) => { p.userId = userKey; });
+                });
+                console.log(`🔁 Backfilled profile.userId for profile ${pr.id}`);
+              } catch (e) {
+                console.warn(`⚠️ Failed to backfill userId for profile ${pr.id}:`, e);
+              }
+            }
+          }
+
+          // Merge best values across duplicates
+          let bestAge = '';
+          let bestAgeRange = '';
+          let bestLocation = '';
+          for (const pr of profiles) {
+            const r = pr._raw || {};
+            const a = pr.age || r.age || '';
+            const ar = pr.ageRange || r.ageRange || r.age_range || '';
+            const loc = pr.location || r.location || '';
+            if (!bestAge && a) bestAge = a;
+            if (!bestAgeRange && ar) bestAgeRange = ar;
+            if (!bestLocation || (loc && loc.length > bestLocation.length)) bestLocation = loc;
+          }
+
+          const finalAge = bestAge || bestAgeRange || '';
+          const location = bestLocation;
+          const locationParts = location.split(',').map((p: string) => p.trim());
+          const [address1 = '', address2 = '', city = '', province = '', postalCode = ''] = locationParts;
+
+          console.log(`📤 Syncing personal info for user ${userKey || authUserId}:`, { age: finalAge, location });
 
           await updatePersonalInfo({
-            age: profileData.age_range || profileData.age,
-            address1: profileData.address1 || '',
-            address2: profileData.address2 || '',
-            city: profileData.city || '',
-            province: profileData.province || '',
-            postalCode: profileData.postal_code || profileData.postalCode || '',
-            location: profileData.location || '',
-            onboardingCompleted: true,
+            age: finalAge,
+            address1,
+            address2,
+            city,
+            province,
+            postalCode,
+            location,
           });
 
-          // Mark as completed locally
-          await database.write(async () => {
-            await profile.update((p: any) => {
-              p.onboarding_completed = true;
-            });
-          });
+          // Mark all local duplicates as completed (best-effort)
+          for (const pr of profiles) {
+            try {
+              await database.write(async () => {
+                await pr.update((p: any) => { p.onboardingCompleted = true; });
+              });
+            } catch (localErr) {
+              console.warn('⚠️ Local profile update (onboardingCompleted) failed but server sync succeeded:', localErr);
+            }
+          }
 
           console.log(`✅ Synced personal info`);
         } catch (error) {
@@ -123,13 +455,23 @@ export function useSyncOnOnline() {
 
   useEffect(() => {
     if (!isOnline) return;
+    if (!isAuthenticated) return; // Don't sync anything when user isn't logged in
 
     // When coming online, sync all offline data
     const syncOfflineData = async () => {
       try {
         console.log('🔄 Coming online - syncing offline data...');
-        await syncHealthEntries();
-        await syncPersonalInfo();
+        // Ensure DB migrations finished before we access tables
+        await waitForDatabaseReady();
+        
+        // Only sync if we have current user data
+        if (currentUser?._id) {
+          await syncHealthEntries();
+          await syncPersonalInfo();
+          hasSyncedProfilesRef.current = true;
+        } else {
+          console.log('⏭️ Skipping sync - current user not loaded yet');
+        }
         console.log('✅ Offline sync completed');
       } catch (error) {
         console.error('❌ Error syncing offline data:', error);
@@ -140,5 +482,28 @@ export function useSyncOnOnline() {
     const timer = setTimeout(syncOfflineData, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline]);
-}
+  }, [isOnline, isAuthenticated]);
+
+  // Kick off profile sync when current user becomes available while online
+  useEffect(() => {
+    if (!isOnline) return;
+    if (!isAuthenticated) return; // Don't sync when user isn't logged in
+    if (!currentUser?._id) return;
+    if (hasSyncedProfilesRef.current) return;
+
+    const run = async () => {
+      try {
+        await waitForDatabaseReady();
+        await syncPersonalInfo();
+        hasSyncedProfilesRef.current = true;
+      } catch (e) {
+        console.error('❌ Error syncing personal info after user loaded:', e);
+      }
+    };
+    // slight delay to ensure convex client settled
+    const t = setTimeout(run, 200);
+    return () => clearTimeout(t);
+  }, 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [isOnline, isAuthenticated, currentUser?._id]);
+ }

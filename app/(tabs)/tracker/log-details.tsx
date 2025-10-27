@@ -1,15 +1,18 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text into separate cards (mirrors assessment-results)
 function renderAssessmentCards(text: string | null) {
@@ -150,13 +153,51 @@ function renderAssessmentCards(text: string | null) {
 export default function LogDetails() {
   const params = useLocalSearchParams();
   const entryId = params.entryId as string;
+  const database = useWatermelonDatabase();
+  const { isOnline } = useNetworkStatus();
+  const [offlineEntry, setOfflineEntry] = useState<any>(null);
   
   // Convert string to Convex ID type
   const convexEntryId = entryId as Id<"healthEntries">;
   
-  const entry = useQuery(api.healthEntries.getEntryById, 
-    entryId ? { entryId: convexEntryId } : "skip"
+  // Online query
+  const entryOnline = useQuery(api.healthEntries.getEntryById, 
+    entryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
+
+  // Offline query from WatermelonDB
+  useEffect(() => {
+    if (!isOnline && entryId) {
+      const loadOfflineEntry = async () => {
+        try {
+          const healthCollection = database.get("health_entries");
+          const localEntry = await healthCollection.find(entryId);
+          
+          // Map WatermelonDB entry to Convex format
+          const entryData = localEntry as any;
+          setOfflineEntry({
+            _id: localEntry.id,
+            _creationTime: entryData.createdAt || Date.now(),
+            userId: entryData.userId,
+            timestamp: entryData.timestamp,
+            severity: entryData.severity,
+            type: entryData.type,
+            symptoms: JSON.parse(entryData.symptoms || "[]"),
+            notes: entryData.notes || "",
+            photos: JSON.parse(entryData.photos || "[]"),
+            aiAssessment: entryData.aiAssessment || null,
+          });
+        } catch (error) {
+          console.error("Failed to load offline entry:", error);
+          setOfflineEntry(null);
+        }
+      };
+      loadOfflineEntry();
+    }
+  }, [isOnline, entryId, database]);
+
+  // Use online entry if available, otherwise offline entry
+  const entry = isOnline ? entryOnline : offlineEntry;
 
   const getSeverityColor = (severity: number) => {
     if (severity >= 9) return "#DC3545";

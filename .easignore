@@ -2,3 +2,19 @@
 # Ensure android folder is included (override .gitignore)
 !android/
 !android/**
+
+# Exclude generated build files that may contain local paths
+android/app/build/
+android/app/.cxx/
+android/app/build/generated/autolinking/
+android/build/
+android/.gradle/
+.gradle/
+
+# Exclude documentation and non-essential files
+docs/
+*.md
+!README.md
+
+# Exclude large unnecessary files
+node_modules/.cache/

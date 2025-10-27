@@ -6,12 +6,12 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -34,7 +34,7 @@ export default function Dashboard() {
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const [cachedUser, setCachedUser] = useState<any>(null);
   const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
-  const queryArgs = isAuthenticated && isOnline ? {} : "skip";
+  const queryArgs = isAuthenticated && !isLoading ? {} : "skip";
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -42,13 +42,13 @@ export default function Dashboard() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get current user data (only when online)
+  // Get current user data (allow offline access via cache)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
   
-  // Get reminder settings (only when online)
+  // Get reminder settings (allow offline access via cache)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading && isOnline ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
 
   // Get entries for the last 7 days to calculate health score

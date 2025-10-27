@@ -18,10 +18,10 @@ export default function Index() {
   const [offlineTimeout, setOfflineTimeout] = useState(false);
   const [hasOfflineToken, setHasOfflineToken] = useState(false);
 
-  // Only fetch user data if authenticated AND online
+  // Fetch user data if authenticated (allow offline access via cache)
   const user = useQuery(
     api.users.getCurrentUser, 
-    isAuthenticated && isOnline ? {} : "skip"
+    isAuthenticated ? {} : "skip"
   );
 
   // Check for cached auth token on mount

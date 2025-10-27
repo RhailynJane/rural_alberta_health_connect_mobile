@@ -6,6 +6,8 @@
   },
   "java.enabled": false,
   "java.jdt.ls.enabled": false,
+  "java.import.gradle.enabled": false,
+  "java.autobuild.enabled": false,
   "typescript.validate.enable": true,
   "javascript.validate.enable": true,
   "typescript.tsdk": "node_modules/typescript/lib",

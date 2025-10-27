@@ -101,36 +101,10 @@ class SyncManager {
     try {
       const healthEntriesCollection = database.collections.get('health_entries');
       const unsyncedEntries = await healthEntriesCollection
-        .query(Q.where('is_synced', false))
+        .query(Q.where('isSynced', false))
         .fetch();
-      
-      console.log(`📊 Syncing ${unsyncedEntries.length} health entries...`);
-      
-      for (const entry of unsyncedEntries) {
-        try {
-          // Entry data is already in WatermelonDB - it will be synced by the Convex backend
-          // or by the app's background sync mechanism
-          // For now, mark as synced after confirming it exists locally
-          
-          console.log(`📤 Syncing health entry ${entry.id} (${(entry as any).timestamp})...`);
-          
-          await database.write(async () => {
-            await entry.update((e: any) => {
-              e.is_synced = true;
-            });
-          });
-          
-          console.log(`✅ Health entry ${entry.id} marked as synced`);
-        } catch (error) {
-          console.error(`Failed to sync entry ${entry.id}:`, error);
-          // Keep retrying
-          await database.write(async () => {
-            await entry.update((e: any) => {
-              e.sync_error = error instanceof Error ? error.message : String(error);
-            });
-          });
-        }
-      }
+      console.log(`📊 Found ${unsyncedEntries.length} unsynced health entries (SyncManager)`);
+      // Do not mark as synced here. Actual syncing to backend is handled elsewhere (useSyncOnOnline).
     } catch (error) {
       console.error('Failed to sync health entries:', error);
       throw error;
@@ -143,7 +117,7 @@ class SyncManager {
       const unsyncedAssessments = await assessmentsCollection
         .query(
           Q.where('type', 'ai_assessment'),
-          Q.where('is_synced', false)
+          Q.where('isSynced', false)
         )
         .fetch();
       
@@ -179,7 +153,7 @@ class SyncManager {
     try {
       const healthEntriesCollection = database.collections.get('health_entries');
       const unsynced = await healthEntriesCollection
-        .query(Q.where('is_synced', false))
+        .query(Q.where('isSynced', false))
         .fetchCount();
       
       return unsynced;

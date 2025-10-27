@@ -53,17 +53,17 @@ export default function Profile() {
   const updatePhone = useMutation(api.users.updatePhone);
   const currentUserOnline = useQuery(
     api.users.getCurrentUser,
-    isAuthenticated && !isLoading && isOnline ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
 
-  // Skip queries if not authenticated or offline
+  // Skip queries if not authenticated - allow offline access via cache
   const userProfileOnline = useQuery(
     api.profile.personalInformation.getProfile,
-    isAuthenticated && !isLoading && isOnline ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading && isOnline ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
 
   // Cache user data when online

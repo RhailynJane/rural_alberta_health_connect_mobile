@@ -1,18 +1,18 @@
 import { useDatabase } from "@nozbe/watermelondb/hooks";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -26,7 +26,6 @@ const MAX_CHARS = 500;
 export default function MedicalHistory() {
   const router = useRouter();
   const database = useDatabase();
-  const { isAuthenticated } = useConvexAuth();
   const currentUser = useQuery(api.users.getCurrentUser);
   const { refreshSession } = useSessionRefresh(); 
   
@@ -85,7 +84,7 @@ export default function MedicalHistory() {
     setIsSubmitting(true);
     
     try {
-      // Save to WatermelonDB first (offline-first)
+      // Save to WatermelonDB first (offline-first), best-effort per field
       await database.write(async () => {
         const userProfilesCollection = database.get("user_profiles");
         const existingProfiles = await userProfilesCollection.query().fetch();
@@ -94,22 +93,28 @@ export default function MedicalHistory() {
         );
 
         if (existingProfile) {
-          await existingProfile.update((profile: any) => {
-            profile.medicalConditions = medicalConditions || '';
-            profile.currentMedications = currentMedications || '';
-            profile.allergies = allergies || '';
-            profile.onboardingCompleted = true;
-          });
-          console.log("✅ Medical History - Updated existing local profile");
+          try { await existingProfile.update((p: any) => { p.medicalConditions = medicalConditions || ''; }); } catch (e) { console.warn('⚠️ Could not set medicalConditions locally:', e); }
+          try { await existingProfile.update((p: any) => { p.currentMedications = currentMedications || ''; }); } catch (e) { console.warn('⚠️ Could not set currentMedications locally:', e); }
+          try { await existingProfile.update((p: any) => { p.allergies = allergies || ''; }); } catch (e) { console.warn('⚠️ Could not set allergies locally:', e); }
+          try { await existingProfile.update((p: any) => { p.onboardingCompleted = true; }); } catch (e) { console.warn('⚠️ Could not set onboardingCompleted locally:', e); }
+          console.log("✅ Medical History - Updated existing local profile (best-effort)");
         } else {
-          await userProfilesCollection.create((profile: any) => {
-            profile.userId = currentUser._id;
-            profile.medicalConditions = medicalConditions || '';
-            profile.currentMedications = currentMedications || '';
-            profile.allergies = allergies || '';
-            profile.onboardingCompleted = true;
-          });
-          console.log("✅ Medical History - Created new local profile");
+          // Create minimal record first
+          let created: any = null;
+          try {
+            created = await userProfilesCollection.create((p: any) => {
+              p.userId = String(currentUser._id);
+            });
+          } catch (createErr) {
+            console.warn('⚠️ Could not create local profile record for medical history:', createErr);
+          }
+          if (created) {
+            try { await created.update((p: any) => { p.medicalConditions = medicalConditions || ''; }); } catch (e) { console.warn('⚠️ Could not set medicalConditions on new record:', e); }
+            try { await created.update((p: any) => { p.currentMedications = currentMedications || ''; }); } catch (e) { console.warn('⚠️ Could not set currentMedications on new record:', e); }
+            try { await created.update((p: any) => { p.allergies = allergies || ''; }); } catch (e) { console.warn('⚠️ Could not set allergies on new record:', e); }
+            try { await created.update((p: any) => { p.onboardingCompleted = true; }); } catch (e) { console.warn('⚠️ Could not set onboardingCompleted on new record:', e); }
+            console.log("✅ Medical History - Created/updated new local profile (best-effort)");
+          }
         }
       });
 

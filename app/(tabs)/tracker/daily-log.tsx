@@ -1,6 +1,6 @@
  
 import { Q } from "@nozbe/watermelondb";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -188,7 +188,8 @@ const styles = StyleSheet.create({
 export default function DailyLog() {
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
-  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
   const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
 
