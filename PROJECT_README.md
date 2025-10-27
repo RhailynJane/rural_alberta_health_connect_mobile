@@ -1,6 +1,6 @@
 # Rural Alberta Health Connect (RAHC)
 
-![RAHC Logo](./assets/images/icon.png)
+![RAHC Logo](./assets/images/logo-no-name.png)
 
 **Pronounced:** "Rock"  
 **Tagline:** Healthcare access shouldn't depend on your postal code
