@@ -39,12 +39,13 @@ npx convex deploy      # Deploy backend to production
 ### Frontend Stack
 - **Framework**: React Native 0.81.4 with Expo SDK 54
 - **Routing**: Expo Router (file-based) with typed routes enabled
-- **Language**: TypeScript with strict mode
+- **Language**: TypeScript (strict mode disabled for decorators compatibility)
 - **State Management**: Local state + Convex realtime subscriptions
 - **Offline Database**: WatermelonDB v0.28.0 with SQLite adapter for local persistence
 - **Data Sync**: Bidirectional sync between WatermelonDB and Convex (see `/watermelon` directory)
 - **UI**: Custom curved components with react-native-svg
 - **Form Handling**: Formik + Yup validation
+- **Notifications**: Expo Notifications with push token management and local notifications
 - **ML/AI**:
   - TensorFlow Lite (`react-native-fast-tflite`) for on-device object detection
   - ExecutorCH integration (`react-native-executorch`) for edge models
@@ -54,8 +55,9 @@ npx convex deploy      # Deploy backend to production
 - **Architecture**: BFF (Backend for Frontend) pattern with layered structure
 - **Authentication**: Convex Auth with Password provider + Expo SecureStore
 - **Database**: Convex's built-in datastore with realtime sync
-- **Key Schemas**: users, userProfiles, healthEntries
+- **Key Schemas**: users, userProfiles, healthEntries, notifications, pushTokens, passwordResetCodes
 - **Sync Layer**: `convex/sync.ts` handles WatermelonDB synchronization
+- **Notifications**: Server-side notification management and push token storage
 
 ### Navigation Structure
 ```
@@ -136,11 +138,13 @@ convex/
 
 ### Key Convex Endpoints
 - `api.auth.signIn/signOut` - Authentication
-- `api.aiAssessment.generateContextWithGemini` - AI symptom analysis
+- `api.aiAssessment.generateContextWithGemini` - AI symptom analysis with Gemini
 - `api.healthEntries.logAIAssessment/logManualEntry` - Health tracking
 - `api.profile.getOnboardingStatus/getProfile` - User profile
 - `api.dashboard.user.getUserWithProfile` - Dashboard data
 - `api.locationServices.*` - Location-based healthcare facility search
+- `api.notifications.*` - Notification management and push tokens
+- `api.passwordReset.*` - Password reset with OTP via email (Resend/Brevo)
 
 ## Environment Setup
 
@@ -148,13 +152,14 @@ convex/
 ```
 EXPO_PUBLIC_CONVEX_URL=<your-convex-deployment-url>
 CONVEX_DEPLOYMENT=<convex-deployment-id>
+GEMINI_API_KEY=<google-gemini-api-key>
 FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
-MAPBOX_ACCESS_TOKEN=<mapbox-api-key>
+RNMAPBOX_MAPS_DOWNLOAD_TOKEN=<mapbox-download-token>
 ```
 
 ### Convex Deployment
 - Development: `npx convex dev` (uses dev deployment from .env.local)
-  - Dev URL: `https://judicious-pony-253.convex.cloud`
+  - Current dev URL: `https://rightful-narwhal-594.convex.cloud`
 - Production: Configure via Convex dashboard and `npx convex deploy`
   - Production URL: `https://energized-cormorant-495.convex.cloud`
 
@@ -170,7 +175,8 @@ MAPBOX_ACCESS_TOKEN=<mapbox-api-key>
 - Models stored in `assets/models/`
 
 ### TypeScript (tsconfig.json)
-- Strict mode enabled
+- Strict mode disabled (required for WatermelonDB decorators)
+- Experimental decorators enabled
 - Path alias: `@/*` maps to root directory
 - Includes Convex generated types
 
@@ -357,8 +363,9 @@ Currently no automated testing framework configured. Future considerations:
 
 ### Convex Connection Issues
 - **Auth failures**: Verify `.env.local` has correct `EXPO_PUBLIC_CONVEX_URL`
-- **Deployment mismatch**: Ensure dev uses `judicious-pony-253`, prod uses `energized-cormorant-495`
+- **Deployment mismatch**: Ensure dev uses `rightful-narwhal-594`, prod uses `energized-cormorant-495`
 - **Session expiry**: Use session refresh context (`useSessionRefresh`)
+- **Gemini API failures**: Verify `GEMINI_API_KEY` is set in `.env.local`
 
 ### Camera/Vision Issues
 - **Permissions**: Check camera permissions in `app.json` and device settings

@@ -7,4 +7,11 @@ const config = getDefaultConfig(__dirname);
 // Add support for .tflite files (TensorFlow Lite models)
 config.resolver.assetExts.push('tflite');
 
+// Exclude documentation files from bundle
+config.resolver.blockList = [
+  /docs\/.*/,
+  /.*\.md$/,
+  /\.demo\/.*/,
+];
+
 module.exports = config;
