@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "Rural Alberta Health Connect",
+    "name": "RAHC",
     "slug": "rahc-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-no-name.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "rahcapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.amirzhou.rahcapp",
+      "bundleIdentifier": "com.rahc.app",
       "infoPlist": {
         "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone.",
@@ -27,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.amirzhou.rahcapp",
+      "package": "com.rahc.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -146,7 +146,8 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud"
+        "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNoeHp0MDlncG84bzk1ZWxjZ2djMCJ9.b8JeDGu7Abnp2Kcxp78ztQ"
       },
       "android": {
         "buildType": "app-bundle"
