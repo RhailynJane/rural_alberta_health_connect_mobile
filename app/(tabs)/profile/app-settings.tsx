@@ -16,6 +16,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import {
     addReminder,
     deleteReminder,
+    dismissAllNotifications,
     getReminders,
     ReminderItem,
     requestNotificationPermissions,
@@ -166,18 +167,20 @@ export default function AppSettings() {
     }
 
     if (!value && reminders.length > 0) {
-      // Disable all reminders
+      // Disable all reminders and clear notifications
       const updated = reminders.map((r) => ({ ...r, enabled: false }));
       setReminders(updated);
-      await scheduleAllReminderItems(updated);
+      await scheduleAllReminderItems(updated); // This will cancel all scheduled notifications
+      await dismissAllNotifications(); // Also dismiss any visible notifications
     } else if (value) {
       // Enable existing reminders
       const updated = reminders.map((r) => ({ ...r, enabled: true }));
       setReminders(updated);
       await scheduleAllReminderItems(updated);
     } else if (!value) {
-      // Toggling OFF with no reminders
+      // Toggling OFF with no reminders - just dismiss any visible notifications
       setPendingEnable(false);
+      await dismissAllNotifications();
     }
   };
 
@@ -382,22 +385,8 @@ export default function AppSettings() {
           onClose={() => setFrequencyPickerVisible(false)}
           buttons={[
             {
-              label: "Hourly",
-              variant: "primary",
-              onPress: async () => {
-                setFrequencyPickerVisible(false);
-                setNextFrequency("hourly");
-                await addReminder({ enabled: true, frequency: "hourly" as any });
-                const updated = await getReminders();
-                setReminders(updated);
-                setPendingEnable(false);
-                // Don't schedule yet - only schedule when user explicitly confirms or saves
-                // await scheduleAllReminderItems(updated);
-              },
-            },
-            {
               label: "Daily",
-              variant: "secondary",
+              variant: "primary",
               onPress: () => {
                 setFrequencyPickerVisible(false);
                 setNextFrequency("daily");

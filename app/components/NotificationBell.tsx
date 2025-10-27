@@ -1,10 +1,12 @@
 import { api } from '@/convex/_generated/api';
+import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from 'convex/react';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
-import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread, markBellRead, ReminderSettings } from '../_utils/notifications';
+import { checkAndUpdateAnyReminderDue, getReminders, initializeNotificationsOnce, isBellUnread, ReminderSettings } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface NotificationBellProps {
@@ -13,61 +15,46 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ reminderEnabled = false, reminderSettings = null }: NotificationBellProps) {
-  const [showModal, setShowModal] = useState(false);
-  const [reminderInfo, setReminderInfo] = useState<{
-    scheduled: boolean;
-    enabled: boolean;
-    frequency?: string;
-    time?: string;
-    dayOfWeek?: string;
-    allNotifications: any[]; // deprecated view removed but keep shape
-    isDue: boolean;
-  } | null>(null);
+  const router = useRouter();
   const [unread, setUnread] = useState(false);
   
   // Get unread notification count from Convex
   const unreadCount = useQuery(api.notifications.getUnreadCount) || 0;
+  // Full-screen screen handles listing and read actions
   
-  // Combined unread: local reminders OR server notifications
-  const hasUnread = unread || unreadCount > 0;
+  // Show red only for local reminder due. Server unread count will not turn the bell red.
+  const hasUnread = unread;
   // Local state just for showing due info; management moved to Profile page
 
-  const loadReminderDetails = async () => {
+  const loadReminderDue = async () => {
     try {
-  const list = await getReminders();
-  const isDue = await checkAndUpdateAnyReminderDue(list);
-      setReminderInfo({
-        scheduled: list.length > 0,
-        enabled: true,
-        allNotifications: [],
-        isDue,
-      });
+      const list = await getReminders();
+      await checkAndUpdateAnyReminderDue(list);
     } catch (e) {
-      console.error('Error loading reminder details:', e);
-      setReminderInfo({ scheduled: false, enabled: false, allNotifications: [], isDue: false });
+      console.error('Error checking reminder due:', e);
     }
   };
 
   const handlePress = async () => {
-    await loadReminderDetails();
-    // Mark as read to clear the dot
-    await markBellRead();
-    setUnread(false);
-    NotificationBellEvent.emit('read'); // Notify all tabs to clear unread
-    setShowModal(true);
+    await loadReminderDue();
+    router.push('/(tabs)/notifications');
   };
 
   useEffect(() => {
+    // Ensure notification subsystem is initialized (creates heads-up channel and runs migration if needed)
+    initializeNotificationsOnce().catch(() => {});
+
     // Check if any reminder is due and update unread flag
     const checkReminder = async () => {
       // Load reminders from storage and compute due
-  const list = await getReminders();
-  await checkAndUpdateAnyReminderDue(list);
-      
-      // Get the current unread status
+      const list = await getReminders();
+      await checkAndUpdateAnyReminderDue(list);
+
+      // Get the current unread status for local reminder
       const currentUnread = await isBellUnread();
       console.log('[NotificationBell] Current unread status:', currentUnread);
       setUnread(currentUnread);
+  // local reminder due is reflected by unread flag
     };
 
     checkReminder();
@@ -76,7 +63,18 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
     const off = NotificationBellEvent.on('read', async () => {
       console.log('[NotificationBell] Received read event, clearing unread');
       setUnread(false);
-      await markBellRead();
+    });
+
+    // Listen for 'due' event to set unread instantly across tabs
+    const onDue = NotificationBellEvent.on('due', async () => {
+      // Recompute to avoid false positives
+      const list = await getReminders();
+      await checkAndUpdateAnyReminderDue(list);
+      const current = await isBellUnread();
+      setUnread(current);
+    });
+    const onCleared = NotificationBellEvent.on('cleared', async () => {
+      setUnread(false);
     });
 
     // Poll every minute to check if it's reminder time
@@ -85,8 +83,23 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
     return () => {
       clearInterval(interval);
       off();
+      onDue();
+      onCleared();
     };
   }, [reminderEnabled, reminderSettings]);
+
+  // Refresh on focus (e.g., when returning to Profile) so the bell syncs immediately
+  useFocusEffect(
+    React.useCallback(() => {
+      (async () => {
+        const list = await getReminders();
+        await checkAndUpdateAnyReminderDue(list);
+        const currentUnread = await isBellUnread();
+        setUnread(currentUnread);
+      })();
+      return () => {};
+    }, [])
+  );
 
   // Management UI removed from bell
 
@@ -112,48 +125,7 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
         )}
       </TouchableOpacity>
 
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Icon name="notifications" size={24} color={COLORS.primary} />
-              <Text style={styles.modalTitle}>Scheduled Reminders</Text>
-            </View>
-            
-            <ScrollView style={styles.scrollView}>
-              {reminderInfo?.isDue ? (
-                <View style={styles.pendingNotificationCard}>
-                  <View style={styles.notificationHeader}>
-                    <Icon name="notification-important" size={18} color={COLORS.error} />
-                    <Text style={styles.pendingNotificationTitle}>Time to take Symptom Assessment</Text>
-                  </View>
-                  <Text style={styles.notificationBody}>Complete your symptoms check now.</Text>
-                  <View style={styles.notificationTimeInfo}>
-                    <Icon name="access-time" size={14} color={COLORS.primary} />
-                    <Text style={styles.notificationTimeText}>Due now</Text>
-                    <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>Unread</Text></View>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.infoState}>
-                  <Icon name="check-circle" size={32} color={COLORS.success} />
-                  <Text style={styles.infoText}>You’re all caught up</Text>
-                  <Text style={styles.infoSubtext}>We’ll notify you here when your next reminder is due.</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Navigates to full-screen notifications; no modal here */}
     </>
   );
 }
