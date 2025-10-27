@@ -6,7 +6,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { NotificationBellEvent } from "../_utils/NotificationBellEvent";
-import { checkAndUpdateAnyReminderDue, clearBellNotification, getReminders, isBellUnread, markBellRead } from "../_utils/notifications";
+import { checkAndUpdateAnyReminderDue, clearBellNotification, getReminders, isBellReadNotCleared, isBellUnread, markBellRead } from "../_utils/notifications";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -17,6 +17,7 @@ export default function NotificationsScreen() {
   const { isOnline } = useNetworkStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [localDue, setLocalDue] = useState(false);
+  const [isReminderRead, setIsReminderRead] = useState(false);
   const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
   
   // Online queries (skip when offline)
@@ -101,13 +102,29 @@ export default function NotificationsScreen() {
       const list = await getReminders();
       await checkAndUpdateAnyReminderDue(list);
       const unread = await isBellUnread();
-      if (mounted) setLocalDue(unread);
+      const readNotCleared = await isBellReadNotCleared();
+      if (mounted) {
+        // Show notification if it's either unread OR read-but-not-cleared
+        setLocalDue(unread || readNotCleared);
+        // Set read state
+        setIsReminderRead(readNotCleared && !unread);
+      }
     };
     compute();
-    const offDue = NotificationBellEvent.on('due', () => setLocalDue(true));
-    const offCleared = NotificationBellEvent.on('cleared', () => setLocalDue(false));
-    const offRead = NotificationBellEvent.on('read', () => setLocalDue(false));
-    const interval = setInterval(compute, 60000);
+    const offDue = NotificationBellEvent.on('due', () => {
+      setLocalDue(true);
+      setIsReminderRead(false);
+    });
+    const offCleared = NotificationBellEvent.on('cleared', () => {
+      setLocalDue(false);
+      setIsReminderRead(false);
+    });
+    const offRead = NotificationBellEvent.on('read', () => {
+      setIsReminderRead(true);
+      setLocalDue(true); // Keep showing it
+    });
+    // Reduced interval frequency - only check every 5 minutes on this page
+    const interval = setInterval(compute, 300000); // 5 minutes
     return () => { mounted = false; offDue(); offCleared(); offRead(); clearInterval(interval); };
   }, []);
 
@@ -147,24 +164,45 @@ export default function NotificationsScreen() {
           )}
 
           {localDue && (
-            <View style={[styles.item, styles.itemUnread]}> 
+            <View style={[styles.item, !isReminderRead && styles.itemUnread]}> 
               <View style={styles.row}>
-                <Icon name="notifications-active" size={22} color={COLORS.primary} />
-                <Text style={styles.title} numberOfLines={2}>Symptom reminder due now</Text>
+                <Icon 
+                  name={isReminderRead ? "notifications-none" : "notifications-active"} 
+                  size={22} 
+                  color={isReminderRead ? COLORS.darkGray : COLORS.primary} 
+                />
+                <Text style={styles.title} numberOfLines={2}>
+                  Symptom reminder due now {isReminderRead && "(Read)"}
+                </Text>
               </View>
-              <Text style={styles.body}>It’s time to complete your symptoms check.</Text>
+              <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
               <View style={styles.footerRow}>
                 <Text style={styles.time}>{new Date().toLocaleString()}</Text>
-                <TouchableOpacity
-                  style={styles.smallBtn}
-                  onPress={async () => {
-                    try { await markBellRead(); } catch {}
-                    NotificationBellEvent.emit('read');
-                    setLocalDue(false);
-                  }}
-                >
-                  <Text style={styles.smallBtnText}>Mark done</Text>
-                </TouchableOpacity>
+                <View style={styles.actionButtons}>
+                  {!isReminderRead && (
+                    <TouchableOpacity
+                      style={styles.smallBtn}
+                      onPress={async () => {
+                        try { await markBellRead(); } catch {}
+                        NotificationBellEvent.emit('read');
+                        setIsReminderRead(true);
+                      }}
+                    >
+                      <Text style={styles.smallBtnText}>Mark read</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.smallBtn, styles.clearBtn]}
+                    onPress={async () => {
+                      try { await clearBellNotification(); } catch {}
+                      NotificationBellEvent.emit('cleared');
+                      setLocalDue(false);
+                      setIsReminderRead(false);
+                    }}
+                  >
+                    <Text style={styles.smallBtnText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           )}

@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +11,6 @@ interface DueReminderBannerProps {
 }
 
 export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerProps) {
-  const router = useRouter();
   const [visible, setVisible] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const insets = useSafeAreaInsets();
@@ -27,13 +25,13 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
 
     checkReminder();
 
-    // Listen for due event
-    const onDue = NotificationBellEvent.on('due', checkReminder);
-    const onRead = NotificationBellEvent.on('read', checkReminder);
-    const onCleared = NotificationBellEvent.on('cleared', checkReminder);
+    // Listen for events - no need to recompute, just update state
+    const onDue = NotificationBellEvent.on('due', () => setVisible(true));
+    const onRead = NotificationBellEvent.on('read', () => setVisible(false));
+    const onCleared = NotificationBellEvent.on('cleared', () => setVisible(false));
 
-    // Poll more frequently to reduce perceived delay
-    const interval = setInterval(checkReminder, 15000);
+    // Reduced interval - check every 2 minutes instead of 15 seconds
+    const interval = setInterval(checkReminder, 120000);
 
     return () => {
       clearInterval(interval);
@@ -59,22 +57,13 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     }
   }, [visible, fadeAnim]);
 
-  const handleDismiss = async (e?: any) => {
-    // Prevent event bubbling
-    if (e) {
-      e.stopPropagation();
-    }
+  const handleDismiss = async () => {
     try {
       await markBellRead();
       NotificationBellEvent.emit('read');
     } catch (error) {
       console.error('Error marking reminder as read:', error);
     }
-  };
-
-  const handleBannerPress = () => {
-    // Navigate to tracker when banner body is clicked
-    router.push('/(tabs)/tracker');
   };
 
   if (!visible) return null;
@@ -100,28 +89,22 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
         },
       ]}
     >
-      <View style={styles.banner}>
+      <TouchableOpacity 
+        style={styles.banner}
+        onPress={handleDismiss}
+        activeOpacity={0.9}
+      >
         <Icon 
           name="notifications-active" 
           size={24} 
           color={COLORS.white} 
         />
-        <TouchableOpacity 
-          style={styles.textContainer}
-          onPress={handleBannerPress}
-          activeOpacity={0.7}
-        >
+        <View style={styles.textContainer}>
           <Text style={styles.title}>Symptom Check Reminder</Text>
           <Text style={styles.body}>Time to log your symptoms</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.closeButton}
-          onPress={handleDismiss}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Icon name="close" size={20} color={COLORS.white} />
-        </TouchableOpacity>
-      </View>
+        </View>
+        <Icon name="close" size={20} color={COLORS.white} style={styles.closeIcon} />
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -166,7 +149,7 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     opacity: 0.9,
   },
-  closeButton: {
-    padding: 4,
+  closeIcon: {
+    marginLeft: 8,
   },
 });

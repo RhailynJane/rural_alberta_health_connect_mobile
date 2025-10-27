@@ -1,5 +1,4 @@
 import { api } from '@/convex/_generated/api';
-import { useFocusEffect } from '@react-navigation/native';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -26,18 +25,8 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
   const hasUnread = unread;
   // Local state just for showing due info; management moved to Profile page
 
-  const loadReminderDue = async () => {
-    try {
-      const list = await getReminders();
-      await checkAndUpdateAnyReminderDue(list);
-    } catch (e) {
-      console.error('Error checking reminder due:', e);
-    }
-  };
-
-  const handlePress = async () => {
-    await loadReminderDue();
-    router.push('/(tabs)/notifications');
+  const handlePress = () => {
+    router.navigate('/(tabs)/notifications');
   };
 
   useEffect(() => {
@@ -52,33 +41,26 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
 
       // Get the current unread status for local reminder
       const currentUnread = await isBellUnread();
-      console.log('[NotificationBell] Current unread status:', currentUnread);
       setUnread(currentUnread);
-  // local reminder due is reflected by unread flag
     };
 
     checkReminder();
 
     // Listen for 'read' event to clear unread instantly on all tabs
-    const off = NotificationBellEvent.on('read', async () => {
-      console.log('[NotificationBell] Received read event, clearing unread');
+    const off = NotificationBellEvent.on('read', () => {
       setUnread(false);
     });
 
     // Listen for 'due' event to set unread instantly across tabs
-    const onDue = NotificationBellEvent.on('due', async () => {
-      // Recompute to avoid false positives
-      const list = await getReminders();
-      await checkAndUpdateAnyReminderDue(list);
-      const current = await isBellUnread();
-      setUnread(current);
+    const onDue = NotificationBellEvent.on('due', () => {
+      setUnread(true);
     });
-    const onCleared = NotificationBellEvent.on('cleared', async () => {
+    const onCleared = NotificationBellEvent.on('cleared', () => {
       setUnread(false);
     });
 
-  // Poll more frequently to reduce perceived delay
-  const interval = setInterval(checkReminder, 15000);
+    // Reduced interval - check every 2 minutes instead of 15 seconds
+    const interval = setInterval(checkReminder, 120000);
 
     return () => {
       clearInterval(interval);
@@ -88,18 +70,8 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
     };
   }, [reminderEnabled, reminderSettings]);
 
-  // Refresh on focus (e.g., when returning to Profile) so the bell syncs immediately
-  useFocusEffect(
-    React.useCallback(() => {
-      (async () => {
-        const list = await getReminders();
-        await checkAndUpdateAnyReminderDue(list);
-        const currentUnread = await isBellUnread();
-        setUnread(currentUnread);
-      })();
-      return () => {};
-    }, [])
-  );
+  // REMOVED useFocusEffect - causing too many checks
+  // Events will handle updates in real-time
 
   // Management UI removed from bell
 

@@ -68,7 +68,10 @@ const BottomNavigation: React.FC = () => {
         const isFocused = pathname === tab.route;
 
         const onPress = () => {
-          router.push(tab.route as any);
+          // Use navigate for tab switching - doesn't add to stack
+          if (!isFocused) {
+            router.navigate(tab.route as any);
+          }
         };
 
         return (
