@@ -4,23 +4,32 @@
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
   },
-  "java.configuration.runtimes": [
-    {
-      "name": "JavaSE-17",
-      "path": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
-      "default": true
-    }
-  ],
-  "java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
-  "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
-  "java.import.gradle.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.16.8-hotspot",
-  "java.import.gradle.enabled": true,
-  "java.autobuild.enabled": true,
-  "java.import.exclusions": [
-    "**/node_modules/**",
-    "**/.meteor/**",
-    "**/build/**"
-  ],
-  "java.dependency.syncWithFolderExplorer": false,
-  "java.project.explorer.showNonJavaResources": false
+  "java.enabled": false,
+  "java.jdt.ls.enabled": false,
+  "typescript.validate.enable": true,
+  "javascript.validate.enable": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules/@rnmapbox": true,
+    "**/node_modules/@shopify": true,
+    "**/node_modules/expo-modules-core": true,
+    "**/.settings": true,
+    "**/.project": true,
+    "**/.classpath": true,
+    "**/.factorypath": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/*.code-search": true,
+    "**/android/build": true,
+    "**/ios/build": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/android/build/**": true,
+    "**/ios/build/**": true
+  }
 }
