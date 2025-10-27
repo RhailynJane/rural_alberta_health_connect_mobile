@@ -140,7 +140,6 @@ packagingOptions {
     }
 }
 
-    // Globally exclude legacy Android Support libraries to avoid conflicts with AndroidX
     configurations.all {
         exclude group: 'com.android.support'
     }
