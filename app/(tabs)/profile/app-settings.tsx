@@ -391,7 +391,8 @@ export default function AppSettings() {
                 const updated = await getReminders();
                 setReminders(updated);
                 setPendingEnable(false);
-                await scheduleAllReminderItems(updated);
+                // Don't schedule yet - only schedule when user explicitly confirms or saves
+                // await scheduleAllReminderItems(updated);
               },
             },
             {
@@ -480,8 +481,9 @@ export default function AppSettings() {
                   <Text
                     style={{
                       fontFamily: FONTS.BarlowSemiCondensed,
-                      fontSize: 16,
+                      fontSize: 18,
                       color: COLORS.darkText,
+                      fontWeight: '600',
                     }}
                   >
                     {d}
@@ -492,7 +494,7 @@ export default function AppSettings() {
                     <Text
                       style={{
                         fontFamily: FONTS.BarlowSemiCondensed,
-                        fontSize: 14,
+                        fontSize: 16,
                         color: COLORS.darkGray,
                       }}
                     >
@@ -518,7 +520,7 @@ export default function AppSettings() {
                 </View>
               ))}
               <View
-                style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 12 }}
+                style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 20, gap: 12 }}
               >
                 <TouchableOpacity
                   onPress={() =>
@@ -532,27 +534,45 @@ export default function AppSettings() {
                       Sat: null,
                     })
                   }
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 20,
+                    borderRadius: 8,
+                    backgroundColor: COLORS.error + '20',
+                    borderWidth: 1,
+                    borderColor: COLORS.error,
+                  }}
                 >
                   <Text
                     style={{
                       color: COLORS.error,
                       fontFamily: FONTS.BarlowSemiCondensedBold,
+                      fontSize: 15,
                     }}
                   >
                     Clear all
                   </Text>
                 </TouchableOpacity>
-                <View style={{ flexDirection: "row", gap: 16 }}>
+                <View style={{ flexDirection: "row", gap: 12 }}>
                   <TouchableOpacity
                     onPress={() => {
                       setWeeklyModalVisible(false);
                       setPendingEnable(false);
                     }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 20,
+                      borderRadius: 8,
+                      backgroundColor: COLORS.lightGray,
+                      borderWidth: 1,
+                      borderColor: COLORS.darkGray,
+                    }}
                   >
                     <Text
                       style={{
-                        color: COLORS.darkGray,
+                        color: COLORS.darkText,
                         fontFamily: FONTS.BarlowSemiCondensedBold,
+                        fontSize: 15,
                       }}
                     >
                       Cancel
@@ -575,11 +595,18 @@ export default function AppSettings() {
                       setWeeklyModalVisible(false);
                       await scheduleAllReminderItems(updated);
                     }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 20,
+                      borderRadius: 8,
+                      backgroundColor: COLORS.primary,
+                    }}
                   >
                     <Text
                       style={{
-                        color: COLORS.primary,
+                        color: COLORS.white,
                         fontFamily: FONTS.BarlowSemiCondensedBold,
+                        fontSize: 15,
                       }}
                     >
                       Save
