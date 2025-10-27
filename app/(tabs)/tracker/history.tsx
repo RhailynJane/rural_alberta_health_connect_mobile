@@ -1,28 +1,35 @@
+import { Q } from "@nozbe/watermelondb";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+
 export default function History() {
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const database = useWatermelonDatabase();
+  const { isOnline } = useNetworkStatus();
+  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
+  const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -57,10 +64,47 @@ export default function History() {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [selectedRange, setSelectedRange] = useState("7d");
 
-  // Get all user entries
-  const allEntries = useQuery(
+  // Get all user entries (online)
+  const allEntriesOnline = useQuery(
     api.healthEntries.getAllUserEntries,
-    currentUser ? { userId: currentUser._id } : "skip"
+    currentUser && isOnline ? { userId: currentUser._id } : "skip"
+  );
+
+  // Get offline entries from WatermelonDB
+  useEffect(() => {
+    if (!isOnline) {
+      const fetchOfflineEntries = async () => {
+        try {
+          const collection = database.get("health_entries");
+          const entries = await collection
+            .query(Q.sortBy("timestamp", Q.desc))
+            .fetch();
+
+          // Map WatermelonDB entries to match Convex format
+          const mapped = entries.map((entry: any) => ({
+            _id: entry.id,
+            symptoms: entry.symptoms || "",
+            severity: entry.severity || 0,
+            category: entry.category || "",
+            notes: entry.notes || "",
+            timestamp: entry.timestamp || Date.now(),
+            createdBy: entry.createdBy || "User",
+            type: entry.type || "manual_entry",
+          }));
+          setOfflineEntries(mapped);
+        } catch (error) {
+          console.error("Error fetching offline entries:", error);
+          setOfflineEntries([]);
+        }
+      };
+      fetchOfflineEntries();
+    }
+  }, [isOnline, database]);
+
+  // Use online or offline data
+  const allEntries = useMemo(
+    () => (isOnline ? allEntriesOnline : offlineEntries),
+    [isOnline, allEntriesOnline, offlineEntries]
   );
 
   const handleViewEntryDetails = (entryId: string) => {

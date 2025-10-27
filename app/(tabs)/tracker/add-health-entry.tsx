@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useDatabase } from "@nozbe/watermelondb/hooks";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
@@ -19,15 +20,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
+import { syncManager } from "../../../watermelon/sync/syncManager";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
-import SpeechToTextButton from "../../components/SpeechToTextButton";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 export default function AddHealthEntry() {
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const database = useDatabase();
+  const { isOnline } = useNetworkStatus();
+  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
   const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
@@ -39,6 +43,7 @@ export default function AddHealthEntry() {
   const [severity, setSeverity] = useState("");
   const [notes, setNotes] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [localPhotoUris, setLocalPhotoUris] = useState<string[]>([]); // For offline photo storage
   const [uploading, setUploading] = useState(false);
   
   // Error modal state
@@ -161,12 +166,12 @@ export default function AddHealthEntry() {
     }
   };
 
-  // Upload image to Convex storage
+  // Upload image to Convex storage (online) or save locally (offline)
   const uploadImage = async (imageUri: string) => {
     if (uploading) return;
 
     // Double-check photo limit before starting upload
-    if (photos.length >= 3) {
+    if (photos.length + localPhotoUris.length >= 3) {
       setErrorModalMessage("You can only add up to 3 photos per health entry.");
       setErrorModalVisible(true);
       return;
@@ -174,43 +179,47 @@ export default function AddHealthEntry() {
 
     setUploading(true);
     try {
-      // Generate upload URL
-      const uploadUrl = await generateUploadUrl();
+      if (isOnline) {
+        // Online: Upload to Convex
+        const uploadUrl = await generateUploadUrl();
 
-      // Convert image to blob
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
 
-      // Upload to Convex
-      const result = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": blob.type },
-        body: blob,
-      });
+        const result = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": blob.type },
+          body: blob,
+        });
 
-      if (!result.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const { storageId } = await result.json();
-
-      // Store the photo reference
-      const photoUrl = await storeUploadedPhoto({ storageId });
-
-      // Final check before adding to state (in case of race conditions)
-      setPhotos((prev) => {
-        if (prev.length >= 3) {
-          setErrorModalMessage("You can only add up to 3 photos per health entry.");
-          setErrorModalVisible(true);
-          return prev; // Don't add if limit reached
+        if (!result.ok) {
+          throw new Error("Upload failed");
         }
-        return [...prev, photoUrl];
-      });
 
-      console.log("✅ Photo uploaded successfully:", photoUrl);
+        const { storageId } = await result.json();
+        const photoUrl = await storeUploadedPhoto({ storageId });
+
+        setPhotos((prev) => {
+          if (prev.length >= 3) {
+            setErrorModalMessage("You can only add up to 3 photos per health entry.");
+            setErrorModalVisible(true);
+            return prev;
+          }
+          return [...prev, photoUrl];
+        });
+
+        console.log("✅ Photo uploaded successfully:", photoUrl);
+      } else {
+        // Offline: Just store the local URI directly (no upload needed)
+        // Photos will be uploaded when back online during sync
+        setLocalPhotoUris((prev) => [...prev, imageUri]);
+        console.log("📴 Photo saved for offline upload:", imageUri);
+      }
     } catch (error) {
       console.error("❌ Error uploading image:", error);
-      setErrorModalMessage("Failed to upload photo. Please try again.");
+      setErrorModalMessage(isOnline 
+        ? "Failed to upload photo. Please try again."
+        : "Failed to save photo locally. Please try again.");
       setErrorModalVisible(true);
     } finally {
       setUploading(false);
@@ -261,18 +270,20 @@ export default function AddHealthEntry() {
 
   // Save health entry and navigate back
   const handleSaveEntry = async () => {
-    if (!currentUser?._id) {
-      setAlertModalTitle("Error");
-      setAlertModalMessage("You must be logged in to save entries.");
+    const userId = currentUser?._id;
+    
+    // Allow offline saves without authentication check
+    if (!isOnline && !userId) {
+      setAlertModalTitle("Offline Mode");
+      setAlertModalMessage("Your entry will be saved locally and synced when you're back online. Please sign in when online to sync your data.");
       setAlertModalButtons([
         {
-          label: "OK",
+          label: "Continue",
           onPress: () => setAlertModalVisible(false),
           variant: "primary",
         },
       ]);
       setAlertModalVisible(true);
-      return;
     }
 
     if (!symptoms.trim() || !severity) {
@@ -292,33 +303,76 @@ export default function AddHealthEntry() {
     try {
       const timestamp = createTimestamp(selectedDate, selectedTime);
       const dateString = formatDate(selectedDate);
+      const saveUserId = userId || 'offline_user';
 
       console.log("Saving entry:", {
+        mode: isOnline ? 'online' : 'offline',
         date: dateString,
         timestamp,
         symptoms,
         severity: parseInt(severity),
         notes,
         photos: photos.length,
+        localPhotos: localPhotoUris.length,
       });
 
-      await logManualEntry({
-        userId: currentUser._id,
-        date: dateString,
-        timestamp,
-        symptoms,
-        severity: parseInt(severity),
-        notes,
-        photos: photos,
-        createdBy: currentUser.firstName || "User",
-      });
+      if (isOnline && userId) {
+        // ONLINE: Save directly to Convex
+        await logManualEntry({
+          userId,
+          date: dateString,
+          timestamp,
+          symptoms,
+          severity: parseInt(severity),
+          notes,
+          photos: photos,
+          createdBy: currentUser.firstName || "User",
+        });
+        console.log("✅ Manual entry saved online");
+      } else {
+        // OFFLINE: Save to WatermelonDB
+        const healthEntriesCollection = database.collections.get('health_entries');
+        
+        await database.write(async () => {
+          await healthEntriesCollection.create((entry: any) => {
+            entry.userId = saveUserId;
+            entry.date = dateString;
+            entry.timestamp = timestamp;
+            entry.symptoms = symptoms;
+            entry.severity = parseInt(severity);
+            entry.notes = notes || '';
+            entry.photos = JSON.stringify([...photos, ...localPhotoUris]); // Combine uploaded and local
+            entry.type = 'manual';
+            entry.synced = false; // Mark for sync when online
+            entry.createdBy = currentUser?.firstName || 'User';
+          });
+        });
+        
+        console.log("📴 Entry saved offline, will sync when online");
+        
+        // Add to sync queue
+        await syncManager.addToQueue({
+          type: 'health_entry',
+          data: {
+            userId: saveUserId,
+            date: dateString,
+            timestamp,
+            symptoms,
+            severity: parseInt(severity),
+            notes,
+            photos: [...photos, ...localPhotoUris],
+            createdBy: currentUser?.firstName || 'User',
+          },
+        });
+      }
 
-      console.log("✅ Manual entry saved successfully with photos");
       setShowSuccessModal(true);
     } catch (error) {
       console.error("❌ Failed to save manual entry:", error);
       setAlertModalTitle("Error");
-      setAlertModalMessage("Failed to save entry. Please try again.");
+      setAlertModalMessage(isOnline 
+        ? "Failed to save entry online. Please try again."
+        : "Failed to save entry offline. Please check storage and try again.");
       setAlertModalButtons([
         {
           label: "OK",
@@ -540,12 +594,7 @@ export default function AddHealthEntry() {
                   >
                     Symptoms/Details
                   </Text>
-                  <SpeechToTextButton
-                    onTextReceived={setSymptoms}
-                    currentText={symptoms}
-                    placeholder="Tap to speak your symptoms"
-                    style={{ marginBottom: 10 }}
-                  />
+                  {/* Speech-to-text removed */}
                   <TextInput
                     style={[
                       styles.textInput,
@@ -638,12 +687,7 @@ export default function AddHealthEntry() {
                   >
                     Notes
                   </Text>
-                  <SpeechToTextButton
-                    onTextReceived={setNotes}
-                    currentText={notes}
-                    placeholder="Tap to speak additional details"
-                    style={{ marginBottom: 10 }}
-                  />
+                  {/* Speech-to-text removed */}
                   <TextInput
                     style={[
                       styles.textInput,

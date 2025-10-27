@@ -21,7 +21,6 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
-import SpeechToTextButton from "../../components/SpeechToTextButton";
 import { COLORS, FONTS } from "../../constants/constants";
 
 // AI Context Types
@@ -622,11 +621,7 @@ export default function SymptomAssessment() {
                 Or describe your symptoms:
               </Text>
 
-              <SpeechToTextButton
-                onTextReceived={setSymptomDescription}
-                currentText={symptomDescription}
-                placeholder="Tap to speak your symptoms"
-              />
+
 
               <TextInput
                 style={[

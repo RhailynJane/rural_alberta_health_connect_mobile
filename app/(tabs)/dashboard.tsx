@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // app/dashboard.tsx
+import { Q } from "@nozbe/watermelondb";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Linking,
@@ -14,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -25,10 +28,13 @@ import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function Dashboard() {
+  const database = useWatermelonDatabase();
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
+  const [cachedUser, setCachedUser] = useState<any>(null);
+  const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
   const queryArgs = isAuthenticated && isOnline ? {} : "skip";
   
   // Modal state
@@ -63,7 +69,7 @@ export default function Dashboard() {
   };
 
   const dateRange = getLast7DaysDateRange();
-  const weeklyEntries = useQuery(
+  const weeklyEntriesOnline = useQuery(
     api.healthEntries.getEntriesByDateRange,
     user?._id && isOnline
       ? {
@@ -72,6 +78,89 @@ export default function Dashboard() {
           endDate: dateRange.endDate,
         }
       : "skip"
+  );
+
+  // Cache user data when online
+  useEffect(() => {
+    if (isOnline && user) {
+      AsyncStorage.setItem("@dashboard_user", JSON.stringify(user)).catch((err) =>
+        console.error("Failed to cache user data:", err)
+      );
+      setCachedUser(user);
+    }
+  }, [isOnline, user]);
+
+  // Cache weekly entries when online
+  useEffect(() => {
+    if (isOnline && weeklyEntriesOnline) {
+      AsyncStorage.setItem(
+        "@dashboard_weekly_entries",
+        JSON.stringify(weeklyEntriesOnline)
+      ).catch((err) => console.error("Failed to cache weekly entries:", err));
+      setCachedWeeklyEntries(weeklyEntriesOnline);
+    }
+  }, [isOnline, weeklyEntriesOnline]);
+
+  // Load cached data when offline
+  useEffect(() => {
+    if (!isOnline) {
+      // Load cached user
+      AsyncStorage.getItem("@dashboard_user")
+        .then((cached) => {
+          if (cached) {
+            setCachedUser(JSON.parse(cached));
+          }
+        })
+        .catch((err) => console.error("Failed to load cached user:", err));
+
+      // Load cached weekly entries
+      AsyncStorage.getItem("@dashboard_weekly_entries")
+        .then((cached) => {
+          if (cached) {
+            setCachedWeeklyEntries(JSON.parse(cached));
+          }
+        })
+        .catch((err) => console.error("Failed to load cached entries:", err));
+
+      // Also try to load from WatermelonDB
+      const fetchOfflineEntries = async () => {
+        try {
+          const collection = database.get("health_entries");
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          
+          const entries = await collection
+            .query(
+              Q.where("timestamp", Q.gte(sevenDaysAgo.getTime())),
+              Q.sortBy("timestamp", Q.desc)
+            )
+            .fetch();
+
+          if (entries.length > 0) {
+            const mapped = entries.map((entry: any) => ({
+              _id: entry.id,
+              symptoms: entry.symptoms || "",
+              severity: entry.severity || 0,
+              timestamp: entry.timestamp || Date.now(),
+            }));
+            setCachedWeeklyEntries(mapped);
+          }
+        } catch (error) {
+          console.error("Error fetching offline entries from WatermelonDB:", error);
+        }
+      };
+      fetchOfflineEntries();
+    }
+  }, [isOnline, database]);
+
+  // Use online or cached data
+  const displayUser = useMemo(
+    () => (isOnline ? user : cachedUser),
+    [isOnline, user, cachedUser]
+  );
+  const weeklyEntries = useMemo(
+    () => (isOnline ? weeklyEntriesOnline : cachedWeeklyEntries),
+    [isOnline, weeklyEntriesOnline, cachedWeeklyEntries]
   );
 
   // Calculate weekly health score
@@ -210,9 +299,9 @@ export default function Dashboard() {
     );
   }
 
-  // Use currentUser data instead of userWithProfile for now
-  const userName = user.firstName || "User";
-  const userEmail = user.email;
+  // Use displayUser instead of user for offline support
+  const userName = displayUser?.firstName || user?.firstName || "User";
+  const userEmail = displayUser?.email || user?.email || "";
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router

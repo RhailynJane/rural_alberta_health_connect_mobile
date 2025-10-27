@@ -1,16 +1,17 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { api } from "@/convex/_generated/api";
 import { useAuthActions } from "@convex-dev/auth/react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -20,11 +21,15 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import StatusModal from "../../components/StatusModal";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { normalizeNanpToE164, savePhoneSecurely } from "../../utils/securePhone";
 
 export default function Profile() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signOut } = useAuthActions();
+  const { isOnline } = useNetworkStatus();
+  const [cachedProfile, setCachedProfile] = useState<any>(null);
+  const [cachedUser, setCachedUser] = useState<any>(null);
 
   const updatePersonalInfo = useMutation(
     api.profile.personalInformation.updatePersonalInfo
@@ -45,20 +50,61 @@ export default function Profile() {
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
   const updatePhone = useMutation(api.users.updatePhone);
-  const currentUser = useQuery(
+  const currentUserOnline = useQuery(
     api.users.getCurrentUser,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && isOnline ? {} : "skip"
   );
 
-  // Skip queries if not authenticated
-  const userProfile = useQuery(
+  // Skip queries if not authenticated or offline
+  const userProfileOnline = useQuery(
     api.profile.personalInformation.getProfile,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && isOnline ? {} : "skip"
   );
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && isOnline ? {} : "skip"
   );
+
+  // Cache user data when online
+  useEffect(() => {
+    if (isOnline && currentUserOnline) {
+      AsyncStorage.setItem("@profile_user", JSON.stringify(currentUserOnline)).catch((err) =>
+        console.error("Failed to cache user:", err)
+      );
+      setCachedUser(currentUserOnline);
+    }
+  }, [isOnline, currentUserOnline]);
+
+  // Cache profile data when online
+  useEffect(() => {
+    if (isOnline && userProfileOnline) {
+      AsyncStorage.setItem("@profile_data", JSON.stringify(userProfileOnline)).catch((err) =>
+        console.error("Failed to cache profile:", err)
+      );
+      setCachedProfile(userProfileOnline);
+    }
+  }, [isOnline, userProfileOnline]);
+
+  // Load cached data when offline
+  useEffect(() => {
+    if (!isOnline) {
+      AsyncStorage.getItem("@profile_user")
+        .then((cached) => {
+          if (cached) setCachedUser(JSON.parse(cached));
+        })
+        .catch((err) => console.error("Failed to load cached user:", err));
+
+      AsyncStorage.getItem("@profile_data")
+        .then((cached) => {
+          if (cached) setCachedProfile(JSON.parse(cached));
+        })
+        .catch((err) => console.error("Failed to load cached profile:", err));
+    }
+  }, [isOnline]);
+
+  // Use online or cached data
+  const currentUser = isOnline ? currentUserOnline : (cachedUser || currentUserOnline);
+  const userProfile = isOnline ? userProfileOnline : (cachedProfile || userProfileOnline);
 
   // Get location services status
   const locationStatus = useQuery(

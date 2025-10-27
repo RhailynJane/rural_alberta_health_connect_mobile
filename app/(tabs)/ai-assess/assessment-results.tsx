@@ -7,22 +7,25 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Linking,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { syncManager } from "../../../watermelon/sync/syncManager";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 /**
  * Compresses and resizes an image to reduce file size for API transmission
@@ -295,6 +298,8 @@ function renderAssessmentCards(text: string | null) {
 }
 
 export default function AssessmentResults() {
+  const database = useWatermelonDatabase();
+  const { isOnline } = useNetworkStatus();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [symptomContext, setSymptomContext] = useState("");
@@ -307,7 +312,7 @@ export default function AssessmentResults() {
   // Use ref to track if we're currently fetching to prevent multiple calls
   const isFetchingRef = useRef(false);
 
-  const currentUser = useQuery(api.users.getCurrentUser);
+  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
 
@@ -405,24 +410,69 @@ export default function AssessmentResults() {
             getUTCMonth: today.getUTCMonth(),
           });
 
-          await logAIAssessment({
-            userId: currentUser._id,
-            date: dateString,
-            timestamp,
-            symptoms: description,
-            severity: severity,
-            category: category,
-            duration: duration,
-            aiContext: cleanedContext,
-            photos: displayPhotos,
-            notes: `AI Assessment - ${category}`,
-          });
+          // Check if online - if offline, save to WatermelonDB + sync queue
+          if (!isOnline) {
+            console.log("📴 Offline: Saving AI assessment to WatermelonDB");
+            try {
+              const collection = database.get("health_entries");
+              await database.write(async () => {
+                await collection.create((entry: any) => {
+                  entry.user_id = currentUser?._id || "offline_user";
+                  entry.symptoms = description;
+                  entry.severity = severity;
+                  entry.category = category;
+                  entry.notes = `AI Assessment - ${category}`;
+                  entry.timestamp = timestamp;
+                  entry.local_date = dateString;
+                  entry.type = "ai_assessment";
+                  entry.createdBy = "AI Assessment";
+                  entry.synced = false;
+                });
+              });
 
-          console.log(
-            "✅ AI assessment automatically logged to health entries with date:",
-            dateString
-          );
-          setIsLogged(true);
+              // Add to sync queue
+              await syncManager.addToQueue({
+                type: "ai_assessment",
+                data: {
+                  userId: currentUser?._id,
+                  date: dateString,
+                  timestamp,
+                  symptoms: description,
+                  severity,
+                  category,
+                  duration,
+                  aiContext: cleanedContext,
+                  photos: displayPhotos,
+                  notes: `AI Assessment - ${category}`,
+                },
+              });
+
+              console.log("✅ AI assessment saved offline, will sync when online");
+              setIsLogged(true);
+            } catch (offlineError) {
+              console.error("❌ Failed to save offline:", offlineError);
+            }
+          } else {
+            // Online - save to Convex
+            await logAIAssessment({
+              userId: currentUser._id,
+              date: dateString,
+              timestamp,
+              symptoms: description,
+              severity: severity,
+              category: category,
+              duration: duration,
+              aiContext: cleanedContext,
+              photos: displayPhotos,
+              notes: `AI Assessment - ${category}`,
+            });
+
+            console.log(
+              "✅ AI assessment automatically logged to health entries with date:",
+              dateString
+            );
+            setIsLogged(true);
+          }
         } catch (logError) {
           console.error("❌ Failed to log AI assessment:", logError);
         }

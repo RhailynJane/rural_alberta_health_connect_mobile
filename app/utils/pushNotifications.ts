@@ -9,15 +9,28 @@ import { Platform } from "react-native";
  * Configure notification handler for foreground notifications
  */
 export function configureForegroundNotifications() {
+  // Ensure foreground notifications show a banner/alert
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
+      // iOS presentation options (SDK 54+)
       shouldShowBanner: true,
       shouldShowList: true,
     }),
   });
+
+  // Ensure Android has a high-importance default channel for heads-up banners
+  if (Platform.OS === "android") {
+    Notifications.setNotificationChannelAsync("default", {
+      name: "Default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#FF231F7C",
+      sound: 'default',
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -52,7 +65,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     // Get the push token
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6", // Your EAS project ID from app.json
+      projectId: "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6", // EAS project ID from app.json -> extra.eas.projectId
     });
     token = tokenData.data;
 
@@ -123,4 +136,34 @@ export function setupNotificationListeners(
     foregroundSubscription.remove();
     responseSubscription.remove();
   };
+}
+
+/**
+ * Schedule an immediate local test notification to validate banners
+ */
+export async function sendLocalTestNotification(): Promise<void> {
+  // Ensure handler/channel configured
+  configureForegroundNotifications();
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      sound: 'default',
+    }).catch(() => {});
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Test notification',
+      body: 'If you see this, banners are working ✅',
+      sound: 'default',
+      priority: 'max',
+      data: { type: 'test', timestamp: Date.now() },
+    },
+    // null trigger shows immediately
+    trigger: null,
+  });
 }

@@ -1,5 +1,6 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { useEffect, useRef, useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { api } from "../convex/_generated/api";
@@ -15,12 +16,29 @@ export default function Index() {
   const { isOnline, isChecking: isCheckingNetwork } = useNetworkStatus();
   const hasNavigated = useRef(false);
   const [offlineTimeout, setOfflineTimeout] = useState(false);
+  const [hasOfflineToken, setHasOfflineToken] = useState(false);
 
   // Only fetch user data if authenticated AND online
   const user = useQuery(
     api.users.getCurrentUser, 
     isAuthenticated && isOnline ? {} : "skip"
   );
+
+  // Check for cached auth token on mount
+  useEffect(() => {
+    const checkOfflineAuth = async () => {
+      try {
+        const token = await SecureStore.getItemAsync("convex_token");
+        if (token) {
+          console.log("🔐 Found cached auth token - allowing offline access");
+          setHasOfflineToken(true);
+        }
+      } catch (error) {
+        console.error("Failed to check offline auth:", error);
+      }
+    };
+    checkOfflineAuth();
+  }, []);
 
   // Set timeout for offline mode
   useEffect(() => {
@@ -60,7 +78,7 @@ export default function Index() {
     }
 
     // If offline for too long, navigate to dashboard (offline mode)
-    if (offlineTimeout) {
+    if (offlineTimeout || (!isOnline && hasOfflineToken)) {
       console.log("📴 Offline mode: navigating to dashboard");
       hasNavigated.current = true;
       router.replace('/(tabs)/dashboard');
@@ -89,7 +107,7 @@ export default function Index() {
       console.log("🔄 Initial route: navigating to onboarding");
       router.replace('/onboarding');
     }
-  }, [router, isAuthenticated, isLoading, user, isRefreshing, isOnline, isCheckingNetwork, offlineTimeout]);
+  }, [router, isAuthenticated, isLoading, user, isRefreshing, isOnline, isCheckingNetwork, offlineTimeout, hasOfflineToken]);
   
   return (
     <View style={styles.container}>

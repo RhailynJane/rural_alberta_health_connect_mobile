@@ -1,6 +1,7 @@
 import { api } from "@/convex/_generated/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -10,22 +11,88 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { COLORS, FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function NotificationsScreen() {
+  const { isOnline } = useNetworkStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [localDue, setLocalDue] = useState(false);
-  const unreadCount = useQuery(api.notifications.getUnreadCount) || 0;
-  const list = useQuery(api.notifications.getNotifications, { limit: 50 }) || [] as any[];
+  const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
+  
+  // Online queries (skip when offline)
+  const unreadCount = useQuery(
+    api.notifications.getUnreadCount,
+    isOnline ? {} : "skip"
+  ) || 0;
+  const listRaw = useQuery(
+    api.notifications.getNotifications,
+    isOnline ? { limit: 50 } : "skip"
+  );
+  const list = useMemo(() => listRaw || [] as any[], [listRaw]);
+  
   const markAllAsRead = useMutation(api.notifications.markAllAsRead);
   const markOneAsRead = useMutation(api.notifications.markAsRead);
 
+  // Cache notifications when online
+  useEffect(() => {
+    if (isOnline && list && list.length > 0) {
+      const cacheNotifications = async () => {
+        try {
+          await AsyncStorage.setItem(
+            'notifications_cache',
+            JSON.stringify({
+              data: list,
+              unreadCount,
+              timestamp: Date.now(),
+            })
+          );
+        } catch (error) {
+          console.error('Failed to cache notifications:', error);
+        }
+      };
+      cacheNotifications();
+    }
+  }, [isOnline, list, unreadCount]);
+
+  // Load cached notifications when offline
+  useEffect(() => {
+    if (!isOnline) {
+      const loadCached = async () => {
+        try {
+          const cached = await AsyncStorage.getItem('notifications_cache');
+          if (cached) {
+            const { data } = JSON.parse(cached);
+            setCachedNotifications(data || []);
+          }
+        } catch (error) {
+          console.error('Failed to load cached notifications:', error);
+          setCachedNotifications([]);
+        }
+      };
+      loadCached();
+    }
+  }, [isOnline]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // useQuery will refetch automatically; just delay the spinner a bit
-    setTimeout(() => setRefreshing(false), 600);
-  }, []);
+    if (isOnline) {
+      // Online: useQuery will refetch automatically
+      setTimeout(() => setRefreshing(false), 600);
+    } else {
+      // Offline: just reload cached data
+      const cached = await AsyncStorage.getItem('notifications_cache');
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        setCachedNotifications(data || []);
+      }
+      setRefreshing(false);
+    }
+  }, [isOnline]);
 
   const computedUnread = useMemo(() => unreadCount, [unreadCount]);
+  
+  // Use online or cached notifications
+  const displayList = isOnline ? list : cachedNotifications;
 
   // Compute local due state on mount and when events fire
   React.useEffect(() => {
@@ -102,14 +169,14 @@ export default function NotificationsScreen() {
             </View>
           )}
 
-          {list.length === 0 ? (
+          {displayList.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="notifications-none" size={48} color={COLORS.darkGray} />
               <Text style={styles.emptyTitle}>No notifications yet</Text>
               <Text style={styles.emptySub}>You&apos;ll see important updates here</Text>
             </View>
           ) : (
-            list.map((n: any) => (
+            displayList.map((n: any) => (
               <View key={String(n._id)} style={[styles.item, !n.read && styles.itemUnread]}>
                 <View style={styles.row}>
                   <Icon name={n.read ? "notifications-none" : "notifications-active"} size={22} color={n.read ? COLORS.darkGray : COLORS.primary} />
@@ -118,7 +185,7 @@ export default function NotificationsScreen() {
                 {!!n.body && <Text style={styles.body}>{n.body}</Text>}
                 <View style={styles.footerRow}>
                   <Text style={styles.time}>{new Date(n.createdAt).toLocaleString()}</Text>
-                  {!n.read && (
+                  {!n.read && isOnline && (
                     <TouchableOpacity
                       style={styles.smallBtn}
                       onPress={async () => {
