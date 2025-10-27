@@ -5,6 +5,7 @@ import { NotificationBellEvent } from "./NotificationBellEvent";
 
 const STORAGE_KEY = "symptomReminderNotificationId";
 const BELL_UNREAD_KEY = "notificationBellUnread";
+const BELL_READ_NOT_CLEARED_KEY = "notificationBellReadNotCleared";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
 // Android heads-up reminder channel
@@ -402,11 +403,27 @@ export async function isBellUnread(): Promise<boolean> {
   }
 }
 
+export async function isBellReadNotCleared(): Promise<boolean> {
+  try {
+    const v = await AsyncStorage.getItem(nk(BELL_READ_NOT_CLEARED_KEY));
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
 export async function markBellRead(): Promise<void> {
   await setBellUnread(false);
+  // Mark as read but not cleared
+  try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "1"); } catch {}
   // Store the date/time when user marked as read, so we don't re-trigger until next reminder
   const now = new Date().toISOString();
   try { await AsyncStorage.setItem(nk(LAST_READ_DATE_KEY), now); } catch {}
+}
+
+export async function clearBellNotification(): Promise<void> {
+  await setBellUnread(false);
+  try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "0"); } catch {}
 }
 
 // Legacy helper no longer used; kept for reference

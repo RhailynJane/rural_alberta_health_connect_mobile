@@ -28,12 +28,12 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     checkReminder();
 
     // Listen for due event
-  const onDue = NotificationBellEvent.on('due', checkReminder);
-  const onRead = NotificationBellEvent.on('read', () => setVisible(false));
-  const onCleared = NotificationBellEvent.on('cleared', () => setVisible(false));
+    const onDue = NotificationBellEvent.on('due', checkReminder);
+    const onRead = NotificationBellEvent.on('read', checkReminder);
+    const onCleared = NotificationBellEvent.on('cleared', checkReminder);
 
-  // Poll more frequently to reduce perceived delay
-  const interval = setInterval(checkReminder, 15000);
+    // Poll more frequently to reduce perceived delay
+    const interval = setInterval(checkReminder, 15000);
 
     return () => {
       clearInterval(interval);
@@ -59,26 +59,23 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     }
   }, [visible, fadeAnim]);
 
+  const handlePress = () => {
+    router.push('/(tabs)/tracker');
+  };
+
   const handleDismiss = async () => {
     try {
       await markBellRead();
       NotificationBellEvent.emit('read');
-      setVisible(false);
     } catch (error) {
-      console.error('Error dismissing reminder:', error);
+      console.error('Error marking reminder as read:', error);
     }
-  };
-
-  const handlePress = () => {
-    router.push('/(tabs)/tracker');
-    handleDismiss();
   };
 
   if (!visible) return null;
 
   // Position the banner just below the phone's notch/safe area.
-  // We prefer safe area top with a small margin to ensure visibility across devices.
-  const computedTop = Math.max(insets.top + 1, 1);
+  const computedTop = insets.top + 1;
 
   return (
     <Animated.View
@@ -103,7 +100,11 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
         onPress={handlePress}
         activeOpacity={0.9}
       >
-        <Icon name="notifications-active" size={24} color={COLORS.white} />
+        <Icon 
+          name="notifications-active" 
+          size={24} 
+          color={COLORS.white} 
+        />
         <View style={styles.textContainer}>
           <Text style={styles.title}>Symptom Check Reminder</Text>
           <Text style={styles.body}>Time to log your symptoms</Text>

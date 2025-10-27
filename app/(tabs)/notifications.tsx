@@ -6,7 +6,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { NotificationBellEvent } from "../_utils/NotificationBellEvent";
-import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread, markBellRead } from "../_utils/notifications";
+import { checkAndUpdateAnyReminderDue, clearBellNotification, getReminders, isBellUnread, markBellRead } from "../_utils/notifications";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -136,12 +136,12 @@ export default function NotificationsScreen() {
               <TouchableOpacity
                 onPress={async () => {
                   try { await markAllAsRead({}); } catch {}
-                  try { await markBellRead(); } catch {}
-                  NotificationBellEvent.emit('read');
+                  try { await clearBellNotification(); } catch {}
+                  NotificationBellEvent.emit('cleared');
                 }}
                 style={styles.markAllBtn}
               >
-                <Text style={styles.markAllText}>Mark all as read</Text>
+                <Text style={styles.markAllText}>Clear all</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -241,6 +241,8 @@ const styles = StyleSheet.create({
   body: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkGray, marginTop: 4 },
   footerRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   time: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray },
+  actionButtons: { flexDirection: 'row', gap: 8 },
   smallBtn: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  clearBtn: { backgroundColor: COLORS.darkGray },
   smallBtnText: { color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 12 },
 });

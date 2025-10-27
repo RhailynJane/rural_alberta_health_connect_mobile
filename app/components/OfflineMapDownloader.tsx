@@ -2,19 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-  ALBERTA_REGIONS,
-  DEFAULT_MAP_CONFIG,
-  OFFLINE_PACK_CONFIG,
+    ALBERTA_REGIONS,
+    DEFAULT_MAP_CONFIG,
+    OFFLINE_PACK_CONFIG,
 } from '../_config/mapbox.config';
 import { COLORS, FONTS } from '../constants/constants';
 import StatusModal from './StatusModal';
@@ -400,6 +400,7 @@ export default function OfflineMapDownloader({
               <Icon name="information-circle-outline" size={20} color={COLORS.primary} />
               <Text style={styles.footerText}>
                 Each region is approximately 10-50 MB. Download on WiFi recommended.
+                {'\n'}{'\n'}Downloaded tiles are used automatically when you are offline on the Emergency screen. Clinic markers come from your last saved results, and you can still view them on the map without connectivity. Opening turn-by-turn directions may require an internet connection unless your maps app has cached routes.
               </Text>
             </View>
           </View>

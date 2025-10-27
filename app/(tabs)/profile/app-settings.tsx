@@ -94,13 +94,18 @@ export default function AppSettings() {
   }, []);
 
   // Apply server location status when available and persist cache
+  // Only sync FROM server, not back to it, to avoid toggle loops
   useEffect(() => {
+    if (locationStatus !== undefined && !isOnline) {
+      // When offline, prefer cached local state
+      return;
+    }
     if (locationStatus !== undefined) {
       const val = !!locationStatus.locationServicesEnabled;
       setLocationServicesEnabled(val);
       AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, val ? "1" : "0").catch(() => {});
     }
-  }, [locationStatus]);
+  }, [locationStatus, isOnline]);
 
   // Memoize the sync callback to prevent infinite loops
   const syncCallback = useCallback(async (items: ReminderItem[]) => {
@@ -261,6 +266,13 @@ export default function AppSettings() {
     setLocationServicesEnabled(value);
     // Persist locally for offline access
     try { await AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, value ? "1" : "0"); } catch {}
+    
+    // Only update server if online
+    if (!isOnline) {
+      console.log("📴 Offline: location setting saved locally, will sync when online");
+      return;
+    }
+    
     try {
       await toggleLocationServices({ enabled: value });
     } catch (error) {
@@ -268,18 +280,8 @@ export default function AppSettings() {
     }
   };
 
-  // Best-effort background sync: when back online and server differs, push local setting
-  useEffect(() => {
-    if (!isAuthenticated || isLoading) return;
-    if (!isOnline) return;
-    if (locationStatus === undefined) return;
-    const serverVal = !!locationStatus.locationServicesEnabled;
-    if (serverVal !== locationServicesEnabled) {
-      toggleLocationServices({ enabled: locationServicesEnabled }).catch((e) =>
-        console.error("Location setting resync failed:", e)
-      );
-    }
-  }, [isOnline, locationServicesEnabled, locationStatus, isAuthenticated, isLoading, toggleLocationServices]);
+  // REMOVED: Background sync effect that was causing toggle loops
+  // The handleToggleLocationServices now handles both local and server updates
 
   const reminderEnabled = reminders.some((r) => r.enabled);
 

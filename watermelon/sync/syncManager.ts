@@ -101,7 +101,7 @@ class SyncManager {
     try {
       const healthEntriesCollection = database.collections.get('health_entries');
       const unsyncedEntries = await healthEntriesCollection
-        .query(Q.where('synced', false))
+        .query(Q.where('is_synced', false))
         .fetch();
       
       console.log(`📊 Syncing ${unsyncedEntries.length} health entries...`);
@@ -112,7 +112,7 @@ class SyncManager {
           // Mark as synced after successful upload
           await database.write(async () => {
             await entry.update((e: any) => {
-              e.synced = true;
+              e.isSynced = true;
             });
           });
         } catch (error) {
@@ -130,7 +130,7 @@ class SyncManager {
       const unsyncedAssessments = await assessmentsCollection
         .query(
           Q.where('type', 'ai_assessment'),
-          Q.where('synced', false)
+          Q.where('is_synced', false)
         )
         .fetch();
       
@@ -166,7 +166,7 @@ class SyncManager {
     try {
       const healthEntriesCollection = database.collections.get('health_entries');
       const unsynced = await healthEntriesCollection
-        .query(Q.where('synced', false))
+        .query(Q.where('is_synced', false))
         .fetchCount();
       
       return unsynced;

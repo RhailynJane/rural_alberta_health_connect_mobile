@@ -3,15 +3,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -140,45 +140,44 @@ export default function Emergency() {
           let latitude: number | undefined;
           let longitude: number | undefined;
           
-          // First, try to get actual GPS coordinates from device
-          try {
-             const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
-             console.log('🔐 Location permission status:', status);
-            if (status === 'granted') {
-              console.log('📍 Getting actual GPS location from device...');
-               const location = await ExpoLocation.getCurrentPositionAsync({
-                 accuracy: ExpoLocation.Accuracy.Balanced,
-              });
-              latitude = location.coords.latitude;
-              longitude = location.coords.longitude;
-              console.log(`✅ Got GPS coordinates: ${latitude}, ${longitude}`);
-            } else {
-              console.log('⚠️ Location permission denied, will try parsing stored location');
+          // First, check if we have a stored location to use immediately
+          const loc = locationStatus.location;
+          if (typeof loc === 'string' && loc.includes(',')) {
+            const parts = loc.split(',');
+            if (parts.length >= 2) {
+              const lat = parseFloat(parts[0]);
+              const lng = parseFloat(parts[1]);
+              if (isFinite(lat) && isFinite(lng)) {
+                latitude = lat;
+                longitude = lng;
+                console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
+              }
             }
-          } catch (gpsError) {
-             console.log('⚠️ Failed to get GPS location:', gpsError instanceof Error ? gpsError.message : gpsError);
           }
           
-          // Fallback: Parse stored location string if GPS failed
+          // Only try GPS if we don't have stored coordinates (first-time setup)
           if (latitude === undefined || longitude === undefined) {
-             console.log('🔄 Attempting to parse stored location:', locationStatus.location);
-            const loc = locationStatus.location;
-            if (typeof loc === 'string' && loc.includes(',')) {
-              const parts = loc.split(',');
-              if (parts.length >= 2) {
-                const lat = parseFloat(parts[0]);
-                const lng = parseFloat(parts[1]);
-                if (isFinite(lat) && isFinite(lng)) {
-                  latitude = lat;
-                  longitude = lng;
-                  console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
-                 } else {
-                   console.log(`⚠️ Invalid stored coordinates: lat=${lat}, lng=${lng}`);
-                }
+            try {
+              const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+              console.log('🔐 Location permission status:', status);
+              if (status === 'granted') {
+                console.log('📍 Getting GPS location from device...');
+                const location = await ExpoLocation.getCurrentPositionAsync({
+                  accuracy: ExpoLocation.Accuracy.Low, // Use Low for faster results
+                });
+                latitude = location.coords.latitude;
+                longitude = location.coords.longitude;
+                console.log(`✅ Got GPS coordinates: ${latitude}, ${longitude}`);
+              } else {
+                console.log('⚠️ Location permission denied');
               }
-             } else {
-               console.log(`⚠️ Stored location not in lat,lng format: "${loc}"`);
+            } catch (gpsError) {
+              console.log('⚠️ Failed to get GPS location:', gpsError instanceof Error ? gpsError.message : gpsError);
             }
+          }
+          
+          if (latitude === undefined || longitude === undefined) {
+            console.log(`⚠️ No coordinates available`);
           }
           
            console.log(`📤 Calling getRealTimeClinicData with location="${locationStatus.location}", latitude=${latitude}, longitude=${longitude}`);
@@ -234,10 +233,11 @@ export default function Emergency() {
     };
 
     loadRealTimeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     locationStatus?.locationServicesEnabled,
     locationStatus?.location,
-    getRealTimeClinicData,
+    // getRealTimeClinicData removed - it's a Convex action and causes infinite loops
     isOnline,
   ]);
 
@@ -431,11 +431,18 @@ export default function Emergency() {
             <View style={styles.cardHeader}>
               <Icon name="local-pharmacy" size={24} color="#2DE16B" />
               <Text style={styles.cardTitle}>Local Clinic</Text>
-              {nearestClinic?.source && (
-                <Text style={styles.dataSource}>
-                  via {nearestClinic.source}
-                </Text>
-              )}
+              <View style={styles.headerRightRow}>
+                {nearestClinic?.source && (
+                  <Text style={styles.dataSource}>
+                    via {nearestClinic.source}
+                  </Text>
+                )}
+                {nearestClinic?.source && String(nearestClinic.source).toLowerCase().includes('cached') && (
+                  <View style={styles.cachedPill}>
+                    <Text style={styles.cachedPillText}>Cached</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             {isLoading ? (
@@ -564,6 +571,14 @@ export default function Emergency() {
                     {nearestClinic?.source || "Alberta Health Services"}
                   </Text>
                 </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Data status:</Text>
+                  <Text style={styles.detailValue}>
+                    {nearestClinic?.source && String(nearestClinic.source).toLowerCase().includes('cached')
+                      ? 'Cached data'
+                      : 'Live data'}
+                  </Text>
+                </View>
                 {nearestClinic && (
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Clinic distance:</Text>
@@ -610,8 +625,8 @@ export default function Emergency() {
             <View style={styles.cardContent}>
               <Text style={styles.mapDescription}>
                 {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
-                  ? "Interactive map showing nearby clinics. Download maps for offline use."
-                  : "Download offline maps for areas with poor connectivity. Enable location services to see nearby clinics."}
+                  ? "Interactive map showing nearby clinics. Download maps for offline use. When offline, the map tiles load from your downloads and clinic markers use your last saved results. Opening directions may require connectivity."
+                  : "Download offline maps for areas with poor connectivity. When offline, the Emergency map will use your downloaded tiles automatically. Clinic markers use your last saved results; directions may require connectivity. Enable location services to see nearby clinics."}
               </Text>
               <MapboxOfflineMap
                 clinics={locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
@@ -878,6 +893,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cardTitle: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 18,
@@ -889,6 +908,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     fontStyle: "italic",
+  },
+  cachedPill: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDBA74', // amber-300
+    backgroundColor: '#FFFBEB', // amber-50
+  },
+  cachedPillText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 10,
+    color: '#92400E', // amber-800
   },
   cardDescription: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -1009,6 +1042,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  statusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+  },
+  statusLive: {
+    backgroundColor: '#ECFDF5', // emerald-50
+    borderColor: '#34D399', // emerald-400
+  },
+  statusCached: {
+    backgroundColor: '#FFFBEB', // amber-50
+    borderColor: '#FBBF24', // amber-400
+  },
+  statusChipText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+  },
+  statusLiveText: {
+    color: '#065F46', // emerald-800
+  },
+  statusCachedText: {
+    color: '#92400E', // amber-800
+  },
   locationDescription: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
@@ -1022,12 +1080,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 10,
   },
+  detailItemInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   detailLabel: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
     color: "#666",
     marginRight: 5,
     flex: 1,
+  },
+  detailLabelInline: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#666",
+    marginRight: 8,
   },
   detailValue: {
     fontFamily: FONTS.BarlowSemiCondensed,
