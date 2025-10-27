@@ -22,13 +22,6 @@ const tabs: Tab[] = [
     iconNameFocused: 'home'
   },
   {
-    name: 'VisionTest',
-    label: 'Vision Test',
-    route: '/vision-test',
-    iconName: 'eye-outline',
-    iconNameFocused: 'eye'
-  },
-  {
     name: 'AIAssess',
     label: 'AI Assess',
     route: '/ai-assess',

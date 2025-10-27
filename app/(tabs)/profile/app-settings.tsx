@@ -17,6 +17,7 @@ import {
     addReminder,
     deleteReminder,
     dismissAllNotifications,
+    forceRescheduleAllReminders,
     getReminders,
     ReminderItem,
     requestNotificationPermissions,
@@ -75,6 +76,7 @@ export default function AppSettings() {
   const daysOfWeek: ("Sun"|"Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat")[] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const [weeklyTimes, setWeeklyTimes] = useState<Record<string, string | null>>({ Sun:null, Mon:null, Tue:null, Wed:null, Thu:null, Fri:null, Sat:null });
   const [weeklyEditingDay, setWeeklyEditingDay] = useState<null | (typeof daysOfWeek)[number]>(null);
+  const [isRescheduling, setIsRescheduling] = useState(false);
 
   // Load location services status
   useEffect(() => {
@@ -331,6 +333,30 @@ export default function AppSettings() {
                 >
                   <Icon name="add-circle" size={20} color={COLORS.primary} />
                   <Text style={styles.addReminderText}>Add Reminder</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.addReminderButton, { marginTop: 8, backgroundColor: '#eef6ff' }]}
+                  onPress={async () => {
+                    if (isRescheduling) return;
+                    try {
+                      setIsRescheduling(true);
+                      const count = await forceRescheduleAllReminders();
+                      Alert.alert(
+                        'Reminders rescheduled',
+                        `Re-applied ${count} reminder(s) to the high-importance channel.`
+                      );
+                    } catch {
+                      Alert.alert('Error', 'Failed to reschedule reminders.');
+                    } finally {
+                      setIsRescheduling(false);
+                    }
+                  }}
+                >
+                  <Icon name="refresh" size={20} color={COLORS.primary} />
+                  <Text style={styles.addReminderText}>
+                    {isRescheduling ? 'Rescheduling…' : 'Force re-schedule reminders'}
+                  </Text>
                 </TouchableOpacity>
               </>
             )}

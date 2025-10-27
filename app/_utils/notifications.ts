@@ -619,3 +619,14 @@ async function syncRemindersToWatermelon(list: ReminderItem[]) {
     console.error('WatermelonDB syncRemindersToWatermelon error:', err);
   }
 }
+
+// Manual trigger to re-apply channels and re-schedule all reminders
+export async function forceRescheduleAllReminders(): Promise<number> {
+  try {
+    await initializeNotificationsOnce();
+  } catch {}
+  const list = await getReminders();
+  await scheduleAllReminderItems(list);
+  // Return count of enabled, non-hourly reminders scheduled
+  return list.filter(r => r.enabled && r.frequency !== 'hourly').length;
+}

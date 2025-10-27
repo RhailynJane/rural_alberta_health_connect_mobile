@@ -42,6 +42,7 @@ export default function OfflineMapDownloader({
   const [regions, setRegions] = useState<OfflineRegion[]>([]);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [verifying, setVerifying] = useState<boolean>(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -80,6 +81,71 @@ export default function OfflineMapDownloader({
       setModalMessage('Failed to load offline regions');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
+    }
+  };
+
+  const verifyPacks = async () => {
+    try {
+      setVerifying(true);
+      // Load previously persisted list as baseline
+      const persistedRaw = await AsyncStorage.getItem('offline_regions_installed');
+      const persisted: string[] = persistedRaw ? JSON.parse(persistedRaw) : [];
+
+      const packs = await Mapbox.offlineManager.getPacks();
+      const names = Array.isArray(packs) ? packs.map((p: any) => p?.name).filter(Boolean) : null;
+      const validIds = new Set(ALBERTA_REGIONS.map(r => r.id));
+
+      if (!names) {
+        // Inconclusive result (API not available). Keep current persisted state.
+        await loadOfflineRegions();
+        setModalTitle('Verification inconclusive');
+        setModalMessage('Could not fetch installed packs right now. Kept your current installed list. Try again later.');
+        setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+
+      if (names.length === 0) {
+        if (persisted.length > 0) {
+          // Don’t aggressively clear if Mapbox returns empty; keep previous state
+          await loadOfflineRegions();
+          setModalTitle('No packs detected');
+          setModalMessage('No offline packs were reported at this time. Your previous installed list was kept to avoid accidental clearing.');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        } else {
+          // Persist empty if we already had none
+          await AsyncStorage.setItem('offline_regions_installed', JSON.stringify([]));
+          await loadOfflineRegions();
+          setModalTitle('Verified');
+          setModalMessage('No offline packs installed.');
+          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+          setModalVisible(true);
+          return;
+        }
+      }
+
+      // Merge strategy: union of persisted + what Mapbox reports (both filtered to valid IDs)
+      // This preserves your existing downloads even if Mapbox doesn't report them all
+      const fromMapbox = names.filter((id: string) => validIds.has(id));
+      const reconciledSet = new Set([...persisted, ...fromMapbox].filter(id => validIds.has(id)));
+      const reconciled = Array.from(reconciledSet);
+      
+      await AsyncStorage.setItem('offline_regions_installed', JSON.stringify(reconciled));
+      await loadOfflineRegions();
+      setModalTitle('Verified');
+      setModalMessage(`Reconciled offline packs. Total installed: ${reconciled.length}.\n\nMapbox reported: ${fromMapbox.length} | Previously tracked: ${persisted.length}`);
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } catch (e) {
+      console.error('Error verifying packs:', e);
+      setModalTitle('Error');
+      setModalMessage('Failed to verify offline packs.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -254,6 +320,24 @@ export default function OfflineMapDownloader({
               Download maps for offline use in areas with poor connectivity
             </Text>
 
+            {/* Actions */}
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={[styles.verifyButton, verifying && styles.verifyButtonDisabled]}
+                onPress={verifyPacks}
+                disabled={verifying}
+              >
+                {verifying ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : (
+                  <Icon name="refresh" size={16} color={COLORS.primary} />
+                )}
+                <Text style={styles.verifyButtonText}>
+                  {verifying ? 'Verifying…' : 'Verify packs'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Regions List */}
             <ScrollView style={styles.regionsList}>
               {regions.map((region) => (
@@ -381,6 +465,32 @@ const styles = StyleSheet.create({
     color: COLORS.darkGray,
     paddingHorizontal: 20,
     marginBottom: 20,
+  },
+  actionsRow: {
+    paddingHorizontal: 20,
+    marginBottom: 8,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  verifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eef6ff',
+    borderWidth: 1,
+    borderColor: '#cfe3ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  verifyButtonDisabled: {
+    opacity: 0.7,
+  },
+  verifyButtonText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+    color: COLORS.primary,
   },
   regionsList: {
     paddingHorizontal: 20,

@@ -1,142 +1,11 @@
+/* Deprecated: vision-test removed. File contents commented out.
 // Robust LLM output cleaning: remove markdown, echoed prompt, and fallback if cleaning strips all content
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import {
-  LLAMA3_2_1B_SPINQUANT,
-  Message,
-  useLLM,
-} from "react-native-executorch";
-import { SafeAreaView } from "react-native-safe-area-context";
-import BottomNavigation from "../../components/bottomNavigation";
-import CurvedBackground from "../../components/curvedBackground";
-import CurvedHeader from "../../components/curvedHeader";
-import { FONTS } from "../../constants/constants";
-import { useVisionSession } from "./VisionSessionContext";
-function cleanLLMResponse(text: string): string {
-  // Remove echoed prompt, markdown, and extra whitespace
-  let cleaned = text
-    .replace(/```[\s\S]*?```/g, "") // Remove code blocks
-    .replace(/\*\*|__|\*|#/g, "") // Remove markdown bold/italic/headers
-    .replace(/^(Prompt:|System:)[\s\S]*?\n/gi, "") // Remove echoed prompt/system
-    .replace(/\n{3,}/g, "\n\n") // Collapse multiple newlines
-    .replace(/\s+$/g, "") // Trim trailing whitespace
-    .trim();
-  
-  // If cleaning strips everything but raw is not empty, fallback to raw
-  if (!cleaned && text.trim().length > 0) {
-    return text.trim();
-  }
-  return cleaned;
+// Deprecated: vision-test removed. Keeping stub to avoid route exposure.
+export default function ReviewScreen() {
+  return null;
 }
-
-// Medical AI System Prompt (detailed clinical context from backend prompt)
-const MEDICAL_SYSTEM_PROMPT = `You are an emergency medicine physician in rural Alberta providing medical triage.
-
-Your job: Assess the patient's condition and provide structured medical guidance.
-
-Rules:
-- Be direct and clinical
-- Use plain language
-- Follow the exact output format requested
-- Do NOT repeat the user's prompt or instructions
-- Start your response immediately with "SUMMARY:"
-
-Assess burns, wounds, injuries, rashes, infections, trauma, and any visible medical conditions.`;
-
-function getDurationDescription(duration: string): string {
-  const d = (duration || "").trim();
-  if (!d) return "Duration not specified.";
-  return d;
-}
-
-function extractSymptomsFromDescription(desc: string): string[] {
-  const text = (desc || "").toLowerCase();
-  const keywords = [
-    "pain",
-    "swelling",
-    "redness",
-    "bleeding",
-    "itching",
-    "burning",
-    "numbness",
-    "tingling",
-    "fever",
-    "pus",
-    "tenderness",
-    "bruising",
-  ];
-  const found = keywords.filter((k) => text.includes(k));
-  return found.slice(0, 5);
-}
-
-// Format detections for LLM prompt
-function formatDetectionsForLLM(
-  detections:
-    | {
-        label: string;
-        confidence: number;
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-      }[]
-    | null
-): string {
-  if (!detections || detections.length === 0) {
-    return "No objects detected in the captured image";
-  }
-  return detections
-    .map((d) => `${d.label} (${Math.round(d.confidence * 100)}% confidence)`)
-    .join(", ");
-}
-
-// Render assessment as separate cards: Summary, Visual Assessment, First Aid, Red Flags, What's Next
-function renderAssessmentCards(text: string | null) {
-  if (!text) return null;
-
-  const lines = text.split(/\r?\n/).map((l) => l.trim());
-  type SectionKey =
-    | "SUMMARY"
-    | "VISUAL ASSESSMENT"
-    | "FIRST AID"
-    | "RED FLAGS"
-    | "WHAT NEXT"
-    | "OTHER";
-  const wantedOrder: SectionKey[] = [
-    "SUMMARY",
-    "VISUAL ASSESSMENT",
-    "FIRST AID",
-    "RED FLAGS",
-    "WHAT NEXT",
-  ];
-  const sections: Record<SectionKey, string[]> = {
-    SUMMARY: [],
-    "VISUAL ASSESSMENT": [],
-    "FIRST AID": [],
-    "RED FLAGS": [],
-    "WHAT NEXT": [],
-    OTHER: [],
-  };
-  let current: SectionKey = "SUMMARY";
-
-  const isHeader = (l: string): SectionKey | null => {
-    const lower = l.toLowerCase().trim();
-
-    if (/^summary\s*:?$/i.test(lower)) {
       return "SUMMARY";
     }
     if (/^visual\s+assessment\s*:?$/i.test(lower)) {
@@ -1082,3 +951,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+*/
+export default function ReviewScreen(){ return null; }
