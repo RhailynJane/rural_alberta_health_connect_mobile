@@ -1,21 +1,21 @@
-import { useDatabase } from "@nozbe/watermelondb/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -25,7 +25,7 @@ import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../uti
 
 export default function PersonalInfo() {
   const router = useRouter();
-  const database = useDatabase();
+  const database = useWatermelonDatabase();
   const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
@@ -344,29 +344,29 @@ export default function PersonalInfo() {
 
       console.log("✅ Personal Info - Saved to local database");
 
-      // Then sync with Convex (online) - this will work when there's internet
-      try {
-        await updatePersonalInfo({ 
-          age,
-          address1,
-          address2,
-          city,
-          province,
-          postalCode,
-          location, 
-          onboardingCompleted: false 
-        });
+      // Navigate immediately after local save - don't wait for Convex sync
+      console.log("➡️ Navigating to emergency contact");
+      router.push("/auth/emergency-contact");
+
+      // Then sync with Convex (online) in the background - this will work when there's internet
+      // Don't await this - let it sync in the background
+      updatePersonalInfo({ 
+        age,
+        address1,
+        address2,
+        city,
+        province,
+        postalCode,
+        location, 
+        onboardingCompleted: false 
+      }).then(() => {
         console.log("✅ Personal Info - Synced with Convex");
-      } catch (syncError) {
+      }).catch((syncError) => {
         console.log(
           "⚠️ Personal Info - Saved locally, will sync when online:",
           syncError
         );
-        // Don't show error to user - data is saved locally
-      }
-
-      console.log("➡️ Navigating to emergency contact");
-      router.push("/auth/emergency-contact");
+      });
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
       setErrorModalMessage("Failed to save personal information. Please try again.");

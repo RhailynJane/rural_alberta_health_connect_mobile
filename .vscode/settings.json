@@ -20,5 +20,7 @@
     "**/node_modules/**",
     "**/.meteor/**",
     "**/build/**"
-  ]
+  ],
+  "java.dependency.syncWithFolderExplorer": false,
+  "java.project.explorer.showNonJavaResources": false
 }

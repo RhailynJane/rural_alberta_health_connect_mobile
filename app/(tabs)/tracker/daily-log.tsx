@@ -218,7 +218,7 @@ export default function DailyLog() {
           const collection = database.get("health_entries");
           const entries = await collection
             .query(
-              Q.where("local_date", todayLocalDate),
+              Q.where("date", todayLocalDate),
               Q.sortBy("timestamp", Q.desc)
             )
             .fetch();

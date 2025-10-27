@@ -6,13 +6,12 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -196,75 +195,12 @@ export default function Dashboard() {
     }
   }, [weeklyHealthScore, weeklyEntries]);
 
-  // Skip loading check if offline - go straight to rendering with offline mode
-  if (!isOnline) {
-    // Offline mode - render dashboard with empty/cached data
-    const userName = user?.firstName || "User";
-    const userEmail = user?.email || "";
-    
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <CurvedBackground style={{ flex: 1 }}>
-          {/* Due reminder banner (offline-capable) */}
-          <DueReminderBanner topOffset={120} />
-          {/* Offline Banner */}
-          <OfflineBanner />
-          
-          {/* Fixed Header */}
-          <CurvedHeader
-            title="Alberta Health Connect"
-            height={150}
-            showLogo={true}
-            screenType="signin"
-            bottomSpacing={0}
-            showNotificationBell={false}
-            reminderEnabled={false}
-            reminderSettings={null}
-          />
+  // Use displayUser and cached data for offline support
+  const userName = displayUser?.firstName || user?.firstName || "User";
+  const userEmail = displayUser?.email || user?.email || "";
 
-          {/* Content Area */}
-          <View style={styles.contentArea}>
-            <ScrollView
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.contentSection}>
-                {/* Welcome Section */}
-                <View style={styles.welcomeContainer}>
-                  <Text
-                    style={[
-                      styles.welcomeText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Welcome, {userName}!
-                  </Text>
-                  <Text style={[styles.offlineNotice, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    📴 You&apos;re currently offline. Some features may be limited.
-                  </Text>
-                </View>
-
-                {/* Offline message */}
-                <View style={styles.offlineCard}>
-                  <Text style={[styles.offlineCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                    Offline Mode Active
-                  </Text>
-                  <Text style={[styles.offlineCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Connect to the internet to access all features and sync your data.
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* Bottom Navigation */}
-          <BottomNavigation />
-        </CurvedBackground>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading || (!isAuthenticated && user === undefined)) {
+  // Check if loading during initial auth
+  if (isLoading && !displayUser) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -281,27 +217,25 @@ export default function Dashboard() {
     );
   }
 
-  if (!isAuthenticated || user === null || user === undefined) {
+  // Check if not authenticated and no cached user
+  if (!isAuthenticated && !displayUser) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2A7DE1" />
           <Text
             style={[
               styles.loadingText,
               { fontFamily: FONTS.BarlowSemiCondensed },
             ]}
           >
-            Loading your dashboard...
+            Please log in to continue
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Use displayUser instead of user for offline support
-  const userName = displayUser?.firstName || user?.firstName || "User";
-  const userEmail = displayUser?.email || user?.email || "";
+
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
