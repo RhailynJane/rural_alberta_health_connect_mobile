@@ -5,17 +5,17 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -23,6 +23,7 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
+import SpeechToTextButton from "../../components/SpeechToTextButton";
 import { COLORS, FONTS } from "../../constants/constants";
 
 export default function AddHealthEntry() {
@@ -539,6 +540,12 @@ export default function AddHealthEntry() {
                   >
                     Symptoms/Details
                   </Text>
+                  <SpeechToTextButton
+                    onTextReceived={setSymptoms}
+                    currentText={symptoms}
+                    placeholder="Tap to speak your symptoms"
+                    style={{ marginBottom: 10 }}
+                  />
                   <TextInput
                     style={[
                       styles.textInput,
@@ -631,6 +638,12 @@ export default function AddHealthEntry() {
                   >
                     Notes
                   </Text>
+                  <SpeechToTextButton
+                    onTextReceived={setNotes}
+                    currentText={notes}
+                    placeholder="Tap to speak additional details"
+                    style={{ marginBottom: 10 }}
+                  />
                   <TextInput
                     style={[
                       styles.textInput,
