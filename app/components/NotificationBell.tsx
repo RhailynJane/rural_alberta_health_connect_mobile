@@ -1,8 +1,11 @@
+import { api } from '@/convex/_generated/api';
+import { useQuery } from 'convex/react';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
-import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread, markBellRead, ReminderSettings } from '../_utils/notifications';
+import { checkAndUpdateAnyReminderDue, getReminders, initializeNotificationsOnce, isBellUnread, ReminderSettings } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface NotificationBellProps {
@@ -11,74 +14,64 @@ interface NotificationBellProps {
 }
 
 export default function NotificationBell({ reminderEnabled = false, reminderSettings = null }: NotificationBellProps) {
-  const [showModal, setShowModal] = useState(false);
-  const [reminderInfo, setReminderInfo] = useState<{
-    scheduled: boolean;
-    enabled: boolean;
-    frequency?: string;
-    time?: string;
-    dayOfWeek?: string;
-    allNotifications: any[]; // deprecated view removed but keep shape
-    isDue: boolean;
-  } | null>(null);
+  const router = useRouter();
   const [unread, setUnread] = useState(false);
+  
+  // Get unread notification count from Convex
+  const unreadCount = useQuery(api.notifications.getUnreadCount) || 0;
+  // Full-screen screen handles listing and read actions
+  
+  // Show red only for local reminder due. Server unread count will not turn the bell red.
+  const hasUnread = unread;
   // Local state just for showing due info; management moved to Profile page
 
-  const loadReminderDetails = async () => {
-    try {
-  const list = await getReminders();
-  const isDue = await checkAndUpdateAnyReminderDue(list);
-      setReminderInfo({
-        scheduled: list.length > 0,
-        enabled: true,
-        allNotifications: [],
-        isDue,
-      });
-    } catch (e) {
-      console.error('Error loading reminder details:', e);
-      setReminderInfo({ scheduled: false, enabled: false, allNotifications: [], isDue: false });
-    }
-  };
-
-  const handlePress = async () => {
-    await loadReminderDetails();
-    // Mark as read to clear the dot
-    await markBellRead();
-    setUnread(false);
-    NotificationBellEvent.emit('read'); // Notify all tabs to clear unread
-    setShowModal(true);
+  const handlePress = () => {
+    router.navigate('/(tabs)/notifications');
   };
 
   useEffect(() => {
+    // Ensure notification subsystem is initialized (creates heads-up channel and runs migration if needed)
+    initializeNotificationsOnce().catch(() => {});
+
     // Check if any reminder is due and update unread flag
     const checkReminder = async () => {
       // Load reminders from storage and compute due
-  const list = await getReminders();
-  await checkAndUpdateAnyReminderDue(list);
-      
-      // Get the current unread status
+      const list = await getReminders();
+      await checkAndUpdateAnyReminderDue(list);
+
+      // Get the current unread status for local reminder
       const currentUnread = await isBellUnread();
-      console.log('[NotificationBell] Current unread status:', currentUnread);
       setUnread(currentUnread);
     };
 
     checkReminder();
 
     // Listen for 'read' event to clear unread instantly on all tabs
-    const off = NotificationBellEvent.on('read', async () => {
-      console.log('[NotificationBell] Received read event, clearing unread');
+    const off = NotificationBellEvent.on('read', () => {
       setUnread(false);
-      await markBellRead();
     });
 
-    // Poll every minute to check if it's reminder time
-    const interval = setInterval(checkReminder, 60000);
+    // Listen for 'due' event to set unread instantly across tabs
+    const onDue = NotificationBellEvent.on('due', () => {
+      setUnread(true);
+    });
+    const onCleared = NotificationBellEvent.on('cleared', () => {
+      setUnread(false);
+    });
+
+    // Reduced interval - check every 2 minutes instead of 15 seconds
+    const interval = setInterval(checkReminder, 120000);
 
     return () => {
       clearInterval(interval);
       off();
+      onDue();
+      onCleared();
     };
   }, [reminderEnabled, reminderSettings]);
+
+  // REMOVED useFocusEffect - causing too many checks
+  // Events will handle updates in real-time
 
   // Management UI removed from bell
 
@@ -89,57 +82,22 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
         style={styles.bellContainer}
       >
         <Icon 
-          name={unread ? "notifications-active" : "notifications-none"} 
+          name={hasUnread ? "notifications-active" : "notifications-none"} 
           size={28} 
           color={COLORS.darkText} 
         />
-        {unread && (
-          <View style={styles.badge} />
+        {hasUnread && (
+          <View style={styles.badge}>
+            {unreadCount > 0 && (
+              <Text style={styles.badgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            )}
+          </View>
         )}
       </TouchableOpacity>
 
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Icon name="notifications" size={24} color={COLORS.primary} />
-              <Text style={styles.modalTitle}>Scheduled Reminders</Text>
-            </View>
-            
-            <ScrollView style={styles.scrollView}>
-              {reminderInfo?.isDue ? (
-                <View style={styles.pendingNotificationCard}>
-                  <View style={styles.notificationHeader}>
-                    <Icon name="notification-important" size={18} color={COLORS.error} />
-                    <Text style={styles.pendingNotificationTitle}>Time to take Symptom Assessment</Text>
-                  </View>
-                  <Text style={styles.notificationBody}>Complete your symptoms check now.</Text>
-                  <View style={styles.notificationTimeInfo}>
-                    <Icon name="access-time" size={14} color={COLORS.primary} />
-                    <Text style={styles.notificationTimeText}>Due now</Text>
-                    <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>Unread</Text></View>
-                  </View>
-                </View>
-              ) : (
-                <View style={styles.infoState}>
-                  <Icon name="check-circle" size={32} color={COLORS.success} />
-                  <Text style={styles.infoText}>You’re all caught up</Text>
-                  <Text style={styles.infoSubtext}>We’ll notify you here when your next reminder is due.</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Navigates to full-screen notifications; no modal here */}
     </>
   );
 }
@@ -153,10 +111,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

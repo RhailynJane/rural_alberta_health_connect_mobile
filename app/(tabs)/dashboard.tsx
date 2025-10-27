@@ -1,31 +1,41 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // app/dashboard.tsx
+import { Q } from "@nozbe/watermelondb";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import DueReminderBanner from "../components/DueReminderBanner";
 import HealthStatusTag from "../components/HealthStatusTag";
-import { COLORS, FONTS } from "../constants/constants";
+import { OfflineBanner } from "../components/OfflineBanner";
+import StatusModal from "../components/StatusModal";
+import { FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function Dashboard() {
+  const database = useWatermelonDatabase();
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [healthStatus, setHealthStatus] = useState<string>("Good");
-  const queryArgs = isAuthenticated ? {} : "skip";
+  const [cachedUser, setCachedUser] = useState<any>(null);
+  const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
+  const queryArgs = isAuthenticated && isOnline ? {} : "skip";
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -33,13 +43,13 @@ export default function Dashboard() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get current user data
+  // Get current user data (only when online)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
   
-  // Get reminder settings
+  // Get reminder settings (only when online)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && isOnline ? {} : "skip"
   );
 
   // Get entries for the last 7 days to calculate health score
@@ -59,15 +69,98 @@ export default function Dashboard() {
   };
 
   const dateRange = getLast7DaysDateRange();
-  const weeklyEntries = useQuery(
+  const weeklyEntriesOnline = useQuery(
     api.healthEntries.getEntriesByDateRange,
-    user?._id
+    user?._id && isOnline
       ? {
           userId: user._id,
           startDate: dateRange.startDate,
           endDate: dateRange.endDate,
         }
       : "skip"
+  );
+
+  // Cache user data when online
+  useEffect(() => {
+    if (isOnline && user) {
+      AsyncStorage.setItem("@dashboard_user", JSON.stringify(user)).catch((err) =>
+        console.error("Failed to cache user data:", err)
+      );
+      setCachedUser(user);
+    }
+  }, [isOnline, user]);
+
+  // Cache weekly entries when online
+  useEffect(() => {
+    if (isOnline && weeklyEntriesOnline) {
+      AsyncStorage.setItem(
+        "@dashboard_weekly_entries",
+        JSON.stringify(weeklyEntriesOnline)
+      ).catch((err) => console.error("Failed to cache weekly entries:", err));
+      setCachedWeeklyEntries(weeklyEntriesOnline);
+    }
+  }, [isOnline, weeklyEntriesOnline]);
+
+  // Load cached data when offline
+  useEffect(() => {
+    if (!isOnline) {
+      // Load cached user
+      AsyncStorage.getItem("@dashboard_user")
+        .then((cached) => {
+          if (cached) {
+            setCachedUser(JSON.parse(cached));
+          }
+        })
+        .catch((err) => console.error("Failed to load cached user:", err));
+
+      // Load cached weekly entries
+      AsyncStorage.getItem("@dashboard_weekly_entries")
+        .then((cached) => {
+          if (cached) {
+            setCachedWeeklyEntries(JSON.parse(cached));
+          }
+        })
+        .catch((err) => console.error("Failed to load cached entries:", err));
+
+      // Also try to load from WatermelonDB
+      const fetchOfflineEntries = async () => {
+        try {
+          const collection = database.get("health_entries");
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          
+          const entries = await collection
+            .query(
+              Q.where("timestamp", Q.gte(sevenDaysAgo.getTime())),
+              Q.sortBy("timestamp", Q.desc)
+            )
+            .fetch();
+
+          if (entries.length > 0) {
+            const mapped = entries.map((entry: any) => ({
+              _id: entry.id,
+              symptoms: entry.symptoms || "",
+              severity: entry.severity || 0,
+              timestamp: entry.timestamp || Date.now(),
+            }));
+            setCachedWeeklyEntries(mapped);
+          }
+        } catch (error) {
+          console.error("Error fetching offline entries from WatermelonDB:", error);
+        }
+      };
+      fetchOfflineEntries();
+    }
+  }, [isOnline, database]);
+
+  // Use online or cached data
+  const displayUser = useMemo(
+    () => (isOnline ? user : cachedUser),
+    [isOnline, user, cachedUser]
+  );
+  const weeklyEntries = useMemo(
+    () => (isOnline ? weeklyEntriesOnline : cachedWeeklyEntries),
+    [isOnline, weeklyEntriesOnline, cachedWeeklyEntries]
   );
 
   // Calculate weekly health score
@@ -102,6 +195,74 @@ export default function Dashboard() {
       setHealthStatus("Poor");
     }
   }, [weeklyHealthScore, weeklyEntries]);
+
+  // Skip loading check if offline - go straight to rendering with offline mode
+  if (!isOnline) {
+    // Offline mode - render dashboard with empty/cached data
+    const userName = user?.firstName || "User";
+    const userEmail = user?.email || "";
+    
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <CurvedBackground style={{ flex: 1 }}>
+          {/* Due reminder banner (offline-capable) */}
+          <DueReminderBanner topOffset={120} />
+          {/* Offline Banner */}
+          <OfflineBanner />
+          
+          {/* Fixed Header */}
+          <CurvedHeader
+            title="Alberta Health Connect"
+            height={150}
+            showLogo={true}
+            screenType="signin"
+            bottomSpacing={0}
+            showNotificationBell={false}
+            reminderEnabled={false}
+            reminderSettings={null}
+          />
+
+          {/* Content Area */}
+          <View style={styles.contentArea}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.contentSection}>
+                {/* Welcome Section */}
+                <View style={styles.welcomeContainer}>
+                  <Text
+                    style={[
+                      styles.welcomeText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Welcome, {userName}!
+                  </Text>
+                  <Text style={[styles.offlineNotice, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    📴 You&apos;re currently offline. Some features may be limited.
+                  </Text>
+                </View>
+
+                {/* Offline message */}
+                <View style={styles.offlineCard}>
+                  <Text style={[styles.offlineCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
+                    Offline Mode Active
+                  </Text>
+                  <Text style={[styles.offlineCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Connect to the internet to access all features and sync your data.
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* Bottom Navigation */}
+          <BottomNavigation />
+        </CurvedBackground>
+      </SafeAreaView>
+    );
+  }
 
   if (isLoading || (!isAuthenticated && user === undefined)) {
     return (
@@ -138,9 +299,9 @@ export default function Dashboard() {
     );
   }
 
-  // Use currentUser data instead of userWithProfile for now
-  const userName = user.firstName || "User";
-  const userEmail = user.email;
+  // Use displayUser instead of user for offline support
+  const userName = displayUser?.firstName || user?.firstName || "User";
+  const userEmail = displayUser?.email || user?.email || "";
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
@@ -212,6 +373,11 @@ export default function Dashboard() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
+        {/* Offline Banner */}
+        <OfflineBanner />
+        
         {/* Fixed Header */}
         <CurvedHeader
           title="Alberta Health Connect"
@@ -464,52 +630,15 @@ export default function Dashboard() {
       </CurvedBackground>
       <BottomNavigation />
 
-      {/* Modal for alerts and confirmations */}
-      <Modal
+      {/* StatusModal for alerts and confirmations */}
+      <StatusModal
         visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <View style={{
-            width: '80%', backgroundColor: COLORS.white, borderRadius: 12, padding: 16,
-            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 8
-          }}>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginBottom: 8 }}>{modalTitle}</Text>
-            <Text style={{ fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginBottom: 16 }}>{modalMessage}</Text>
-            <View style={{ flexDirection: 'row', justifyContent: modalButtons.length > 1 ? 'space-between' : 'center', gap: 12 }}>
-              {(modalButtons.length ? modalButtons : [{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]).map((b, idx) => {
-                const isSecondary = b.variant === 'secondary';
-                const isDestructive = b.variant === 'destructive';
-                const backgroundColor = isSecondary ? COLORS.white : (isDestructive ? COLORS.error : COLORS.primary);
-                const textColor = isSecondary ? COLORS.primary : COLORS.white;
-                const borderStyle = isSecondary ? { borderWidth: 1, borderColor: COLORS.primary } : {};
-                return (
-                  <TouchableOpacity
-                    key={idx}
-                    onPress={b.onPress}
-                    style={{
-                      backgroundColor,
-                      borderRadius: 8,
-                      paddingVertical: 10,
-                      alignItems: 'center',
-                      flex: modalButtons.length > 1 ? 1 : undefined,
-                      paddingHorizontal: modalButtons.length > 1 ? 0 : 18,
-                      ...borderStyle as any,
-                    }}
-                  >
-                    <Text style={{ color: textColor, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16 }}>{b.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
+        type={modalTitle === 'Success' ? 'success' : modalTitle === 'Error' ? 'error' : 'confirm'}
+        title={modalTitle}
+        message={modalMessage}
+        onClose={() => setModalVisible(false)}
+        buttons={modalButtons.length > 0 ? modalButtons : undefined}
+      />
     </SafeAreaView>
   );
 }
@@ -775,6 +904,30 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: "#666",
+  },
+  offlineNotice: {
+    fontSize: 14,
+    color: "#FF8C00",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  offlineCard: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 12,
+    padding: 20,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: "#FFB74D",
+  },
+  offlineCardTitle: {
+    fontSize: 18,
+    color: "#E65100",
+    marginBottom: 8,
+  },
+  offlineCardText: {
+    fontSize: 14,
+    color: "#666",
+    lineHeight: 20,
   },
   errorContainer: {
     flex: 1,

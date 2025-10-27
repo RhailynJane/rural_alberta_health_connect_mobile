@@ -1,0 +1,286 @@
+import { api } from "@/convex/_generated/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useMutation, useQuery } from "convex/react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import { NotificationBellEvent } from "../_utils/NotificationBellEvent";
+import { checkAndUpdateAnyReminderDue, clearBellNotification, getReminders, isBellReadNotCleared, isBellUnread, markBellRead } from "../_utils/notifications";
+import BottomNavigation from "../components/bottomNavigation";
+import CurvedBackground from "../components/curvedBackground";
+import CurvedHeader from "../components/curvedHeader";
+import { COLORS, FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
+
+export default function NotificationsScreen() {
+  const { isOnline } = useNetworkStatus();
+  const [refreshing, setRefreshing] = useState(false);
+  const [localDue, setLocalDue] = useState(false);
+  const [isReminderRead, setIsReminderRead] = useState(false);
+  const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
+  
+  // Online queries (skip when offline)
+  const unreadCount = useQuery(
+    api.notifications.getUnreadCount,
+    isOnline ? {} : "skip"
+  ) || 0;
+  const listRaw = useQuery(
+    api.notifications.getNotifications,
+    isOnline ? { limit: 50 } : "skip"
+  );
+  const list = useMemo(() => listRaw || [] as any[], [listRaw]);
+  
+  const markAllAsRead = useMutation(api.notifications.markAllAsRead);
+  const markOneAsRead = useMutation(api.notifications.markAsRead);
+
+  // Cache notifications when online
+  useEffect(() => {
+    if (isOnline && list && list.length > 0) {
+      const cacheNotifications = async () => {
+        try {
+          await AsyncStorage.setItem(
+            'notifications_cache',
+            JSON.stringify({
+              data: list,
+              unreadCount,
+              timestamp: Date.now(),
+            })
+          );
+        } catch (error) {
+          console.error('Failed to cache notifications:', error);
+        }
+      };
+      cacheNotifications();
+    }
+  }, [isOnline, list, unreadCount]);
+
+  // Load cached notifications when offline
+  useEffect(() => {
+    if (!isOnline) {
+      const loadCached = async () => {
+        try {
+          const cached = await AsyncStorage.getItem('notifications_cache');
+          if (cached) {
+            const { data } = JSON.parse(cached);
+            setCachedNotifications(data || []);
+          }
+        } catch (error) {
+          console.error('Failed to load cached notifications:', error);
+          setCachedNotifications([]);
+        }
+      };
+      loadCached();
+    }
+  }, [isOnline]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (isOnline) {
+      // Online: useQuery will refetch automatically
+      setTimeout(() => setRefreshing(false), 600);
+    } else {
+      // Offline: just reload cached data
+      const cached = await AsyncStorage.getItem('notifications_cache');
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        setCachedNotifications(data || []);
+      }
+      setRefreshing(false);
+    }
+  }, [isOnline]);
+
+  const computedUnread = useMemo(() => unreadCount, [unreadCount]);
+  
+  // Use online or cached notifications
+  const displayList = isOnline ? list : cachedNotifications;
+
+  // Compute local due state on mount and when events fire
+  React.useEffect(() => {
+    let mounted = true;
+    const compute = async () => {
+      const list = await getReminders();
+      await checkAndUpdateAnyReminderDue(list);
+      const unread = await isBellUnread();
+      const readNotCleared = await isBellReadNotCleared();
+      if (mounted) {
+        // Show notification if it's either unread OR read-but-not-cleared
+        setLocalDue(unread || readNotCleared);
+        // Set read state
+        setIsReminderRead(readNotCleared && !unread);
+      }
+    };
+    compute();
+    const offDue = NotificationBellEvent.on('due', () => {
+      setLocalDue(true);
+      setIsReminderRead(false);
+    });
+    const offCleared = NotificationBellEvent.on('cleared', () => {
+      setLocalDue(false);
+      setIsReminderRead(false);
+    });
+    const offRead = NotificationBellEvent.on('read', () => {
+      setIsReminderRead(true);
+      setLocalDue(true); // Keep showing it
+    });
+    // Reduced interval frequency - only check every 5 minutes on this page
+    const interval = setInterval(compute, 300000); // 5 minutes
+    return () => { mounted = false; offDue(); offCleared(); offRead(); clearInterval(interval); };
+  }, []);
+
+  return (
+    <CurvedBackground>
+      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+        <CurvedHeader
+          title="Notifications"
+          height={150}
+          showLogo={true}
+          screenType="signin"
+          bottomSpacing={0}
+          showNotificationBell={false}
+        />
+        <ScrollView
+          style={styles.container}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
+        >
+          {(computedUnread > 0 || localDue) && (
+            <View style={[styles.headerActions]}> 
+              {computedUnread > 0 && (
+                <Text style={styles.unreadText}>
+                  {computedUnread} {computedUnread === 1 ? "unread notification" : "unread notifications"}
+                </Text>
+              )}
+              <TouchableOpacity
+                onPress={async () => {
+                  try { await markAllAsRead({}); } catch {}
+                  try { await clearBellNotification(); } catch {}
+                  NotificationBellEvent.emit('cleared');
+                }}
+                style={styles.markAllBtn}
+              >
+                <Text style={styles.markAllText}>Clear all</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {localDue && (
+            <View style={[styles.item, !isReminderRead && styles.itemUnread]}> 
+              <View style={styles.row}>
+                <Icon 
+                  name={isReminderRead ? "notifications-none" : "notifications-active"} 
+                  size={22} 
+                  color={isReminderRead ? COLORS.darkGray : COLORS.primary} 
+                />
+                <Text style={styles.title} numberOfLines={2}>
+                  Symptom reminder due now {isReminderRead && "(Read)"}
+                </Text>
+              </View>
+              <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
+              <View style={styles.footerRow}>
+                <Text style={styles.time}>{new Date().toLocaleString()}</Text>
+                <View style={styles.actionButtons}>
+                  {!isReminderRead && (
+                    <TouchableOpacity
+                      style={styles.smallBtn}
+                      onPress={async () => {
+                        try { await markBellRead(); } catch {}
+                        NotificationBellEvent.emit('read');
+                        setIsReminderRead(true);
+                      }}
+                    >
+                      <Text style={styles.smallBtnText}>Mark read</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.smallBtn, styles.clearBtn]}
+                    onPress={async () => {
+                      try { await clearBellNotification(); } catch {}
+                      NotificationBellEvent.emit('cleared');
+                      setLocalDue(false);
+                      setIsReminderRead(false);
+                    }}
+                  >
+                    <Text style={styles.smallBtnText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {displayList.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Icon name="notifications-none" size={48} color={COLORS.darkGray} />
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptySub}>You&apos;ll see important updates here</Text>
+            </View>
+          ) : (
+            displayList.map((n: any) => (
+              <View key={String(n._id)} style={[styles.item, !n.read && styles.itemUnread]}>
+                <View style={styles.row}>
+                  <Icon name={n.read ? "notifications-none" : "notifications-active"} size={22} color={n.read ? COLORS.darkGray : COLORS.primary} />
+                  <Text style={styles.title} numberOfLines={2}>{n.title}</Text>
+                </View>
+                {!!n.body && <Text style={styles.body}>{n.body}</Text>}
+                <View style={styles.footerRow}>
+                  <Text style={styles.time}>{new Date(n.createdAt).toLocaleString()}</Text>
+                  {!n.read && isOnline && (
+                    <TouchableOpacity
+                      style={styles.smallBtn}
+                      onPress={async () => {
+                        try { await markOneAsRead({ notificationId: n._id }); } catch {}
+                      }}
+                    >
+                      <Text style={styles.smallBtnText}>Mark read</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      </SafeAreaView>
+      <BottomNavigation />
+    </CurvedBackground>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, paddingHorizontal: 16 },
+  headerActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  unreadText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+  },
+  markAllBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  markAllText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+  },
+  emptyState: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
+  emptyTitle: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginTop: 12 },
+  emptySub: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginTop: 4 },
+  item: { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: COLORS.lightGray },
+  itemUnread: { borderLeftWidth: 3, borderLeftColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { flex: 1, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 15, color: COLORS.darkText },
+  body: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkGray, marginTop: 4 },
+  footerRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  time: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray },
+  actionButtons: { flexDirection: 'row', gap: 8 },
+  smallBtn: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  clearBtn: { backgroundColor: COLORS.darkGray },
+  smallBtnText: { color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 12 },
+});

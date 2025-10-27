@@ -20,15 +20,19 @@ import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
+import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
 
 export default function PersonalInfo() {
   const router = useRouter();
   const database = useDatabase();
   const { isAuthenticated } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
     api.users.getCurrentUser,
     isAuthenticated ? {} : "skip"
   );
+  const [phone, setPhone] = useState("");
   const [age, setAge] = useState("");
   const [address1, setAddress1] = useState("");
   const [address2, setAddress2] = useState("");
@@ -58,12 +62,61 @@ export default function PersonalInfo() {
   const updatePersonalInfo = useMutation(
     api.personalInfoOnboarding.update.withAgeRangeAndLocation
   );
+  const updatePhone = useMutation(api.users.updatePhone);
+
+  // Format phone as (XXX) XXX-XXXX with a hard cap of 10 digits (display only)
+  const formatPhoneInput = (input: string) => {
+    let digits = (input || "").replace(/\D/g, "");
+    if (digits.length > 10) digits = digits.slice(-10);
+    const len = digits.length;
+    if (len === 0) return "";
+    if (len < 4) return `(${digits}`;
+    if (len < 7) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  };
+
+  // Prefill phone if available from server
+  React.useEffect(() => {
+    if (currentUser?.phone && !phone) {
+      setPhone(formatPhoneInput(currentUser.phone));
+    }
+  }, [currentUser?.phone, phone]);
+
+  // Prefill from secure storage when offline or when server has no phone
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (phone) return;
+      const shouldTrySecure = !isOnline || !currentUser?.phone;
+      if (!shouldTrySecure) return;
+      try {
+        const uid = currentUser?._id ? String(currentUser._id) : undefined;
+        if (!uid) return; // don't read legacy/global entry to avoid cross-account prefill
+        const stored = await getPhoneSecurely(uid);
+        if (!cancelled && stored && !phone) {
+          setPhone(formatPhoneInput(stored));
+        }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [isOnline, currentUser?._id, currentUser?.phone, phone]);
 
   // Validation logic
   const validateField = (field: string, raw: string): boolean => {
     const value = (raw || '').trim();
     let error = '';
     switch (field) {
+      case 'phone': {
+        if (value.length === 0) {
+          error = 'Phone number is required';
+          break;
+        }
+        const digits = value.replace(/\D+/g, '');
+        if (digits.length !== 10) {
+          error = 'Enter a valid 10-digit phone number';
+        }
+        break;
+      }
       case 'age': {
         if (value.length === 0) {
           error = 'Age is required';
@@ -109,6 +162,7 @@ export default function PersonalInfo() {
 
   const validateAll = (): boolean => {
     const results = [
+      validateField('phone', phone),
       validateField('age', age),
       validateField('address1', address1),
       validateField('city', city),
@@ -120,6 +174,12 @@ export default function PersonalInfo() {
 
   const handleInputChange = (field: string, value: string) => {
     switch (field) {
+      case 'phone': {
+        const formatted = formatPhoneInput(value);
+        setPhone(formatted);
+        validateField('phone', formatted);
+        return;
+      }
       case 'age': setAge(value); break;
       case 'address1': 
         setAddress1(value); 
@@ -232,6 +292,16 @@ export default function PersonalInfo() {
     setIsSubmitting(true);
 
     try {
+      // Save phone securely (Android) and sync to server
+      const normalizedPhone = normalizeNanpToE164(phone);
+      const uid = currentUser?._id ? String(currentUser._id) : undefined;
+      await savePhoneSecurely(normalizedPhone, uid);
+      try {
+        await updatePhone({ phone: normalizedPhone });
+      } catch (e) {
+        console.log('⚠️ Personal Info - Could not sync phone immediately:', e);
+      }
+
       // Save to WatermelonDB first (offline)
       await database.write(async () => {
         const userProfilesCollection = database.get("user_profiles");
@@ -358,6 +428,29 @@ export default function PersonalInfo() {
               </Text>
 
               <View style={styles.formContainer}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Phone Number *
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    errors.phone ? styles.inputError : null,
+                  ]}
+                  placeholder="(403) 555-0123"
+                  placeholderTextColor="#999"
+                  value={phone}
+                  onChangeText={(val) => handleInputChange('phone', val)}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  maxLength={14}
+                />
+                {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
                 <Text
                   style={[
                     styles.fieldLabel,

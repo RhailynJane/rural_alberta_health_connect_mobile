@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 
 export default function SymptomSeverity() {
@@ -96,6 +97,8 @@ export default function SymptomSeverity() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
         {/* Fixed Header */}
         <CurvedHeader
           title="Symptom Assessment"

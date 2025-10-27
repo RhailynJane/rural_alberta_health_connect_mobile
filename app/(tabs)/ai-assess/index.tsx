@@ -20,6 +20,7 @@ import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 
 // AI Context Types
@@ -398,6 +399,8 @@ export default function SymptomAssessment() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
         {/* Fixed Header */}
         <CurvedHeader
           title="Symptom Assessment"
@@ -617,6 +620,8 @@ export default function SymptomAssessment() {
               >
                 Or describe your symptoms:
               </Text>
+
+
 
               <TextInput
                 style={[

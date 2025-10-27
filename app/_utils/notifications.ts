@@ -1,12 +1,15 @@
 import { Q } from '@nozbe/watermelondb';
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NativeModules, Platform } from "react-native";
 import { database } from "../../watermelon/database";
+import { NotificationBellEvent } from "./NotificationBellEvent";
 
 const STORAGE_KEY = "symptomReminderNotificationId";
 const BELL_UNREAD_KEY = "notificationBellUnread";
+const BELL_READ_NOT_CLEARED_KEY = "notificationBellReadNotCleared";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
+// Android heads-up reminder channel
+const REMINDER_CHANNEL_ID = "reminders-high";
 // Per-user namespace for AsyncStorage keys to avoid cross-user leakage on the same device
 let USER_NS: string | null = null;
 export function setReminderUserKey(ns: string | null) {
@@ -75,8 +78,7 @@ export async function addReminder(item: Omit<ReminderItem, "id"|"createdAt"|"upd
   const newItem: ReminderItem = { id: genId(), createdAt: now, updatedAt: now, ...item };
   const updated = [...list, newItem];
   await saveReminders(updated);
-  // Optionally schedule
-  try { await scheduleReminderItem(newItem); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return updated;
 }
 
@@ -85,8 +87,7 @@ export async function updateReminder(id: string, patch: Partial<ReminderItem>): 
   const now = new Date().toISOString();
   const updated = list.map(r => r.id === id ? { ...r, ...patch, updatedAt: now } : r);
   await saveReminders(updated);
-  // Re-schedule this reminder
-  try { const r = updated.find(x => x.id === id); if (r) await scheduleReminderItem(r); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return updated;
 }
 
@@ -94,8 +95,7 @@ export async function deleteReminder(id: string): Promise<ReminderItem[]> {
   const list = await getReminders();
   const remaining = list.filter(r => r.id !== id);
   await saveReminders(remaining);
-  // We don't track per-reminder scheduled id here; best-effort: cancel all and re-schedule
-  try { await cancelSymptomReminder(); await scheduleAllReminderItems(remaining); } catch {}
+  // Don't schedule immediately - wait for explicit scheduleAllReminderItems call
   return remaining;
 }
 
@@ -112,18 +112,12 @@ async function getNotificationsModule() {
     IosAuthorizationStatus: { PROVISIONAL: 1 },
   };
 
-  // Never attempt to load on web
-  if (Platform.OS === "web") return stub;
-
-  // If the native module isn't available (e.g., Expo Go without this module), bail out
-  const hasNative = !!(NativeModules as any)?.ExpoNotifications || !!(NativeModules as any)?.ExpoPushTokenManager;
-  if (!hasNative) return stub;
-
-  // Dynamically import to avoid requiring native module on startup and to catch load errors
+  // Prefer dynamic import first; fall back to stub on any error or unsupported platform
   try {
     const Notifications = await import("expo-notifications");
     return Notifications as any;
   } catch {
+    // As a fallback for platforms where the module isn't available (web or missing native), return stub
     return stub;
   }
 }
@@ -135,48 +129,97 @@ export async function initializeNotificationsOnce() {
   const Notifications = await getNotificationsModule();
   if (typeof (Notifications as any).setNotificationHandler === 'function') {
     (Notifications as any).setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        shouldShowBanner: true as any,
-        shouldShowList: true as any,
-      } as any),
+      handleNotification: async (notification: any) => {
+        const type = notification?.request?.content?.data?.type;
+        const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
+        // For reminders: show banner and play sound even in foreground. For others: keep silent.
+        const result = {
+          // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
+          shouldShowAlert: !!isReminder,
+          shouldShowBanner: !!isReminder,
+          shouldShowList: true,
+          shouldPlaySound: !!isReminder,
+          shouldSetBadge: true,
+        };
+        return result as any;
+      },
     });
   }
 
-  // Create Android channel if available (no-op on iOS/Web)
+  // When a reminder notification is received, immediately set bell unread and notify UI
+  try {
+    if (typeof (Notifications as any).addNotificationReceivedListener === 'function') {
+      (Notifications as any).addNotificationReceivedListener(async (notification: any) => {
+        const type = notification?.request?.content?.data?.type;
+        const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
+        if (isReminder) {
+          try { await setBellUnread(true); } catch {}
+          NotificationBellEvent.emit('due');
+        }
+      });
+    }
+  } catch {}
+
+  // Create Android channel for persistent high-priority notifications (heads-up)
   try {
     if (typeof (Notifications as any).setNotificationChannelAsync === 'function') {
-      await (Notifications as any).setNotificationChannelAsync("default", {
-        name: "Default",
-        importance: (await getNotificationsModule()).AndroidImportance?.DEFAULT ?? 3,
+      const HIGH = (Notifications as any).AndroidImportance?.HIGH ?? 4;
+      await (Notifications as any).setNotificationChannelAsync(REMINDER_CHANNEL_ID, {
+        name: "Symptom Reminders (Heads-up)",
+        importance: HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#00695C',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+        bypassDnd: false,
+        lockscreenVisibility: 1,
       } as any);
     }
   } catch {
     // Ignore when channel API isn't available (iOS/Web)
   }
+
+  // One-time migration: reschedule reminders to use the new heads-up channel
+  try {
+    const migratedKey = nk('reminderChannelMigratedV1');
+    const already = await AsyncStorage.getItem(migratedKey);
+    if (!already) {
+      try { await scheduleAllReminderItems(); } catch {}
+      try { await AsyncStorage.setItem(migratedKey, '1'); } catch {}
+    }
+  } catch {}
 }
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   const Notifications = await getNotificationsModule();
+  
+  console.log("🔔 [requestNotificationPermissions] Module loaded:", {
+    hasGetPermissions: typeof (Notifications as any).getPermissionsAsync === 'function',
+    hasRequestPermissions: typeof (Notifications as any).requestPermissionsAsync === 'function',
+  });
+  
   try {
-    if (typeof (Notifications as any).getPermissionsAsync !== 'function') return false;
-    const settings = await (Notifications as any).getPermissionsAsync();
-    if (
-      (settings as any)?.granted ||
-      (settings as any)?.ios?.status === (Notifications as any).IosAuthorizationStatus?.PROVISIONAL
-    ) {
-      return true;
+    if (typeof (Notifications as any).getPermissionsAsync !== 'function') {
+      console.log("⚠️ getPermissionsAsync not available - likely web or missing module");
+      return false;
     }
-    if (typeof (Notifications as any).requestPermissionsAsync !== 'function') return false;
+    if (typeof (Notifications as any).requestPermissionsAsync !== 'function') {
+      console.log("⚠️ requestPermissionsAsync not available");
+      return false;
+    }
+    
+    console.log("🔔 Requesting permissions...");
     const req = await (Notifications as any).requestPermissionsAsync();
+    console.log("🔔 Permission request result:", req);
+    
     return (
       (req as any)?.granted ||
       (req as any)?.ios?.status === (Notifications as any).IosAuthorizationStatus?.PROVISIONAL ||
       false
     );
-  } catch {
+  } catch (err) {
+    console.error("❌ Error requesting permissions:", err);
     return false;
   }
 }
@@ -194,6 +237,19 @@ export async function cancelSymptomReminder() {
   }
   // Clear bell unread flag when canceling
   try { await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), "0"); } catch {}
+}
+
+// Dismiss all delivered notifications from notification center
+export async function dismissAllNotifications() {
+  const Notifications = await getNotificationsModule();
+  try {
+    if (typeof (Notifications as any).dismissAllNotificationsAsync === 'function') {
+      await (Notifications as any).dismissAllNotificationsAsync();
+      console.log('🔕 Dismissed all delivered notifications');
+    }
+  } catch (e) {
+    console.error('Error dismissing notifications:', e);
+  }
 }
 
 function parseTimeToHourMinute(t: string): { hour: number; minute: number } {
@@ -238,7 +294,7 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
 
   let trigger: any;
   if (settings.frequency === "daily") {
-    trigger = { type: "calendar", hour, minute, repeats: true } as any;
+    trigger = { type: "calendar", hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
   } else {
     trigger = {
       type: "calendar",
@@ -246,6 +302,7 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
       hour,
       minute,
       repeats: true,
+      channelId: REMINDER_CHANNEL_ID,
     } as any;
   }
 
@@ -255,9 +312,14 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
 
   const id = await (Notifications as any).scheduleNotificationAsync({
     content: {
-      title: "Symptom assessment reminder",
+      title: "Symptom Assessment Reminder",
       body: "It's time to complete your daily symptoms check.",
-      sound: undefined,
+      sound: 'default',
+      priority: 'max', // Android: request highest priority
+      data: {
+        type: 'symptom_reminder',
+        timestamp: Date.now(),
+      },
     },
     trigger,
   });
@@ -314,7 +376,22 @@ export async function getSymptomReminderDetails(): Promise<{
 
 // Bell unread helpers
 export async function setBellUnread(unread: boolean): Promise<void> {
-  try { await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), unread ? "1" : "0"); } catch {}
+  try {
+    const prev = await AsyncStorage.getItem(nk(BELL_UNREAD_KEY));
+    const prevBool = prev === "1";
+    if (prevBool !== unread) {
+      await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), unread ? "1" : "0");
+      // Emit events so all bells update immediately across screens
+      if (unread) {
+        NotificationBellEvent.emit('due');
+      } else {
+        NotificationBellEvent.emit('cleared');
+      }
+    } else {
+      // No change; still persist to ensure key exists
+      await AsyncStorage.setItem(nk(BELL_UNREAD_KEY), unread ? "1" : "0");
+    }
+  } catch {}
 }
 
 export async function isBellUnread(): Promise<boolean> {
@@ -326,11 +403,27 @@ export async function isBellUnread(): Promise<boolean> {
   }
 }
 
+export async function isBellReadNotCleared(): Promise<boolean> {
+  try {
+    const v = await AsyncStorage.getItem(nk(BELL_READ_NOT_CLEARED_KEY));
+    return v === "1";
+  } catch {
+    return false;
+  }
+}
+
 export async function markBellRead(): Promise<void> {
   await setBellUnread(false);
+  // Mark as read but not cleared
+  try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "1"); } catch {}
   // Store the date/time when user marked as read, so we don't re-trigger until next reminder
   const now = new Date().toISOString();
   try { await AsyncStorage.setItem(nk(LAST_READ_DATE_KEY), now); } catch {}
+}
+
+export async function clearBellNotification(): Promise<void> {
+  await setBellUnread(false);
+  try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "0"); } catch {}
 }
 
 // Legacy helper no longer used; kept for reference
@@ -360,7 +453,10 @@ export async function checkAndUpdateReminderDue(settings: ReminderSettings | nul
 }
 
 export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promise<boolean> {
-  const reminders = (list ?? (await getReminders())).filter(r => r.enabled);
+  // Ignore deprecated 'hourly' reminders entirely for due logic
+  const reminders = (list ?? (await getReminders()))
+    .filter(r => r.enabled)
+    .filter(r => r.frequency !== 'hourly');
   if (reminders.length === 0) {
     await setBellUnread(false);
     return false;
@@ -385,6 +481,11 @@ export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promi
       const { hour, minute } = parseTimeToHourMinute(r.time);
       const d = new Date();
       d.setHours(hour, minute, 0, 0);
+      
+      // If the scheduled time hasn't happened yet today, it's for tomorrow
+      if (d.getTime() > now.getTime()) {
+        return null; // Not due yet today
+      }
       return d;
     }
     // weekly
@@ -398,14 +499,26 @@ export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promi
     // Adjust date to the target weekday within current week
     const diff = targetWeekday - today; // can be negative
     d.setDate(d.getDate() + diff);
+    
+    // If the target day/time hasn't happened yet this week, it's for next week
+    if (d.getTime() > now.getTime()) {
+      return null; // Not due yet this week
+    }
     return d;
   };
 
   let anyDue = false;
+  const NOTIFICATION_WINDOW_MS = 60 * 60 * 1000; // 1 hour window after scheduled time
+  
   for (const r of reminders) {
     const occ = latestOccurrence(r);
     if (!occ) continue;
-    if (now >= occ) {
+    
+    // Check if we're within the notification window (scheduled time to 1 hour after)
+    const timeSinceOccurrence = now.getTime() - occ.getTime();
+    const isWithinWindow = timeSinceOccurrence >= 0 && timeSinceOccurrence <= NOTIFICATION_WINDOW_MS;
+    
+    if (isWithinWindow) {
       // If never read or last read is before this occurrence -> due
       if (!lastRead || lastRead < occ) {
         anyDue = true;
@@ -431,34 +544,65 @@ export async function scheduleReminderItem(item: ReminderItem) {
     if (!ok) return;
 
     if (item.frequency === "hourly") {
-      // Use time interval trigger every 3600 seconds
-      await (Notifications as any).scheduleNotificationAsync({
-        content: { title: "Symptom assessment reminder", body: "Hourly reminder.", sound: undefined },
-        trigger: { seconds: 3600, repeats: true } as any,
-      });
+      // Hourly reminders are deprecated/removed - skip scheduling
+      console.log('⚠️ Hourly reminders are no longer supported, skipping schedule');
       return;
     }
 
     const { hour, minute } = parseTimeToHourMinute(item.time || "09:00");
     let trigger: any;
     if (item.frequency === "daily") {
-      trigger = { type: "calendar", hour, minute, repeats: true } as any;
+      trigger = { type: "calendar", hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
     } else {
-      trigger = { type: "calendar", weekday: weekdayStringToNumber(item.dayOfWeek), hour, minute, repeats: true } as any;
+      trigger = { type: "calendar", weekday: weekdayStringToNumber(item.dayOfWeek), hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
     }
-    await (Notifications as any).scheduleNotificationAsync({
-      content: { title: "Symptom assessment reminder", body: "It's time to complete your symptoms check.", sound: undefined },
+    const schedId = await (Notifications as any).scheduleNotificationAsync({
+      content: {
+        title: "Symptom Assessment Reminder",
+        body: "It's time to complete your symptoms check.",
+        sound: 'default',
+        priority: 'max',
+        categoryIdentifier: 'reminder',
+        data: {
+          type: item.frequency === 'daily' ? 'daily_reminder' : 'weekly_reminder',
+          timestamp: Date.now(),
+          dayOfWeek: item.dayOfWeek,
+        },
+      },
       trigger,
     });
+    console.log('🗓️ Scheduled notification id:', schedId, 'trigger:', JSON.stringify(trigger));
   } catch {}
 }
 
 export async function scheduleAllReminderItems(list?: ReminderItem[]) {
   const reminders = list ?? (await getReminders());
-  // Best-effort: cancel previous single reminder id and schedule all; in real app track ids per item
+  
+  // Cancel ALL existing scheduled notifications first
+  const Notifications = await getNotificationsModule();
+  try {
+    if (typeof (Notifications as any).cancelAllScheduledNotificationsAsync === 'function') {
+      await (Notifications as any).cancelAllScheduledNotificationsAsync();
+      console.log('🔕 Cancelled all scheduled notifications');
+    }
+  } catch (e) {
+    console.error('Error cancelling notifications:', e);
+  }
+  
+  // Also try the legacy cancellation
   try { await cancelSymptomReminder(); } catch {}
-  for (const r of reminders) {
-    try { await scheduleReminderItem(r); } catch {}
+  
+  // Only schedule enabled reminders
+  const enabledReminders = reminders.filter(r => r.enabled);
+  console.log(`📅 Scheduling ${enabledReminders.length} enabled reminders`);
+  
+  for (const r of enabledReminders) {
+    try { 
+      await scheduleReminderItem(r);
+      console.log(`✅ Scheduled ${r.frequency} reminder on channel ${REMINDER_CHANNEL_ID}`);
+    } catch (e) {
+      console.error(`❌ Failed to schedule ${r.frequency} reminder:`, e);
+    }
   }
 }
 
@@ -491,4 +635,15 @@ async function syncRemindersToWatermelon(list: ReminderItem[]) {
   } catch (err) {
     console.error('WatermelonDB syncRemindersToWatermelon error:', err);
   }
+}
+
+// Manual trigger to re-apply channels and re-schedule all reminders
+export async function forceRescheduleAllReminders(): Promise<number> {
+  try {
+    await initializeNotificationsOnce();
+  } catch {}
+  const list = await getReminders();
+  await scheduleAllReminderItems(list);
+  // Return count of enabled, non-hourly reminders scheduled
+  return list.filter(r => r.enabled && r.frequency !== 'hourly').length;
 }

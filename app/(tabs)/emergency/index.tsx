@@ -19,9 +19,12 @@ import { cacheClinics, getCachedClinics } from "../../../watermelon/hooks/useCac
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
+import DueReminderBanner from "../../components/DueReminderBanner";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
+import { OfflineBanner } from "../../components/OfflineBanner";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Define types for our component
 interface ClinicInfo {
@@ -65,6 +68,7 @@ interface RealTimeClinicResponse {
 
 export default function Emergency() {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [isLoading, setIsLoading] = useState(true);
   const [realTimeClinics, setRealTimeClinics] = useState<RealTimeClinicData[]>(
     []
@@ -78,79 +82,102 @@ export default function Emergency() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get location services status and emergency details
+  // Get location services status and emergency details (only when online)
   const locationStatus = useQuery(
-    api.locationServices.getLocationServicesStatus
+    api.locationServices.getLocationServicesStatus,
+    isOnline ? undefined : "skip"
   );
   const emergencyDetails = useQuery(
-    api.locationServices.getEmergencyLocationDetails
+    api.locationServices.getEmergencyLocationDetails,
+    isOnline ? undefined : "skip"
   );
   
-  // Get reminder settings
+  // Get reminder settings (only when online)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !authLoading ? {} : "skip"
+    isAuthenticated && !authLoading && isOnline ? {} : "skip"
   );
 
-  // Mutation to toggle location services
+  // Mutation to toggle location services (only when online)
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
   );
 
-  // Action to get real-time clinic data
+  // Action to get real-time clinic data (only when online)
   const getRealTimeClinicData = useAction(
     api.locationServices.getRealTimeClinicData
   );
 
   useEffect(() => {
     const loadRealTimeData = async () => {
-      // Only load data if location services are enabled AND we have a location
-      if (locationStatus?.locationServicesEnabled && locationStatus?.location) {
+      // If offline, try to load cached data immediately
+      if (!isOnline) {
+        console.log("📴 Offline mode: loading cached clinic data");
+        try {
+          setIsLoading(true);
+          const cached = await getCachedClinics(locationStatus?.location || "");
+          if (cached.length > 0) {
+            console.log("📦 Using cached clinic data (offline)");
+            setRealTimeClinics(cached as RealTimeClinicData[]);
+          } else {
+            console.log("⚠️ No cached data available (offline)");
+            setRealTimeClinics([]);
+          }
+        } catch (error) {
+          console.error("❌ Failed to load cached clinics:", error);
+          setRealTimeClinics([]);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Only load data if location services are enabled AND we have a location AND we're online
+      if (locationStatus?.locationServicesEnabled && locationStatus?.location && isOnline) {
         try {
           setIsLoading(true);
           
           let latitude: number | undefined;
           let longitude: number | undefined;
           
-          // First, try to get actual GPS coordinates from device
-          try {
-             const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
-             console.log('🔐 Location permission status:', status);
-            if (status === 'granted') {
-              console.log('📍 Getting actual GPS location from device...');
-               const location = await ExpoLocation.getCurrentPositionAsync({
-                 accuracy: ExpoLocation.Accuracy.Balanced,
-              });
-              latitude = location.coords.latitude;
-              longitude = location.coords.longitude;
-              console.log(`✅ Got GPS coordinates: ${latitude}, ${longitude}`);
-            } else {
-              console.log('⚠️ Location permission denied, will try parsing stored location');
+          // First, check if we have a stored location to use immediately
+          const loc = locationStatus.location;
+          if (typeof loc === 'string' && loc.includes(',')) {
+            const parts = loc.split(',');
+            if (parts.length >= 2) {
+              const lat = parseFloat(parts[0]);
+              const lng = parseFloat(parts[1]);
+              if (isFinite(lat) && isFinite(lng)) {
+                latitude = lat;
+                longitude = lng;
+                console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
+              }
             }
-          } catch (gpsError) {
-             console.log('⚠️ Failed to get GPS location:', gpsError instanceof Error ? gpsError.message : gpsError);
           }
           
-          // Fallback: Parse stored location string if GPS failed
+          // Only try GPS if we don't have stored coordinates (first-time setup)
           if (latitude === undefined || longitude === undefined) {
-             console.log('🔄 Attempting to parse stored location:', locationStatus.location);
-            const loc = locationStatus.location;
-            if (typeof loc === 'string' && loc.includes(',')) {
-              const parts = loc.split(',');
-              if (parts.length >= 2) {
-                const lat = parseFloat(parts[0]);
-                const lng = parseFloat(parts[1]);
-                if (isFinite(lat) && isFinite(lng)) {
-                  latitude = lat;
-                  longitude = lng;
-                  console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
-                 } else {
-                   console.log(`⚠️ Invalid stored coordinates: lat=${lat}, lng=${lng}`);
-                }
+            try {
+              const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+              console.log('🔐 Location permission status:', status);
+              if (status === 'granted') {
+                console.log('📍 Getting GPS location from device...');
+                const location = await ExpoLocation.getCurrentPositionAsync({
+                  accuracy: ExpoLocation.Accuracy.Low, // Use Low for faster results
+                });
+                latitude = location.coords.latitude;
+                longitude = location.coords.longitude;
+                console.log(`✅ Got GPS coordinates: ${latitude}, ${longitude}`);
+              } else {
+                console.log('⚠️ Location permission denied');
               }
-             } else {
-               console.log(`⚠️ Stored location not in lat,lng format: "${loc}"`);
+            } catch (gpsError) {
+              console.log('⚠️ Failed to get GPS location:', gpsError instanceof Error ? gpsError.message : gpsError);
             }
+          }
+          
+          if (latitude === undefined || longitude === undefined) {
+            console.log(`⚠️ No coordinates available`);
           }
           
            console.log(`📤 Calling getRealTimeClinicData with location="${locationStatus.location}", latitude=${latitude}, longitude=${longitude}`);
@@ -206,10 +233,12 @@ export default function Emergency() {
     };
 
     loadRealTimeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     locationStatus?.locationServicesEnabled,
     locationStatus?.location,
-    getRealTimeClinicData,
+    // getRealTimeClinicData removed - it's a Convex action and causes infinite loops
+    isOnline,
   ]);
 
   // Function to handle emergency calls
@@ -318,6 +347,11 @@ export default function Emergency() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
+        {/* Due reminder banner (offline-capable) */}
+        <DueReminderBanner topOffset={120} />
+        {/* Offline Banner */}
+        <OfflineBanner />
+        
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
           title="Emergency"
@@ -397,11 +431,18 @@ export default function Emergency() {
             <View style={styles.cardHeader}>
               <Icon name="local-pharmacy" size={24} color="#2DE16B" />
               <Text style={styles.cardTitle}>Local Clinic</Text>
-              {nearestClinic?.source && (
-                <Text style={styles.dataSource}>
-                  via {nearestClinic.source}
-                </Text>
-              )}
+              <View style={styles.headerRightRow}>
+                {nearestClinic?.source && (
+                  <Text style={styles.dataSource}>
+                    via {nearestClinic.source}
+                  </Text>
+                )}
+                {nearestClinic?.source && String(nearestClinic.source).toLowerCase().includes('cached') && (
+                  <View style={styles.cachedPill}>
+                    <Text style={styles.cachedPillText}>Cached</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             {isLoading ? (
@@ -530,6 +571,14 @@ export default function Emergency() {
                     {nearestClinic?.source || "Alberta Health Services"}
                   </Text>
                 </View>
+                <View style={styles.detailItem}>
+                  <Text style={styles.detailLabel}>Data status:</Text>
+                  <Text style={styles.detailValue}>
+                    {nearestClinic?.source && String(nearestClinic.source).toLowerCase().includes('cached')
+                      ? 'Cached data'
+                      : 'Live data'}
+                  </Text>
+                </View>
                 {nearestClinic && (
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>Clinic distance:</Text>
@@ -576,8 +625,8 @@ export default function Emergency() {
             <View style={styles.cardContent}>
               <Text style={styles.mapDescription}>
                 {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
-                  ? "Interactive map showing nearby clinics. Download maps for offline use."
-                  : "Download offline maps for areas with poor connectivity. Enable location services to see nearby clinics."}
+                  ? "Interactive map showing nearby clinics. Download maps for offline use. When offline, the map tiles load from your downloads and clinic markers use your last saved results. Opening directions may require connectivity."
+                  : "Download offline maps for areas with poor connectivity. When offline, the Emergency map will use your downloaded tiles automatically. Clinic markers use your last saved results; directions may require connectivity. Enable location services to see nearby clinics."}
               </Text>
               <MapboxOfflineMap
                 clinics={locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
@@ -844,6 +893,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  headerRightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cardTitle: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 18,
@@ -855,6 +908,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
     fontStyle: "italic",
+  },
+  cachedPill: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#FDBA74', // amber-300
+    backgroundColor: '#FFFBEB', // amber-50
+  },
+  cachedPillText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 10,
+    color: '#92400E', // amber-800
   },
   cardDescription: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -975,6 +1042,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  statusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+  },
+  statusLive: {
+    backgroundColor: '#ECFDF5', // emerald-50
+    borderColor: '#34D399', // emerald-400
+  },
+  statusCached: {
+    backgroundColor: '#FFFBEB', // amber-50
+    borderColor: '#FBBF24', // amber-400
+  },
+  statusChipText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 12,
+  },
+  statusLiveText: {
+    color: '#065F46', // emerald-800
+  },
+  statusCachedText: {
+    color: '#92400E', // amber-800
+  },
   locationDescription: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
@@ -988,12 +1080,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 10,
   },
+  detailItemInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
   detailLabel: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
     color: "#666",
     marginRight: 5,
     flex: 1,
+  },
+  detailLabelInline: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#666",
+    marginRight: 8,
   },
   detailValue: {
     fontFamily: FONTS.BarlowSemiCondensed,
