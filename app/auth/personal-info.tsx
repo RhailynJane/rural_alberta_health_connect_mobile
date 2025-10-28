@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -320,23 +319,72 @@ export default function PersonalInfo() {
             .filter(Boolean)
             .join(', ');
           
-          const safeUpdate = async (setter: (p: any) => void) => {
+          const safeUpdate = async (fieldName: string, setter: (p: any) => void) => {
             try {
+              console.log(`🔍 [PersonalInfo] Attempting to update field: ${fieldName}`);
+              console.log(`🔍 [PersonalInfo] Field value:`, fieldName === 'userId' ? currentUser._id :
+                                                          fieldName === 'age' ? age :
+                                                          fieldName === 'ageRange' ? age :
+                                                          fieldName === 'address1' ? address1 :
+                                                          fieldName === 'address2' ? address2 :
+                                                          fieldName === 'city' ? city :
+                                                          fieldName === 'province' ? province :
+                                                          fieldName === 'postalCode' ? postalCode :
+                                                          fieldName === 'location' ? (fullAddress || location) : 'unknown');
+
+              // Check if the field descriptor exists
+              const descriptor = Object.getOwnPropertyDescriptor(existingProfile, fieldName);
+              console.log(`🔍 [PersonalInfo] Field descriptor for ${fieldName}:`, descriptor ? 'exists' : 'undefined');
+
+              // Check model's constructor for field definitions
+              const modelConstructor = existingProfile.constructor as any;
+              console.log(`🔍 [PersonalInfo] Model table:`, modelConstructor?.table);
+              console.log(`🔍 [PersonalInfo] Model associations:`, modelConstructor?.associations);
+
               await existingProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to update profile field:', e);
+              console.log(`✅ [PersonalInfo] Successfully updated field: ${fieldName}`);
+            } catch (e: any) {
+              console.error(`❌ [PersonalInfo] Failed to update field ${fieldName}:`, e);
+              console.error(`❌ [PersonalInfo] Error name:`, e?.name);
+              console.error(`❌ [PersonalInfo] Error message:`, e?.message);
+              console.error(`❌ [PersonalInfo] Error stack:`, e?.stack);
             }
           };
 
-          await safeUpdate((profile: any) => { profile.userId = currentUser._id; });
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          // Update using prepareUpdate for better safety
+          await existingProfile.update((profile: any) => {
+            try {
+              console.log('🔍 [PersonalInfo] Starting batch update');
+              // Use bracket notation for safer property access
+              const updates = {
+                userId: currentUser._id,
+                age: age || '',
+                ageRange: age || '',
+                address1: address1 || '',
+                address2: address2 || '',
+                city: city || '',
+                province: province || '',
+                postalCode: postalCode || '',
+                location: fullAddress || location || ''
+              };
+
+              for (const [key, value] of Object.entries(updates)) {
+                try {
+                  console.log(`🔍 [PersonalInfo] Setting ${key} to:`, value);
+                  // Use bracket notation to avoid decorator issues
+                  (profile as any)[key] = value;
+                  console.log(`✅ [PersonalInfo] Successfully set ${key}`);
+                } catch (fieldError: any) {
+                  console.error(`❌ [PersonalInfo] Failed to set ${key}:`, fieldError);
+                  console.error(`❌ [PersonalInfo] Error details:`, fieldError?.message);
+                }
+              }
+              console.log('✅ [PersonalInfo] Batch update completed');
+            } catch (e: any) {
+              console.error('❌ [PersonalInfo] Batch update failed:', e);
+              console.error('❌ [PersonalInfo] Error stack:', e?.stack);
+            }
+          });
           
           console.log("✅ Personal Info - Updated existing local profile");
         } else {
@@ -352,22 +400,65 @@ export default function PersonalInfo() {
           });
           
           // Then update optional fields one by one
-          const safeUpdate = async (setter: (p: any) => void) => {
+          const safeUpdate = async (fieldName: string, setter: (p: any) => void) => {
             try {
+              console.log(`🔍 [PersonalInfo-Create] Attempting to set field: ${fieldName}`);
+              console.log(`🔍 [PersonalInfo-Create] Field value:`, fieldName === 'age' ? age :
+                                                          fieldName === 'ageRange' ? age :
+                                                          fieldName === 'address1' ? address1 :
+                                                          fieldName === 'address2' ? address2 :
+                                                          fieldName === 'city' ? city :
+                                                          fieldName === 'province' ? province :
+                                                          fieldName === 'postalCode' ? postalCode :
+                                                          fieldName === 'location' ? (fullAddress || location) : 'unknown');
+
+              // Check if the field descriptor exists
+              const descriptor = Object.getOwnPropertyDescriptor(newProfile, fieldName);
+              console.log(`🔍 [PersonalInfo-Create] Field descriptor for ${fieldName}:`, descriptor ? 'exists' : 'undefined');
+
+              // Check model's constructor for field definitions
+              const modelConstructor = newProfile.constructor as any;
+              console.log(`🔍 [PersonalInfo-Create] Model table:`, modelConstructor?.table);
+
               await newProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to set profile field:', e);
+              console.log(`✅ [PersonalInfo-Create] Successfully set field: ${fieldName}`);
+            } catch (e: any) {
+              console.error(`❌ [PersonalInfo-Create] Failed to set field ${fieldName}:`, e);
+              console.error(`❌ [PersonalInfo-Create] Error name:`, e?.name);
+              console.error(`❌ [PersonalInfo-Create] Error message:`, e?.message);
+              console.error(`❌ [PersonalInfo-Create] Error stack:`, e?.stack);
             }
           };
 
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          // Update using batch update for better safety
+          await newProfile.update((profile: any) => {
+            try {
+              console.log('🔍 [PersonalInfo-Create] Starting batch update');
+              const updates = {
+                age: age || '',
+                ageRange: age || '',
+                address1: address1 || '',
+                address2: address2 || '',
+                city: city || '',
+                province: province || '',
+                postalCode: postalCode || '',
+                location: fullAddress || location || ''
+              };
+
+              for (const [key, value] of Object.entries(updates)) {
+                try {
+                  console.log(`🔍 [PersonalInfo-Create] Setting ${key} to:`, value);
+                  (profile as any)[key] = value;
+                  console.log(`✅ [PersonalInfo-Create] Successfully set ${key}`);
+                } catch (fieldError: any) {
+                  console.error(`❌ [PersonalInfo-Create] Failed to set ${key}:`, fieldError);
+                }
+              }
+              console.log('✅ [PersonalInfo-Create] Batch update completed');
+            } catch (e: any) {
+              console.error('❌ [PersonalInfo-Create] Batch update failed:', e);
+            }
+          });
           
           console.log("✅ Personal Info - Created new local profile");
         }
@@ -381,37 +472,23 @@ export default function PersonalInfo() {
 
       // Then sync with Convex (online) in the background - this will work when there's internet
       // Don't await this - let it sync in the background
-      if (isOnline) {
-        updatePersonalInfo({
-          age,
-          address1,
-          address2,
-          city,
-          province,
-          postalCode,
-          location,
-          onboardingCompleted: false
-        }).then(() => {
-          console.log("✅ Personal Info - Synced with Convex");
-        }).catch(async (syncError) => {
-          console.log(
-            "⚠️ Personal Info - Failed to sync, marking for later:",
-            syncError
-          );
-          // Mark for sync when online
-          if (currentUser?._id) {
-            await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
-            console.log("✅ Marked profile for sync when online");
-          }
-        });
-      } else {
-        // Offline - mark for sync when online
-        console.log("📴 Offline - marking for sync when online");
-        if (currentUser?._id) {
-          await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
-          console.log("✅ Marked profile for sync when online");
-        }
-      }
+      updatePersonalInfo({ 
+        age,
+        address1,
+        address2,
+        city,
+        province,
+        postalCode,
+        location, 
+        onboardingCompleted: false 
+      }).then(() => {
+        console.log("✅ Personal Info - Synced with Convex");
+      }).catch((syncError) => {
+        console.log(
+          "⚠️ Personal Info - Saved locally, will sync when online:",
+          syncError
+        );
+      });
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
       setErrorModalMessage("Failed to save personal information. Please try again.");

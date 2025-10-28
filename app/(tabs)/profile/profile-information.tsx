@@ -358,34 +358,34 @@ export default function ProfileInformation() {
                     // Update existing profile (bulk)
                     console.log("📦 [UPDATE PATH] Updating existing profile - NO TYPE FIELD");
                     await (userProfile as any).update((prof: any) => {
-                      prof.age = userData.age;
-                      prof.address1 = userData.address1;
-                      prof.address2 = userData.address2;
-                      prof.city = userData.city;
-                      prof.province = userData.province;
-                      prof.postalCode = userData.postalCode;
-                      prof.location = userData.location;
-                      // Mark as ready to sync
-                      prof.onboardingCompleted = true;
+                      try {
+                        console.log('🔍 [ProfileInfo] Starting batch update for existing profile');
+                        const updates = {
+                          age: userData.age || '',
+                          address1: userData.address1 || '',
+                          address2: userData.address2 || '',
+                          city: userData.city || '',
+                          province: userData.province || '',
+                          postalCode: userData.postalCode || '',
+                          location: userData.location || '',
+                          onboardingCompleted: true
+                        };
+
+                        for (const [key, value] of Object.entries(updates)) {
+                          try {
+                            console.log(`🔍 [ProfileInfo] Setting ${key} to:`, value);
+                            (prof as any)[key] = value;
+                            console.log(`✅ [ProfileInfo] Successfully set ${key}`);
+                          } catch (fieldError: any) {
+                            console.error(`❌ [ProfileInfo] Failed to set ${key}:`, fieldError);
+                          }
+                        }
+                        console.log('✅ [ProfileInfo] Batch update completed');
+                      } catch (e: any) {
+                        console.error('❌ [ProfileInfo] Batch update failed:', e);
+                      }
                     });
                     console.log("📦 Offline: updated personal info in WatermelonDB");
-
-                    // Update AsyncStorage cache immediately to prevent reversion on tab switch
-                    try {
-                      const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
-                      const cached = raw ? JSON.parse(raw) : {};
-                      cached.age = userData.age;
-                      cached.address1 = userData.address1;
-                      cached.address2 = userData.address2;
-                      cached.city = userData.city;
-                      cached.province = userData.province;
-                      cached.postalCode = userData.postalCode;
-                      cached.location = userData.location;
-                      await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
-                      console.log("💾 Updated AsyncStorage cache with personal info");
-                    } catch (e) {
-                      console.warn("⚠️ Failed to update cache:", e);
-                    }
                   } else {
                     // Create new profile entry
                     await profilesCollection.create((prof: any) => {
@@ -400,23 +400,6 @@ export default function ProfileInformation() {
                       prof.onboardingCompleted = true;
                     });
                     console.log("📦 Offline: created personal info in WatermelonDB");
-
-                    // Update AsyncStorage cache for new profile too
-                    try {
-                      const cached = {
-                        age: userData.age,
-                        address1: userData.address1,
-                        address2: userData.address2,
-                        city: userData.city,
-                        province: userData.province,
-                        postalCode: userData.postalCode,
-                        location: userData.location,
-                      };
-                      await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
-                      console.log("💾 Created AsyncStorage cache with personal info");
-                    } catch (e) {
-                      console.warn("⚠️ Failed to create cache:", e);
-                    }
                   }
                 });
               } catch (bulkErr) {
@@ -544,26 +527,29 @@ export default function ProfileInformation() {
             await database.write(async () => {
               if (userProfile) {
                 await (userProfile as any).update((prof: any) => {
-                  prof.emergencyContactName = userData.emergencyContactName;
-                  prof.emergencyContactPhone = userData.emergencyContactPhone;
-                  prof.onboardingCompleted = true;
+                  try {
+                    console.log('🔍 [ProfileInfo-Emergency] Starting batch update');
+                    const updates = {
+                      emergencyContactName: userData.emergencyContactName || '',
+                      emergencyContactPhone: userData.emergencyContactPhone || '',
+                      onboardingCompleted: true
+                    };
+
+                    for (const [key, value] of Object.entries(updates)) {
+                      try {
+                        console.log(`🔍 [ProfileInfo-Emergency] Setting ${key} to:`, value);
+                        (prof as any)[key] = value;
+                        console.log(`✅ [ProfileInfo-Emergency] Successfully set ${key}`);
+                      } catch (fieldError: any) {
+                        console.error(`❌ [ProfileInfo-Emergency] Failed to set ${key}:`, fieldError);
+                      }
+                    }
+                    console.log('✅ [ProfileInfo-Emergency] Batch update completed');
+                  } catch (e: any) {
+                    console.error('❌ [ProfileInfo-Emergency] Batch update failed:', e);
+                  }
                 });
                 console.log("📦 Offline: updated emergency contact in WatermelonDB");
-
-                // Update AsyncStorage cache immediately to prevent reversion on tab switch
-                const uid = currentUser?._id ? String(currentUser._id) : "";
-                if (uid) {
-                  try {
-                    const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
-                    const cached = raw ? JSON.parse(raw) : {};
-                    cached.emergencyContactName = userData.emergencyContactName;
-                    cached.emergencyContactPhone = userData.emergencyContactPhone;
-                    await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
-                    console.log("💾 Updated AsyncStorage cache with emergency contact");
-                  } catch (e) {
-                    console.warn("⚠️ Failed to update cache:", e);
-                  }
-                }
               } else {
                 await profilesCollection.create((prof: any) => {
                   prof.userId = uid;
@@ -655,28 +641,30 @@ export default function ProfileInformation() {
             await database.write(async () => {
               if (userProfile) {
                 await (userProfile as any).update((prof: any) => {
-                  prof.allergies = userData.allergies;
-                  prof.currentMedications = userData.currentMedications;
-                  prof.medicalConditions = userData.medicalConditions;
-                  prof.onboardingCompleted = true;
+                  try {
+                    console.log('🔍 [ProfileInfo-Medical] Starting batch update');
+                    const updates = {
+                      allergies: userData.allergies || '',
+                      currentMedications: userData.currentMedications || '',
+                      medicalConditions: userData.medicalConditions || '',
+                      onboardingCompleted: true
+                    };
+
+                    for (const [key, value] of Object.entries(updates)) {
+                      try {
+                        console.log(`🔍 [ProfileInfo-Medical] Setting ${key} to:`, value);
+                        (prof as any)[key] = value;
+                        console.log(`✅ [ProfileInfo-Medical] Successfully set ${key}`);
+                      } catch (fieldError: any) {
+                        console.error(`❌ [ProfileInfo-Medical] Failed to set ${key}:`, fieldError);
+                      }
+                    }
+                    console.log('✅ [ProfileInfo-Medical] Batch update completed');
+                  } catch (e: any) {
+                    console.error('❌ [ProfileInfo-Medical] Batch update failed:', e);
+                  }
                 });
                 console.log("📦 Offline: updated medical info in WatermelonDB");
-
-                // Update AsyncStorage cache immediately to prevent reversion on tab switch
-                const uid = currentUser?._id ? String(currentUser._id) : "";
-                if (uid) {
-                  try {
-                    const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
-                    const cached = raw ? JSON.parse(raw) : {};
-                    cached.allergies = userData.allergies;
-                    cached.currentMedications = userData.currentMedications;
-                    cached.medicalConditions = userData.medicalConditions;
-                    await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
-                    console.log("💾 Updated AsyncStorage cache with medical info");
-                  } catch (e) {
-                    console.warn("⚠️ Failed to update cache:", e);
-                  }
-                }
               } else {
                 await profilesCollection.create((prof: any) => {
                   prof.userId = uid;
