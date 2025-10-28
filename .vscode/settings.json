@@ -23,5 +23,16 @@
   ],
   "demoTime.insertTypingMode": "character-by-character",
   "demoTime.api.enabled": true,
-  "demoTime.defaultFileType": "json"
+  "demoTime.defaultFileType": "json",
+  "workbench.statusBar.visible": true,
+  "workbench.editor.showTabs": "multiple",
+  "workbench.activityBar.location": "default",
+  "demoTime.highlightBorderColor": "rgba(199, 145, 0, 0.7)",
+  "demoTime.highlightBackground": "rgba(255, 235, 170, 0.4)",
+  "demoTime.highlightBlur": 1,
+  "demoTime.highlightOpacity": 0.8,
+  "demoTime.highlightZoomEnabled": 3,
+  "demoTime.customTheme": "custom-style.css",
+  "demoTime.slideHeaderTemplate": "",
+  "demoTime.slideFooterTemplate": ""
 }

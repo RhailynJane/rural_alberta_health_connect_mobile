@@ -10,7 +10,7 @@
       "steps": [
         {
           "action": "openSlide",
-          "path": ".demo/slides/00-intro/00-intro.md"
+          "path": ".demo/slides/rahc-trade-show-slides/01-offline-first/02-feature.md"
         }
       ]
     },
