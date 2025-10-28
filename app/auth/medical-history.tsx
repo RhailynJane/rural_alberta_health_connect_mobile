@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
@@ -20,12 +21,14 @@ import { useSessionRefresh } from "../_layout";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 const MAX_CHARS = 500;
 
 export default function MedicalHistory() {
   const router = useRouter();
   const database = useDatabase();
+  const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(api.users.getCurrentUser);
   const { refreshSession } = useSessionRefresh(); 
   
@@ -121,22 +124,36 @@ export default function MedicalHistory() {
       console.log("✅ Medical History - Saved to local database");
 
       // Then sync with Convex (online)
-      try {
-        await updateMedicalHistory({
-          medicalConditions: medicalConditions || undefined,
-          currentMedications: currentMedications || undefined,
-          allergies: allergies || undefined,
-        });
-        console.log("✅ Medical History - Synced with Convex");
+      if (isOnline) {
+        try {
+          await updateMedicalHistory({
+            medicalConditions: medicalConditions || undefined,
+            currentMedications: currentMedications || undefined,
+            allergies: allergies || undefined,
+          });
+          console.log("✅ Medical History - Synced with Convex");
 
-        // Complete onboarding
-        await updateCompleteUserOnboarding();
-        console.log("✅ Onboarding marked as completed in Convex");
-      } catch (syncError) {
-        console.log(
-          "⚠️ Medical History - Saved locally, will sync when online:",
-          syncError
-        );
+          // Complete onboarding
+          await updateCompleteUserOnboarding();
+          console.log("✅ Onboarding marked as completed in Convex");
+        } catch (syncError) {
+          console.log(
+            "⚠️ Medical History - Failed to sync, marking for later:",
+            syncError
+          );
+          // Mark for sync when online
+          if (currentUser?._id) {
+            await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+            console.log("✅ Marked profile for sync when online");
+          }
+        }
+      } else {
+        // Offline - mark for sync when online
+        console.log("📴 Offline - marking for sync when online");
+        if (currentUser?._id) {
+          await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+          console.log("✅ Marked profile for sync when online");
+        }
       }
 
       // Refresh session to update auth state with new onboarding status

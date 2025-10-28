@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -380,23 +381,37 @@ export default function PersonalInfo() {
 
       // Then sync with Convex (online) in the background - this will work when there's internet
       // Don't await this - let it sync in the background
-      updatePersonalInfo({ 
-        age,
-        address1,
-        address2,
-        city,
-        province,
-        postalCode,
-        location, 
-        onboardingCompleted: false 
-      }).then(() => {
-        console.log("✅ Personal Info - Synced with Convex");
-      }).catch((syncError) => {
-        console.log(
-          "⚠️ Personal Info - Saved locally, will sync when online:",
-          syncError
-        );
-      });
+      if (isOnline) {
+        updatePersonalInfo({
+          age,
+          address1,
+          address2,
+          city,
+          province,
+          postalCode,
+          location,
+          onboardingCompleted: false
+        }).then(() => {
+          console.log("✅ Personal Info - Synced with Convex");
+        }).catch(async (syncError) => {
+          console.log(
+            "⚠️ Personal Info - Failed to sync, marking for later:",
+            syncError
+          );
+          // Mark for sync when online
+          if (currentUser?._id) {
+            await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+            console.log("✅ Marked profile for sync when online");
+          }
+        });
+      } else {
+        // Offline - mark for sync when online
+        console.log("📴 Offline - marking for sync when online");
+        if (currentUser?._id) {
+          await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+          console.log("✅ Marked profile for sync when online");
+        }
+      }
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
       setErrorModalMessage("Failed to save personal information. Please try again.");

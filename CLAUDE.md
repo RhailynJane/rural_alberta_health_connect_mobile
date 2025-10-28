@@ -58,6 +58,7 @@ npx convex deploy      # Deploy backend to production
 - **Key Schemas**: users, userProfiles, healthEntries, notifications, pushTokens, passwordResetCodes
 - **Sync Layer**: `convex/sync.ts` handles WatermelonDB synchronization
 - **Notifications**: Server-side notification management and push token storage
+- **Password Reset**: OTP-based password reset via Resend or Brevo email services
 
 ### Navigation Structure
 ```
@@ -84,10 +85,10 @@ npx convex deploy      # Deploy backend to production
 RAHC implements a robust offline-first architecture critical for rural areas with intermittent connectivity:
 
 ### WatermelonDB Structure (`/watermelon` directory)
-- **database/**: SQLite adapter configuration and database initialization
-- **models/**: Local data models mirroring Convex schemas
-- **sync/**: Synchronization logic for bidirectional sync with Convex
-- **hooks/**: React hooks for WatermelonDB operations
+- **database/**: SQLite adapter configuration, schema v7, and migrations
+- **models/**: Local data models (User, UserProfile, HealthEntry, MedicalFacility, Reminder)
+- **sync/**: Synchronization logic (convexSync.ts, syncManager.ts)
+- **hooks/**: React hooks (useDatabase, useSync, useClinics, useCachedClinics)
 
 ### Sync Strategy
 - **Local-First**: All data operations happen on WatermelonDB first
@@ -97,8 +98,10 @@ RAHC implements a robust offline-first architecture critical for rural areas wit
 
 ### Key Integration Points
 - `convex/sync.ts`: Server-side sync endpoint
-- `watermelon/sync/`: Client-side sync implementation
-- Network state monitoring via `@react-native-community/netinfo`
+- `watermelon/sync/convexSync.ts`: Core sync logic between WatermelonDB and Convex
+- `watermelon/sync/syncManager.ts`: Manages sync operations and conflict resolution
+- `app/hooks/useNetworkStatus.ts`: Network connectivity monitoring
+- `app/hooks/useSyncOnOnline.ts`: Triggers sync when device comes online
 
 ## Convex Backend Architecture
 
@@ -157,11 +160,20 @@ FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
 RNMAPBOX_MAPS_DOWNLOAD_TOKEN=<mapbox-download-token>
 ```
 
+### EAS Build Environment Variables
+For production builds, environment variables are configured in:
+- `app.json` - Build-time environment variables (per build profile)
+- `eas.json` - Build configuration with environment variables
+- **Security Note**: API keys should be migrated to EAS Secrets for better security
+  ```bash
+  eas secret:create --scope project --name SECRET_NAME --value "secret-value"
+  ```
+
 ### Convex Deployment
 - Development: `npx convex dev` (uses dev deployment from .env.local)
-  - Current dev URL: `https://rightful-narwhal-594.convex.cloud`
+  - Dev URL: `https://rightful-narwhal-594.convex.cloud`
 - Production: Configure via Convex dashboard and `npx convex deploy`
-  - Production URL: `https://energized-cormorant-495.convex.cloud`
+  - Production URL: `https://judicious-pony-253.convex.cloud`
 
 ### Mapbox Setup
 - Required for offline maps and location services
@@ -221,8 +233,9 @@ RNMAPBOX_MAPS_DOWNLOAD_TOKEN=<mapbox-download-token>
 - **Use Case**: Object detection demo for future symptom image analysis
 
 ### ExecutorCH Integration
-- Package: `react-native-executorch` (v0.5.8)
+- Package: `react-native-executorch`
 - Purpose: On-device edge model execution for privacy-focused AI
+- Status: Integration in progress, not yet fully implemented
 
 ### AI Assessment (Convex Action)
 - **Service**: Google Gemini API (via Convex action)
@@ -317,13 +330,13 @@ Currently no automated testing framework configured. Future considerations:
 
 ### iOS
 - Tablet support enabled
-- Bundle ID: `com.amirzhou.rahcapp`
+- Bundle ID: `com.rahc.app`
 
 ### Android
 - Edge-to-edge enabled
 - Adaptive icons configured
 - Predictive back gesture disabled
-- Package: `com.amirzhou.rahcapp`
+- Package: `com.rahc.app`
 
 ### Web
 - Static output configured
@@ -339,6 +352,8 @@ Currently no automated testing framework configured. Future considerations:
 6. **Asset Management**: Place ML models in `assets/models/`, images in `assets/images/`
 7. **Screen Options**: Configure in `_layout.tsx` files per route group
 8. **Test Offline**: Regularly test with airplane mode to ensure offline functionality works
+9. **Schema Migrations**: When modifying WatermelonDB schema, increment version number in `watermelon/database/schema.ts` and add migration in `migrations.ts`
+10. **Network Hooks**: Use `useNetworkStatus()` to check connectivity before operations requiring internet
 
 ## Known Issues & Limitations
 
@@ -363,7 +378,7 @@ Currently no automated testing framework configured. Future considerations:
 
 ### Convex Connection Issues
 - **Auth failures**: Verify `.env.local` has correct `EXPO_PUBLIC_CONVEX_URL`
-- **Deployment mismatch**: Ensure dev uses `rightful-narwhal-594`, prod uses `energized-cormorant-495`
+- **Deployment mismatch**: Ensure dev uses `rightful-narwhal-594`, prod uses `judicious-pony-253`
 - **Session expiry**: Use session refresh context (`useSessionRefresh`)
 - **Gemini API failures**: Verify `GEMINI_API_KEY` is set in `.env.local`
 

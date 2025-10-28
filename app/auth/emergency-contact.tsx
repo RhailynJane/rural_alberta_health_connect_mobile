@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
@@ -19,12 +20,14 @@ import { api } from "../../convex/_generated/api";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 export default function EmergencyContact() {
   const router = useRouter();
   const database = useDatabase();
+  const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(api.users.getCurrentUser);
-  
+
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -210,17 +213,31 @@ export default function EmergencyContact() {
       console.log("✅ Emergency Contact - Saved to local database");
 
       // Then sync with Convex (online)
-      try {
-        await updateEmergencyContact({
-          emergencyContactName: contactName,
-          emergencyContactPhone: contactPhone
-        });
-        console.log("✅ Emergency Contact - Synced with Convex");
-      } catch (syncError) {
-        console.log(
-          "⚠️ Emergency Contact - Saved locally, will sync when online:",
-          syncError
-        );
+      if (isOnline) {
+        try {
+          await updateEmergencyContact({
+            emergencyContactName: contactName,
+            emergencyContactPhone: contactPhone
+          });
+          console.log("✅ Emergency Contact - Synced with Convex");
+        } catch (syncError) {
+          console.log(
+            "⚠️ Emergency Contact - Failed to sync, marking for later:",
+            syncError
+          );
+          // Mark for sync when online
+          if (currentUser?._id) {
+            await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+            console.log("✅ Marked profile for sync when online");
+          }
+        }
+      } else {
+        // Offline - mark for sync when online
+        console.log("📴 Offline - marking for sync when online");
+        if (currentUser?._id) {
+          await AsyncStorage.setItem(`${currentUser._id}:profile_needs_sync`, 'true');
+          console.log("✅ Marked profile for sync when online");
+        }
       }
 
       console.log("➡️ Navigating to medical history");
