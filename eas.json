@@ -15,7 +15,7 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "development",
+        "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud"
       }
     },

@@ -369,6 +369,23 @@ export default function ProfileInformation() {
                       prof.onboardingCompleted = true;
                     });
                     console.log("📦 Offline: updated personal info in WatermelonDB");
+
+                    // Update AsyncStorage cache immediately to prevent reversion on tab switch
+                    try {
+                      const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+                      const cached = raw ? JSON.parse(raw) : {};
+                      cached.age = userData.age;
+                      cached.address1 = userData.address1;
+                      cached.address2 = userData.address2;
+                      cached.city = userData.city;
+                      cached.province = userData.province;
+                      cached.postalCode = userData.postalCode;
+                      cached.location = userData.location;
+                      await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
+                      console.log("💾 Updated AsyncStorage cache with personal info");
+                    } catch (e) {
+                      console.warn("⚠️ Failed to update cache:", e);
+                    }
                   } else {
                     // Create new profile entry
                     await profilesCollection.create((prof: any) => {
@@ -383,6 +400,23 @@ export default function ProfileInformation() {
                       prof.onboardingCompleted = true;
                     });
                     console.log("📦 Offline: created personal info in WatermelonDB");
+
+                    // Update AsyncStorage cache for new profile too
+                    try {
+                      const cached = {
+                        age: userData.age,
+                        address1: userData.address1,
+                        address2: userData.address2,
+                        city: userData.city,
+                        province: userData.province,
+                        postalCode: userData.postalCode,
+                        location: userData.location,
+                      };
+                      await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
+                      console.log("💾 Created AsyncStorage cache with personal info");
+                    } catch (e) {
+                      console.warn("⚠️ Failed to create cache:", e);
+                    }
                   }
                 });
               } catch (bulkErr) {
@@ -515,6 +549,21 @@ export default function ProfileInformation() {
                   prof.onboardingCompleted = true;
                 });
                 console.log("📦 Offline: updated emergency contact in WatermelonDB");
+
+                // Update AsyncStorage cache immediately to prevent reversion on tab switch
+                const uid = currentUser?._id ? String(currentUser._id) : "";
+                if (uid) {
+                  try {
+                    const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+                    const cached = raw ? JSON.parse(raw) : {};
+                    cached.emergencyContactName = userData.emergencyContactName;
+                    cached.emergencyContactPhone = userData.emergencyContactPhone;
+                    await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
+                    console.log("💾 Updated AsyncStorage cache with emergency contact");
+                  } catch (e) {
+                    console.warn("⚠️ Failed to update cache:", e);
+                  }
+                }
               } else {
                 await profilesCollection.create((prof: any) => {
                   prof.userId = uid;
@@ -612,6 +661,22 @@ export default function ProfileInformation() {
                   prof.onboardingCompleted = true;
                 });
                 console.log("📦 Offline: updated medical info in WatermelonDB");
+
+                // Update AsyncStorage cache immediately to prevent reversion on tab switch
+                const uid = currentUser?._id ? String(currentUser._id) : "";
+                if (uid) {
+                  try {
+                    const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+                    const cached = raw ? JSON.parse(raw) : {};
+                    cached.allergies = userData.allergies;
+                    cached.currentMedications = userData.currentMedications;
+                    cached.medicalConditions = userData.medicalConditions;
+                    await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(cached));
+                    console.log("💾 Updated AsyncStorage cache with medical info");
+                  } catch (e) {
+                    console.warn("⚠️ Failed to update cache:", e);
+                  }
+                }
               } else {
                 await profilesCollection.create((prof: any) => {
                   prof.userId = uid;
