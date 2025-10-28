@@ -15,6 +15,22 @@ export const logAIAssessment = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Idempotency guard: prevent duplicates on reconnection/resubmission
+    const existing = await ctx.db
+      .query("healthEntries")
+      .withIndex("byUserId", (q) => q.eq("userId", args.userId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("timestamp"), args.timestamp),
+          q.eq(q.field("date"), args.date),
+          q.eq(q.field("type"), "ai_assessment")
+        )
+      )
+      .first();
+    if (existing) {
+      return existing._id;
+    }
+
     const entryId = await ctx.db.insert("healthEntries", {
       userId: args.userId,
       date: args.date,
@@ -46,6 +62,21 @@ export const logManualEntry = mutation({
     photos: v.optional(v.array(v.string())), 
   },
   handler: async (ctx, args) => {
+    // Idempotency guard: if an entry already exists for this user and timestamp (and date), return it
+    const existing = await ctx.db
+      .query("healthEntries")
+      .withIndex("byUserId", (q) => q.eq("userId", args.userId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("timestamp"), args.timestamp),
+          q.eq(q.field("date"), args.date)
+        )
+      )
+      .first();
+    if (existing) {
+      return existing._id;
+    }
+
     const entryId = await ctx.db.insert("healthEntries", {
       userId: args.userId,
       date: args.date,

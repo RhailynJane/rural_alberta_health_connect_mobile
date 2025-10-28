@@ -1,25 +1,26 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import Ionicons from "@expo/vector-icons/Ionicons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    Linking,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
-import { syncManager } from "../../../watermelon/sync/syncManager";
+
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -299,7 +300,7 @@ function renderAssessmentCards(text: string | null) {
 
 export default function AssessmentResults() {
   const database = useWatermelonDatabase();
-  const { isOnline } = useNetworkStatus();
+  const { isOnline, isChecking } = useNetworkStatus();
   const router = useRouter();
   const params = useLocalSearchParams();
   const [symptomContext, setSymptomContext] = useState("");
@@ -332,6 +333,9 @@ export default function AssessmentResults() {
     if (isFetchingRef.current || hasAttemptedFetch) {
       return;
     }
+    
+    console.log(`🔍 fetchAIAssessment called - isOnline: ${isOnline}, isChecking: ${isChecking}`);
+    
     try {
       isFetchingRef.current = true;
       setHasAttemptedFetch(true);
@@ -365,6 +369,73 @@ export default function AssessmentResults() {
         ? imagesArg
         : (aiContext?.uploadedPhotos || []);
 
+      // If offline, save locally and show offline message
+      if (!isOnline) {
+        console.log("📴 Offline: Saving AI assessment to local database");
+        
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, "0");
+        const day = String(today.getDate()).padStart(2, "0");
+        const dateString = `${year}-${month}-${day}`;
+        const timestamp = today.getTime();
+
+        try {
+          // Determine user id while offline
+          let uid: string | undefined = currentUser?._id as any;
+          if (!uid) {
+            try {
+              const raw = await AsyncStorage.getItem("@profile_user");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                uid = parsed?._id || parsed?.id || uid;
+              }
+            } catch {}
+          }
+          if (!uid) {
+            // Try Watermelon users table
+            try {
+              const usersCol = database.get('users');
+              const allUsers = await usersCol.query().fetch();
+              const first = (allUsers as any[])[0];
+              if (first) {
+                const r = (first as any)._raw || {};
+                uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
+              }
+            } catch {}
+          }
+
+          const collection = database.get("health_entries");
+          await database.write(async () => {
+            await collection.create((entry: any) => {
+              entry.userId = uid || "offline_user";
+              entry.symptoms = description;
+              entry.severity = severity;
+              entry.category = category;
+              entry.notes = `AI Assessment - ${category}`;
+              entry.timestamp = timestamp;
+              entry.date = dateString;
+              entry.type = "ai_assessment";
+              entry.createdBy = "AI Assessment";
+              entry.isSynced = false;
+            });
+          });
+
+          console.log("✅ AI assessment saved offline successfully");
+          setIsLogged(true);
+          
+          // Show offline success message instead of error
+          setSymptomContext("Your assessment has been saved offline and will be analyzed when you reconnect to the internet. The entry is now visible in your health history.");
+        } catch (offlineError) {
+          console.error("❌ Failed to save offline:", offlineError);
+          setAssessmentError(true);
+          } finally {
+            setIsLoading(false);
+            isFetchingRef.current = false;
+          }
+          return;
+      }
+
       console.log("🚀 Calling Gemini with:", {
         description: description.substring(0, 50),
         severity,
@@ -388,7 +459,7 @@ export default function AssessmentResults() {
       const cleanedContext = cleanGeminiResponse(res.context);
       setSymptomContext(cleanedContext);
 
-      // Automatically log the AI assessment
+      // Automatically log the AI assessment (online only - offline is handled above)
       if (currentUser?._id && !isLogged) {
         try {
           const today = new Date();
@@ -411,69 +482,52 @@ export default function AssessmentResults() {
             getUTCMonth: today.getUTCMonth(),
           });
 
-          // Check if online - if offline, save to WatermelonDB + sync queue
-          if (!isOnline) {
-            console.log("📴 Offline: Saving AI assessment to WatermelonDB");
-            try {
-              const collection = database.get("health_entries");
-              await database.write(async () => {
-                await collection.create((entry: any) => {
-                  entry.user_id = currentUser?._id || "offline_user";
-                  entry.symptoms = description;
-                  entry.severity = severity;
-                  entry.category = category;
-                  entry.notes = `AI Assessment - ${category}`;
-                  entry.timestamp = timestamp;
-                  entry.local_date = dateString;
-                  entry.type = "ai_assessment";
-                  entry.createdBy = "AI Assessment";
-                  entry.synced = false;
-                });
-              });
+          // Online - save to Convex
+          const newId = await logAIAssessment({
+            userId: currentUser._id,
+            date: dateString,
+            timestamp,
+            symptoms: description,
+            severity: severity,
+            category: category,
+            duration: duration,
+            aiContext: cleanedContext,
+            photos: displayPhotos,
+            notes: `AI Assessment - ${category}`,
+          });
 
-              // Add to sync queue
-              await syncManager.addToQueue({
-                type: "ai_assessment",
-                data: {
-                  userId: currentUser?._id,
-                  date: dateString,
-                  timestamp,
-                  symptoms: description,
-                  severity,
-                  category,
-                  duration,
-                  aiContext: cleanedContext,
-                  photos: displayPhotos,
-                  notes: `AI Assessment - ${category}`,
-                },
-              });
+          console.log(
+            "✅ AI assessment automatically logged to health entries with date:",
+            dateString
+          );
 
-              console.log("✅ AI assessment saved offline, will sync when online");
-              setIsLogged(true);
-            } catch (offlineError) {
-              console.error("❌ Failed to save offline:", offlineError);
-            }
-          } else {
-            // Online - save to Convex
-            await logAIAssessment({
-              userId: currentUser._id,
-              date: dateString,
-              timestamp,
-              symptoms: description,
-              severity: severity,
-              category: category,
-              duration: duration,
-              aiContext: cleanedContext,
-              photos: displayPhotos,
-              notes: `AI Assessment - ${category}`,
+          // Also save to WatermelonDB for offline access (mirror of online write)
+          try {
+            const collection = database.get("health_entries");
+            await database.write(async () => {
+              await collection.create((entry: any) => {
+                entry.userId = currentUser._id;
+                entry.symptoms = description;
+                entry.severity = severity;
+                entry.category = category;
+                entry.duration = duration;
+                entry.notes = `AI Assessment - ${category}`;
+                entry.timestamp = timestamp;
+                entry.date = dateString;
+                entry.type = "ai_assessment";
+                entry.createdBy = "AI Assessment";
+                entry.aiContext = cleanedContext;
+                // photos is a @json field; store as JSON string for safety
+                entry.photos = JSON.stringify(displayPhotos || []);
+                entry.isSynced = true; // Already synced online
+                entry.convexId = newId;
+              });
             });
-
-            console.log(
-              "✅ AI assessment automatically logged to health entries with date:",
-              dateString
-            );
-            setIsLogged(true);
+            console.log("✅ AI assessment also saved to WatermelonDB for offline access");
+          } catch (wmError) {
+            console.warn("⚠️ Failed to write AI assessment to WatermelonDB (online mirror)", wmError);
           }
+          setIsLogged(true);
         } catch (logError) {
           console.error("❌ Failed to log AI assessment:", logError);
         }
@@ -530,6 +584,14 @@ export default function AssessmentResults() {
 
   // Process images on mount (deferred from previous screens)
   useEffect(() => {
+    // Wait for network check to complete before fetching
+    if (isChecking) {
+      console.log("⏳ Waiting for network status check...");
+      return;
+    }
+
+    console.log(`🌐 Network status ready - isOnline: ${isOnline}`);
+    
     const processImagesAndFetchAssessment = async () => {
       let base64Images: string[] = [];
       if (displayPhotos.length > 0 && aiContext) {
@@ -548,7 +610,7 @@ export default function AssessmentResults() {
     };
 
     processImagesAndFetchAssessment();
-  }, []); // Run once on mount
+  }, [isChecking, isOnline]); // Run when network status is known
 
   useEffect(() => {
     console.log("📋 ALL RECEIVED PARAMS:", {

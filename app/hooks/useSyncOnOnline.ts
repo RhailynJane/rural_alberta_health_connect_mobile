@@ -1,4 +1,5 @@
 // No direct Watermelon query operators needed; using in-memory filtering
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
@@ -10,6 +11,7 @@ import { useNetworkStatus } from './useNetworkStatus';
  */
 export function useSyncOnOnline() {
   const hasSyncedProfilesRef = useRef(false);
+  const previousOnlineRef = useRef<boolean | null>(null);
   const { isOnline } = useNetworkStatus();
   const database = useWatermelonDatabase();
   const { isAuthenticated } = useConvexAuth();
@@ -20,9 +22,16 @@ export function useSyncOnOnline() {
   
   // Get mutations for syncing
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
+  const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   // Use the correct Convex mutation path for updating personal info
   const updatePersonalInfo = useMutation(
     (api as any)["profile/personalInformation"].updatePersonalInfo
+  );
+  const updateEmergencyContact = useMutation(
+    (api as any)["emergencyContactOnboarding/update"].withNameAndPhone
+  );
+  const updateMedicalHistory = useMutation(
+    (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
 
   // Wait for WatermelonDB to finish setting up/migrating before syncing
@@ -217,19 +226,42 @@ export function useSyncOnOnline() {
             symptoms: typeof symptomsData === 'string' ? symptomsData : JSON.stringify(symptomsData),
             userId: entryUserId,
             photoCount: photos.length,
+            type: entryData.type || raw.type || 'manual_entry',
           });
 
-          // Call Convex mutation to save
-          await logManualEntry({
-            userId: entryUserId,
-            date: entryData.date,
-            timestamp: entryData.timestamp,
-            symptoms: symptomsData,
-            severity: entryData.severity,
-            notes: entryData.notes || '',
-            photos: photos,
-            createdBy: entryData.createdBy || entryData.created_by || 'User',
-          });
+          // Use correct mutation based on entry type
+          const entryType = entryData.type || raw.type || 'manual_entry';
+          let newId: any;
+          
+          if (entryType === 'ai_assessment') {
+            // Sync AI assessment with proper fields
+            newId = await logAIAssessment({
+              userId: entryUserId,
+              date: entryData.date,
+              timestamp: entryData.timestamp,
+              symptoms: symptomsData,
+              severity: entryData.severity,
+              category: entryData.category || raw.category || 'General Symptoms',
+              duration: entryData.duration || raw.duration || '',
+              aiContext: entryData.aiContext || raw.aiContext || raw.ai_context || '',
+              photos: photos,
+              notes: entryData.notes || '',
+            });
+            console.log(`✅ Synced AI assessment entry`);
+          } else {
+            // Sync as manual entry
+            newId = await logManualEntry({
+              userId: entryUserId,
+              date: entryData.date,
+              timestamp: entryData.timestamp,
+              symptoms: symptomsData,
+              severity: entryData.severity,
+              notes: entryData.notes || '',
+              photos: photos,
+              createdBy: entryData.createdBy || entryData.created_by || 'User',
+            });
+            console.log(`✅ Synced manual entry`);
+          }
 
           // Mark as synced locally
           await database.write(async () => {
@@ -240,9 +272,9 @@ export function useSyncOnOnline() {
               await safeUpdate((e: any) => { e.type = 'manual_entry'; });
             }
             await safeUpdate((e: any) => { e.isSynced = true; });
+            // Attach server id for de-duplication with hydration
+            await safeUpdate((e: any) => { (e as any).convexId = newId; });
           });
-
-          console.log(`✅ Synced entry: ${entryData.symptoms}`);
         } catch (syncError) {
           console.error(`Failed to sync entry:`, syncError);
           // Store error message but continue with next entry
@@ -274,6 +306,7 @@ export function useSyncOnOnline() {
     try {
       const userProfilesCollection = database.get('user_profiles');
       const usersCollection = database.get('users');
+      const authUserId = currentUser?._id ? String(currentUser._id) : '';
       
       // First, log ALL profiles in the database
       const allProfiles = await userProfilesCollection.query().fetch();
@@ -320,9 +353,8 @@ export function useSyncOnOnline() {
         console.warn('⚠️ User backfill encountered errors but continued:', uErr);
       }
 
-      // Find profiles that need syncing: onboarding_completed is false OR undefined (never completed)
-      // We need to check the raw data because the model might not have all fields mapped
-  const allProfilesForSync = await userProfilesCollection.query().fetch();
+    // Load all profiles (we'll scope and decide below)
+    const allProfilesForSync = await userProfilesCollection.query().fetch();
 
       // Backfill legacy snake_case fields into new camelCase fields if needed (no skipping)
       for (const profile of allProfilesForSync as any[]) {
@@ -350,17 +382,14 @@ export function useSyncOnOnline() {
           console.log(`🔁 Backfilled legacy profile fields for id=${profile.id}`);
         }
       }
-      const unsyncedProfiles = allProfilesForSync.filter((profile: any) => {
-        const raw = profile._raw || {};
-        const completed = profile.onboardingCompleted ?? raw.onboardingCompleted ?? raw.onboarding_completed;
-        const profileType = profile.type ?? raw.type;
-        // Only sync profiles where onboarding is explicitly TRUE AND type is defined
-        return completed === true && profileType !== undefined && profileType !== null && profileType !== '';
-      });
+      // Decide if we should attempt a sync
+      // 1) Prefer explicit offline marker set by editors
+      const needsSyncFlag = authUserId ? await AsyncStorage.getItem(`${authUserId}:profile_needs_sync`) : null;
+      // 2) Also consider any present profile rows as candidates to merge
+      const candidates = allProfilesForSync as any[];
 
       // Scope to the currently logged-in user only (and assign unknowns to them)
-      const authUserId = currentUser?._id ? String(currentUser._id) : '';
-      const scopedProfiles = (unsyncedProfiles as any[]).filter((p) => {
+      const scopedProfiles = (candidates as any[]).filter((p) => {
         if (!authUserId) return true; // if we somehow don't have auth user yet, fall back to all
         const r = p._raw || {};
         const uid = p.userId || r.userId || r.user_id || '';
@@ -383,7 +412,7 @@ export function useSyncOnOnline() {
           if (k !== authUserId) groups.delete(k);
         }
       }
-      console.log(`👤 Found ${scopedProfiles.length} unsynced profiles scoped to ${authUserId ? authUserId : 'all users'} across ${groups.size} group(s)`);
+  console.log(`👤 Found ${scopedProfiles.length} profile row(s) scoped to ${authUserId ? authUserId : 'all users'} across ${groups.size} group(s)`);
 
       for (const [userKey, profiles] of groups) {
         try {
@@ -405,45 +434,129 @@ export function useSyncOnOnline() {
           let bestAge = '';
           let bestAgeRange = '';
           let bestLocation = '';
+          let bestAddress1 = '';
+          let bestAddress2 = '';
+          let bestCity = '';
+          let bestProvince = '';
+          let bestPostalCode = '';
+          let bestEmergencyName = '';
+          let bestEmergencyPhone = '';
+          let bestAllergies = '';
+          let bestMedications = '';
+          let bestConditions = '';
+          
           for (const pr of profiles) {
             const r = pr._raw || {};
             const a = pr.age || r.age || '';
             const ar = pr.ageRange || r.ageRange || r.age_range || '';
             const loc = pr.location || r.location || '';
+            const addr1 = pr.address1 || r.address1 || '';
+            const addr2 = pr.address2 || r.address2 || '';
+            const ct = pr.city || r.city || '';
+            const prov = pr.province || r.province || '';
+            const postal = pr.postalCode || r.postalCode || r.postal_code || '';
+            const emergName = pr.emergencyContactName || r.emergencyContactName || r.emergency_contact_name || '';
+            const emergPhone = pr.emergencyContactPhone || r.emergencyContactPhone || r.emergency_contact_phone || '';
+            const allerg = pr.allergies || r.allergies || '';
+            const meds = pr.currentMedications || r.currentMedications || r.current_medications || '';
+            const conds = pr.medicalConditions || r.medicalConditions || r.medical_conditions || '';
+            
             if (!bestAge && a) bestAge = a;
             if (!bestAgeRange && ar) bestAgeRange = ar;
             if (!bestLocation || (loc && loc.length > bestLocation.length)) bestLocation = loc;
+            if (!bestAddress1 && addr1) bestAddress1 = addr1;
+            if (!bestAddress2 && addr2) bestAddress2 = addr2;
+            if (!bestCity && ct) bestCity = ct;
+            if (!bestProvince && prov) bestProvince = prov;
+            if (!bestPostalCode && postal) bestPostalCode = postal;
+            if (!bestEmergencyName && emergName) bestEmergencyName = emergName;
+            if (!bestEmergencyPhone && emergPhone) bestEmergencyPhone = emergPhone;
+            if (!bestAllergies && allerg) bestAllergies = allerg;
+            if (!bestMedications && meds) bestMedications = meds;
+            if (!bestConditions && conds) bestConditions = conds;
+          }
+
+          // Merge in AsyncStorage cache (set by offline editors) when present
+          if (authUserId) {
+            try {
+              const rawCache = await AsyncStorage.getItem(`${authUserId}:profile_cache_v1`);
+              if (rawCache) {
+                const cached = JSON.parse(rawCache) || {};
+                if (!bestAge && cached.age) bestAge = String(cached.age);
+                if (!bestAddress1 && cached.address1) bestAddress1 = String(cached.address1);
+                if (!bestAddress2 && cached.address2) bestAddress2 = String(cached.address2);
+                if (!bestCity && cached.city) bestCity = String(cached.city);
+                if (!bestProvince && cached.province) bestProvince = String(cached.province);
+                if (!bestPostalCode && cached.postalCode) bestPostalCode = String(cached.postalCode);
+                if (!bestLocation && cached.location) bestLocation = String(cached.location);
+                if (!bestEmergencyName && cached.emergencyContactName) bestEmergencyName = String(cached.emergencyContactName);
+                if (!bestEmergencyPhone && cached.emergencyContactPhone) bestEmergencyPhone = String(cached.emergencyContactPhone);
+                if (!bestAllergies && cached.allergies) bestAllergies = String(cached.allergies);
+                if (!bestMedications && cached.currentMedications) bestMedications = String(cached.currentMedications);
+                if (!bestConditions && cached.medicalConditions) bestConditions = String(cached.medicalConditions);
+              }
+            } catch {}
           }
 
           const finalAge = bestAge || bestAgeRange || '';
           const location = bestLocation;
-          const locationParts = location.split(',').map((p: string) => p.trim());
-          const [address1 = '', address2 = '', city = '', province = '', postalCode = ''] = locationParts;
 
-          console.log(`📤 Syncing personal info for user ${userKey || authUserId}:`, { age: finalAge, location });
+          // Sync personal info if any fields present
+          const shouldSyncPersonal = !!(needsSyncFlag || finalAge || location || bestAddress1 || bestCity || bestProvince || bestPostalCode);
+          if (shouldSyncPersonal) {
+            console.log(`📤 Syncing personal info for user ${userKey || authUserId}`);
+            await updatePersonalInfo({
+              age: finalAge,
+              address1: bestAddress1,
+              address2: bestAddress2,
+              city: bestCity,
+              province: bestProvince,
+              postalCode: bestPostalCode,
+              location,
+            });
+            console.log(`✅ Synced personal info`);
+          }
 
-          await updatePersonalInfo({
-            age: finalAge,
-            address1,
-            address2,
-            city,
-            province,
-            postalCode,
-            location,
-          });
+          // Sync emergency contact if fields present
+          const shouldSyncEmergency = !!(needsSyncFlag || bestEmergencyName || bestEmergencyPhone);
+          if (shouldSyncEmergency) {
+            console.log(`📤 Syncing emergency contact for user ${userKey || authUserId}`);
+            await updateEmergencyContact({
+              emergencyContactName: bestEmergencyName,
+              emergencyContactPhone: bestEmergencyPhone,
+            });
+            console.log(`✅ Synced emergency contact`);
+          }
 
-          // Mark all local duplicates as completed (best-effort)
+          // Sync medical info if fields present
+          const shouldSyncMedical = !!(needsSyncFlag || bestAllergies || bestMedications || bestConditions);
+          if (shouldSyncMedical) {
+            console.log(`📤 Syncing medical info for user ${userKey || authUserId}`);
+            await updateMedicalHistory({
+              allergies: bestAllergies,
+              currentMedications: bestMedications,
+              medicalConditions: bestConditions,
+            });
+            console.log(`✅ Synced medical info`);
+          }
+
+          // Mark all local duplicates as synced (best-effort)
           for (const pr of profiles) {
             try {
               await database.write(async () => {
-                await pr.update((p: any) => { p.onboardingCompleted = true; });
+                await pr.update((p: any) => { 
+                  p.onboardingCompleted = false; // Reset so we don't sync again
+                });
               });
             } catch (localErr) {
               console.warn('⚠️ Local profile update (onboardingCompleted) failed but server sync succeeded:', localErr);
             }
           }
 
-          console.log(`✅ Synced personal info`);
+          // Clear offline sync flag once we've attempted server sync
+          if (authUserId) {
+            try { await AsyncStorage.removeItem(`${authUserId}:profile_needs_sync`); } catch {}
+          }
         } catch (error) {
           console.error(`Failed to sync profile:`, error);
         }
@@ -454,8 +567,31 @@ export function useSyncOnOnline() {
   };
 
   useEffect(() => {
-    if (!isOnline) return;
-    if (!isAuthenticated) return; // Don't sync anything when user isn't logged in
+    // Track if we just transitioned from offline to online
+    const wasOffline = previousOnlineRef.current === false;
+    const isNowOnline = isOnline === true;
+    const justCameOnline = wasOffline && isNowOnline;
+    
+    // Update the ref for next render
+    previousOnlineRef.current = isOnline;
+    
+    console.log('🔍 [Sync] Online state changed:', { 
+      wasOffline, 
+      isNowOnline, 
+      justCameOnline, 
+      isAuthenticated,
+      hasCurrentUser: !!currentUser?._id 
+    });
+    
+    if (!justCameOnline) {
+      console.log('⏭️ [Sync] Not triggering sync - not a fresh online transition');
+      return;
+    }
+    
+    if (!isAuthenticated) {
+      console.log('⏭️ [Sync] Not triggering sync - user not authenticated');
+      return;
+    }
 
     // When coming online, sync all offline data
     const syncOfflineData = async () => {

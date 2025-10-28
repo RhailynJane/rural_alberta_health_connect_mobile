@@ -1,17 +1,18 @@
 import { Q } from "@nozbe/watermelondb";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -73,16 +74,52 @@ export default function History() {
 
   // Get offline entries from WatermelonDB
   useEffect(() => {
-    if (!isOnline) {
-      const fetchOfflineEntries = async () => {
-        try {
-          const collection = database.get("health_entries");
-          const entries = await collection
-            .query(Q.sortBy("timestamp", Q.desc))
-            .fetch();
+    const fetchOfflineEntries = async () => {
+      try {
+        if (isOnline) return;
+        // Determine user id offline
+        let uid: string | undefined = currentUser?._id as any;
+        if (!uid) {
+          try {
+            const raw = await AsyncStorage.getItem("@profile_user");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              uid = parsed?._id || parsed?.id || uid;
+            }
+          } catch {}
+        }
+        if (!uid) {
+          // Try Watermelon users table
+          try {
+            const usersCol = database.get('users');
+            const allUsers = await usersCol.query().fetch();
+            const first = (allUsers as any[])[0];
+            if (first) {
+              const r = (first as any)._raw || {};
+              uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
+            }
+          } catch {}
+        }
+        if (!uid) {
+          console.log('⚠️ [OFFLINE HISTORY] No user id available offline');
+          setOfflineEntries([]);
+          return;
+        }
 
-          // Map WatermelonDB entries to match Convex format
-          const mapped = entries.map((entry: any) => ({
+        const collection = database.get("health_entries");
+        const entries = await collection
+          .query(
+            Q.where('userId', uid),
+            Q.sortBy("timestamp", Q.desc)
+          )
+          .fetch();
+
+        console.log(`🔍 [OFFLINE HISTORY] Fetched ${entries.length} total entries for user ${uid}`);
+        
+        // Map WatermelonDB entries to match Convex format
+        const mapped = entries.map((entry: any) => {
+          console.log(`📝 [OFFLINE ENTRY] id: ${entry.id}, type: ${entry.type}, date: ${entry.date}`);
+          return {
             _id: entry.id,
             symptoms: entry.symptoms || "",
             severity: entry.severity || 0,
@@ -91,22 +128,49 @@ export default function History() {
             timestamp: entry.timestamp || Date.now(),
             createdBy: entry.createdBy || "User",
             type: entry.type || "manual_entry",
-          }));
-          setOfflineEntries(mapped);
-        } catch (error) {
-          console.error("Error fetching offline entries:", error);
-          setOfflineEntries([]);
-        }
-      };
-      fetchOfflineEntries();
-    }
-  }, [isOnline, database]);
+          };
+        });
+        
+        console.log(`✅ [OFFLINE HISTORY] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
+        setOfflineEntries(mapped);
+      } catch (error) {
+        console.error("Error fetching offline entries:", error);
+        setOfflineEntries([]);
+      }
+    };
+    fetchOfflineEntries();
+  }, [isOnline, database, currentUser?._id]);
 
-  // Use online or offline data
-  const allEntries = useMemo(
-    () => (isOnline ? allEntriesOnline : offlineEntries),
-    [isOnline, allEntriesOnline, offlineEntries]
-  );
+  // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
+  const allEntries = useMemo(() => {
+    const base = isOnline ? allEntriesOnline : offlineEntries;
+    if (!Array.isArray(base)) return base;
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const eRaw of base as any[]) {
+      const e = eRaw || {};
+      const key = (e as any).convexId || `${(e as any).timestamp || '0'}_${(e as any).type || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
+    return out;
+  }, [isOnline, allEntriesOnline, offlineEntries]);
+
+  // Status log to verify mode and counts
+  useEffect(() => {
+    const onlineCount = Array.isArray(allEntriesOnline) ? allEntriesOnline.length : (allEntriesOnline === undefined ? 'undefined' : '0');
+    console.log(
+      "📈 [HISTORY STATUS] isOnline=",
+      isOnline,
+      " userId=",
+      currentUser?._id,
+      " onlineLen=",
+      onlineCount,
+      " offlineLen=",
+      offlineEntries.length
+    );
+  }, [isOnline, currentUser?._id, allEntriesOnline, offlineEntries]);
 
   const handleViewEntryDetails = (entryId: string) => {
     router.push({
@@ -465,7 +529,7 @@ export default function History() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {filteredEntries.length}
+                    {Array.isArray(allEntries) ? allEntries.length : 0}
                   </Text>
                   <Text
                     style={[

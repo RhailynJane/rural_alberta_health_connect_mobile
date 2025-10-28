@@ -16,7 +16,12 @@ import { COLORS, FONTS } from '../constants/constants';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 // Initialize Mapbox
-Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== 'YOUR_MAPBOX_PUBLIC_TOKEN') {
+  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+  console.log('✅ Mapbox access token configured');
+} else {
+  console.error('❌ Mapbox access token not configured properly');
+}
 
 interface Clinic {
   id: string;
@@ -124,17 +129,28 @@ function MapboxOfflineMapComponent({
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView
-        ref={mapRef}
-        style={styles.map}
-        styleURL={DEFAULT_MAP_CONFIG.style}
-        compassEnabled={true}
-        compassViewPosition={3} // Top right
-        scaleBarEnabled={false}
-        attributionEnabled={DEFAULT_MAP_CONFIG.attributionEnabled}
-        logoEnabled={DEFAULT_MAP_CONFIG.logoEnabled}
-        onDidFinishLoadingMap={() => setIsMapReady(true)}
-      >
+      {(!MAPBOX_ACCESS_TOKEN || MAPBOX_ACCESS_TOKEN === 'YOUR_MAPBOX_PUBLIC_TOKEN') ? (
+        <View style={styles.errorContainer}>
+          <Icon name="warning" size={48} color="#DC3545" />
+          <Text style={styles.errorText}>
+            Map not available: Mapbox token not configured
+          </Text>
+        </View>
+      ) : (
+        <Mapbox.MapView
+          ref={mapRef}
+          style={styles.map}
+          styleURL={DEFAULT_MAP_CONFIG.style}
+          compassEnabled={true}
+          compassViewPosition={3} // Top right
+          scaleBarEnabled={false}
+          attributionEnabled={DEFAULT_MAP_CONFIG.attributionEnabled}
+          logoEnabled={DEFAULT_MAP_CONFIG.logoEnabled}
+          onDidFinishLoadingMap={() => {
+            console.log('✅ Map loaded successfully');
+            setIsMapReady(true);
+          }}
+        >
         <Mapbox.Camera
           ref={cameraRef}
           zoomLevel={DEFAULT_MAP_CONFIG.defaultZoom}
@@ -189,6 +205,7 @@ function MapboxOfflineMapComponent({
           );
         })}
       </Mapbox.MapView>
+      )}
 
       {/* Loading Indicator */}
       {!isMapReady && (
@@ -248,6 +265,20 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: '#DC3545',
+    textAlign: 'center',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

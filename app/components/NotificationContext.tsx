@@ -27,8 +27,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const loadNotifications = useCallback(async () => {
     try {
-      // Load reminder history (local notifications)
+      // Load reminder history (local notifications) - this is the source of truth for local reminders
       const reminderHistory = await getReminderHistory();
+      console.log('📋 [NotificationContext] Loading notifications:', {
+        reminderCount: reminderHistory.length,
+        reminders: reminderHistory.map(r => ({ id: r.id, title: r.title, read: r.read, createdAt: new Date(r.createdAt).toLocaleTimeString() }))
+      });
+      
       const mappedReminders = reminderHistory.map((r) => ({
         _id: `local-${r.id}`,
         localId: r.id,
@@ -39,13 +44,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         _local: true,
       }));
 
-      // Load cached server notifications
+      // Load cached server notifications (but filter out any local reminders that might have been cached)
       let cachedNotifications: NotificationItem[] = [];
       try {
         const cached = await AsyncStorage.getItem('notifications_cache');
         if (cached) {
           const { data } = JSON.parse(cached);
-          cachedNotifications = data || [];
+          // Filter out any notifications with _local flag or that start with 'occ-'
+          // These should only come from reminder history, not server cache
+          cachedNotifications = (data || []).filter((n: NotificationItem) => 
+            !n._local && !String(n._id).includes('occ-')
+          );
         }
       } catch {
         cachedNotifications = [];
@@ -55,18 +64,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const combined = [...mappedReminders, ...cachedNotifications];
       const seen = new Set<string>();
       const deduped = combined.filter((item) => {
-        // First check: deduplicate by _id
-        if (seen.has(String(item._id))) return false;
-        seen.add(String(item._id));
-        
-        // Second check: for reminder notifications, also group by rounded time (to nearest minute)
-        if (item.title?.includes('Symptom Assessment Reminder') || item.title?.includes('reminder')) {
-          const timestamp = item.createdAt || 0;
-          const roundedTime = Math.floor(timestamp / 60000) * 60000; // Round to minute
-          const timeKey = `time-${item.title}-${roundedTime}`;
-          if (seen.has(timeKey)) return false;
-          seen.add(timeKey);
-        }
+        // Deduplicate by _id only - don't group by time as this causes issues
+        // where different notifications at similar times get merged
+        const id = String(item._id);
+        if (seen.has(id)) return false;
+        seen.add(id);
         return true;
       });
 
@@ -75,6 +77,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         const timeA = a.createdAt || 0;
         const timeB = b.createdAt || 0;
         return timeB - timeA;
+      });
+
+      console.log('📋 [NotificationContext] Final notification list:', {
+        count: sorted.length,
+        notifications: sorted.map(n => ({ id: n._id, title: n.title, read: n.read, createdAt: new Date(n.createdAt).toLocaleTimeString() }))
       });
 
       setNotificationList(sorted);

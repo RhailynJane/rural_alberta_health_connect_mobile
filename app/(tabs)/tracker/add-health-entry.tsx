@@ -321,7 +321,7 @@ export default function AddHealthEntry() {
       if (isOnline && userId) {
         // ONLINE: Save to both Convex AND WatermelonDB
         try {
-          await logManualEntry({
+          const newId = await logManualEntry({
             userId,
             date: dateString,
             timestamp,
@@ -347,6 +347,8 @@ export default function AddHealthEntry() {
               entry.type = 'manual_entry';
               entry.isSynced = true; // Already synced
               entry.createdBy = currentUser?.firstName || 'User';
+              // tie local to server to avoid future hydration duplicates
+              entry.convexId = newId;
             });
           });
           console.log("✅ Entry also saved to WatermelonDB for offline access");

@@ -7,7 +7,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { NotificationBellEvent } from "../_utils/NotificationBellEvent";
-import { checkAndUpdateAnyReminderDue, clearBellNotification, clearReminderHistory, dismissAllNotifications, getReminders, isBellReadNotCleared, isBellUnread, markBellRead, markLatestReminderHistoryRead, markReminderHistoryItemRead } from "../_utils/notifications";
+import { checkAndUpdateAnyReminderDue, clearBellNotification, clearReminderHistory, dismissAllNotifications, getReminders, isBellReadNotCleared, isBellUnread, markBellRead, markReminderHistoryItemRead } from "../_utils/notifications";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -80,10 +80,11 @@ export default function NotificationsScreen() {
 
   // Use the shared notification list directly (already merged and deduplicated)
   const displayList = useMemo(() => notificationList, [notificationList]);
+  const hasUnreadLocal = useMemo(() => displayList.some(n => n._local && !n.read), [displayList]);
 
   // Filter displayList to exclude the current "due now" notification shown in banner
   const filteredDisplayList = useMemo(() => {
-    if (!localDue) return displayList;
+    if (!localDue || !hasUnreadLocal) return displayList;
     // If banner is showing, filter out the most recent unread reminder from the list
     return displayList.filter((item, index) => {
       if (index === 0 && item._local && !item.read && 
@@ -92,7 +93,7 @@ export default function NotificationsScreen() {
       }
       return true;
     });
-  }, [displayList, localDue]);
+  }, [displayList, localDue, hasUnreadLocal]);
 
   // Compute local due banner state
   React.useEffect(() => {
@@ -108,9 +109,14 @@ export default function NotificationsScreen() {
       }
     };
     compute();
-    const offDue = NotificationBellEvent.on('due', () => {
+    const offDue = NotificationBellEvent.on('due', async () => {
+      // When a new notification arrives, only reset read state if there's actually a new unread notification
+      const unread = await isBellUnread();
       setLocalDue(true);
-      setIsReminderRead(false);
+      // Only reset to unread if the bell state is actually unread (meaning a truly new notification)
+      if (unread) {
+        setIsReminderRead(false);
+      }
     });
     const offCleared = NotificationBellEvent.on('cleared', () => {
       setLocalDue(false);
@@ -172,37 +178,52 @@ export default function NotificationsScreen() {
             </View>
           )}
 
-          {localDue && (
-            <View style={[styles.item, !isReminderRead && styles.itemUnread]}>
-              <View style={styles.row}>
-                <Icon
-                  name={isReminderRead ? "notifications-none" : "notifications-active"}
-                  size={22}
-                  color={isReminderRead ? COLORS.darkGray : COLORS.primary}
-                />
-                <Text style={styles.title} numberOfLines={2}>
-                  Symptom reminder due now {isReminderRead && "(Read)"}
-                </Text>
+          {localDue && hasUnreadLocal && (() => {
+            // Get the most recent unread notification time, or use current time as fallback
+            const latestNotif = displayList.find(n => n._local && !n.read);
+            const notifTime = latestNotif?.createdAt || Date.now();
+            const notifId = latestNotif ? (latestNotif.localId || String(latestNotif._id).replace(/^local-/, '')) : null;
+            
+            return (
+              <View style={[styles.item, !isReminderRead && styles.itemUnread]}>
+                <View style={styles.row}>
+                  <Icon
+                    name={isReminderRead ? "notifications-none" : "notifications-active"}
+                    size={22}
+                    color={isReminderRead ? COLORS.darkGray : COLORS.primary}
+                  />
+                  <Text style={styles.title} numberOfLines={2}>
+                    Symptom Assessment Reminder
+                  </Text>
+                  {isReminderRead && (
+                    <View style={styles.readBadge}>
+                      <Text style={styles.readBadgeText}>Read</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
+                <View style={styles.footerRow}>
+                  <Text style={styles.time}>{new Date(notifTime).toLocaleString()}</Text>
+                  {!isReminderRead && (
+                    <TouchableOpacity
+                      style={styles.smallBtn}
+                      onPress={async () => {
+                        try { await markBellRead(); } catch {}
+                        // Mark the SPECIFIC notification shown in banner, not just "latest"
+                        if (notifId) {
+                          try { await markReminderHistoryItemRead(notifId); await refreshNotifications(); } catch {}
+                        }
+                        NotificationBellEvent.emit('read');
+                        setIsReminderRead(true);
+                      }}
+                    >
+                      <Text style={styles.smallBtnText}>Mark read</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
-              <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
-              <View style={styles.footerRow}>
-                <Text style={styles.time}>{new Date().toLocaleString()}</Text>
-                {!isReminderRead && (
-                  <TouchableOpacity
-                    style={styles.smallBtn}
-                    onPress={async () => {
-                      try { await markBellRead(); } catch {}
-                      try { await markLatestReminderHistoryRead(); await refreshNotifications(); } catch {}
-                      NotificationBellEvent.emit('read');
-                      setIsReminderRead(true);
-                    }}
-                  >
-                    <Text style={styles.smallBtnText}>Mark read</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          )}
+            );
+          })()}
 
           {filteredDisplayList.length === 0 ? (
             <View style={styles.emptyState}>

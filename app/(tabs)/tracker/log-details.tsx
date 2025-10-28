@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Q } from "@nozbe/watermelondb";
 import { useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -157,24 +158,65 @@ export default function LogDetails() {
   const { isOnline } = useNetworkStatus();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
   
-  // Convert string to Convex ID type
-  const convexEntryId = entryId as Id<"healthEntries">;
+  // Convert string to Convex ID type - but only if it looks like a Convex ID
+  // Convex IDs start with 'k' or 'j' and are longer than 20 chars
+  const isConvexId = entryId && entryId.length > 20 && /^[kj]/.test(entryId);
+  const convexEntryId = isConvexId ? (entryId as Id<"healthEntries">) : undefined;
   
-  // Online query
+  // Online query - only run if we have a valid Convex ID
   const entryOnline = useQuery(api.healthEntries.getEntryById, 
-    entryId && isOnline ? { entryId: convexEntryId } : "skip"
+    convexEntryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
 
   // Offline query from WatermelonDB
   useEffect(() => {
-    if (!isOnline && entryId) {
+      if (entryId && (!isOnline || !isConvexId)) {
+        // Query WatermelonDB if:
+        // 1. We're offline, OR
+        // 2. We're online but the entryId is a WatermelonDB ID (not Convex format)
       const loadOfflineEntry = async () => {
         try {
           const healthCollection = database.get("health_entries");
-          const localEntry = await healthCollection.find(entryId);
+          let localEntry: any = null;
+          
+            // Try to find by WatermelonDB ID first
+            if (!isConvexId) {
+            try {
+              localEntry = await healthCollection.find(entryId);
+            } catch {
+              // Not found by WatermelonDB ID, try convexId
+            }
+          }
+          
+            // If not found, try querying by convexId field
+          if (!localEntry) {
+            const results = await healthCollection.query(
+              Q.where('convexId', entryId)
+            ).fetch();
+            if (results.length > 0) {
+              localEntry = results[0];
+            }
+          }
+          
+          if (!localEntry) {
+            console.error(`Failed to find entry with id: ${entryId}`);
+            setOfflineEntry(null);
+            return;
+          }
           
           // Map WatermelonDB entry to Convex format
           const entryData = localEntry as any;
+          
+          // Safely handle photos - it's already parsed by the @json decorator
+          let photos: string[] = [];
+          try {
+            if (entryData.photos) {
+              photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
+            }
+          } catch {
+            photos = [];
+          }
+          
           setOfflineEntry({
             _id: localEntry.id,
             _creationTime: entryData.createdAt || Date.now(),
@@ -182,10 +224,11 @@ export default function LogDetails() {
             timestamp: entryData.timestamp,
             severity: entryData.severity,
             type: entryData.type,
-            symptoms: JSON.parse(entryData.symptoms || "[]"),
+            symptoms: entryData.symptoms || "",
+            category: entryData.category || "",
             notes: entryData.notes || "",
-            photos: JSON.parse(entryData.photos || "[]"),
-            aiAssessment: entryData.aiAssessment || null,
+            photos: photos,
+            aiContext: entryData.aiContext || null,
           });
         } catch (error) {
           console.error("Failed to load offline entry:", error);
@@ -194,7 +237,7 @@ export default function LogDetails() {
       };
       loadOfflineEntry();
     }
-  }, [isOnline, entryId, database]);
+    }, [isOnline, entryId, database, isConvexId]);
 
   // Use online entry if available, otherwise offline entry
   const entry = isOnline ? entryOnline : offlineEntry;

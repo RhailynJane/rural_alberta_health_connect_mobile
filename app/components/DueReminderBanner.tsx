@@ -1,9 +1,10 @@
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
-import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread, markBellRead } from '../_utils/notifications';
+import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface DueReminderBannerProps {
@@ -58,11 +59,12 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
   }, [visible, fadeAnim]);
 
   const handleDismiss = async () => {
+    // Do NOT mark as read automatically. Navigate to Notifications screen
+    // so the user can manually mark the specific item as read.
     try {
-      await markBellRead();
-      NotificationBellEvent.emit('read');
+      router.push('/notifications' as any);
     } catch (error) {
-      console.error('Error marking reminder as read:', error);
+      console.error('Error navigating to notifications:', error);
     }
   };
 

@@ -1,4 +1,6 @@
 import { api } from "@/convex/_generated/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -12,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
@@ -19,11 +22,14 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { normalizeNanpToE164, savePhoneSecurely } from "../../utils/securePhone";
 
 export default function ProfileInformation() {
   const router = useRouter();
   const { isAuthenticated } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
+  const database = useWatermelonDatabase();
   
   const currentUser = useQuery(
     api.users.getCurrentUser,
@@ -56,7 +62,7 @@ export default function ProfileInformation() {
       const stored = await getReminders();
       setReminders(stored);
     })();
-  }, [currentUser]);
+  }, [currentUser?._id]);
 
   // State for user data
   const [userData, setUserData] = useState({
@@ -80,7 +86,7 @@ export default function ProfileInformation() {
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalType, setModalType] = useState<'success' | 'error'>('success');
+  const [modalType, setModalType] = useState<'success' | 'error' | 'warning'>('success');
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
 
@@ -103,26 +109,143 @@ export default function ProfileInformation() {
     medicalInfo: false,
   });
 
-  // Load profile data
+  // Load profile data when online - merge without wiping existing values when profile is partial
   React.useEffect(() => {
+    if (!isOnline) return; // Avoid overwriting offline edits with stale online data
     if (userProfile) {
       setUserData((prev) => ({
         ...prev,
-        age: userProfile.age || "",
-        address1: userProfile.address1 || "",
-        address2: userProfile.address2 || "",
-        city: userProfile.city || "",
-        province: userProfile.province || "",
-        postalCode: userProfile.postalCode || "",
-        location: userProfile.location || "",
-        allergies: userProfile.allergies || "",
-        currentMedications: userProfile.currentMedications || "",
-        emergencyContactName: userProfile.emergencyContactName || "",
-        emergencyContactPhone: userProfile.emergencyContactPhone || "",
-        medicalConditions: userProfile.medicalConditions || "",
+        age: userProfile.age ?? prev.age ?? "",
+        address1: userProfile.address1 ?? prev.address1 ?? "",
+        address2: userProfile.address2 ?? prev.address2 ?? "",
+        city: userProfile.city ?? prev.city ?? "",
+        province: userProfile.province ?? prev.province ?? "",
+        postalCode: userProfile.postalCode ?? prev.postalCode ?? "",
+        location: userProfile.location ?? prev.location ?? "",
+        allergies: userProfile.allergies ?? prev.allergies ?? "",
+        currentMedications: userProfile.currentMedications ?? prev.currentMedications ?? "",
+        emergencyContactName: userProfile.emergencyContactName ?? prev.emergencyContactName ?? "",
+        emergencyContactPhone: userProfile.emergencyContactPhone ?? prev.emergencyContactPhone ?? "",
+        medicalConditions: userProfile.medicalConditions ?? prev.medicalConditions ?? "",
       }));
+
+      // Cache the latest profile for offline usage (namespaced per user)
+      (async () => {
+        try {
+          const uid = currentUser?._id ? String(currentUser._id) : "";
+          if (!uid) return;
+          await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(userProfile));
+          console.log("📥 Cached user profile", { _id: uid });
+        } catch {
+          // ignore cache errors
+        }
+      })();
     }
-  }, [userProfile]);
+    // Don't reset userData when userProfile is undefined (offline mode)
+  }, [userProfile, currentUser?._id, isOnline]);
+
+  // If offline or userProfile missing, hydrate userData from cache
+  React.useEffect(() => {
+    const hydrateFromCache = async () => {
+      try {
+        if (userProfile) return; // server data available
+        const uid = currentUser?._id ? String(currentUser._id) : "";
+        if (!uid) return;
+        const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+        if (!raw) return;
+        const cached = JSON.parse(raw) || {};
+        setUserData((prev) => ({
+          ...prev,
+          age: cached.age ?? prev.age ?? "",
+          address1: cached.address1 ?? prev.address1 ?? "",
+          address2: cached.address2 ?? prev.address2 ?? "",
+          city: cached.city ?? prev.city ?? "",
+          province: cached.province ?? prev.province ?? "",
+          postalCode: cached.postalCode ?? prev.postalCode ?? "",
+          location: cached.location ?? prev.location ?? "",
+          allergies: cached.allergies ?? prev.allergies ?? "",
+          currentMedications: cached.currentMedications ?? prev.currentMedications ?? "",
+          emergencyContactName: cached.emergencyContactName ?? prev.emergencyContactName ?? "",
+          emergencyContactPhone: cached.emergencyContactPhone ?? prev.emergencyContactPhone ?? "",
+          medicalConditions: cached.medicalConditions ?? prev.medicalConditions ?? "",
+        }));
+        console.log("📤 Loaded user profile from cache", { _id: uid });
+      } catch {
+        // ignore cache errors
+      }
+    };
+    hydrateFromCache();
+  }, [userProfile, currentUser?._id]);
+
+    // Reload from WatermelonDB when screen comes into focus (for offline edits)
+    useFocusEffect(
+      React.useCallback(() => {
+        const loadFromWatermelon = async () => {
+          try {
+            const uid = currentUser?._id ? String(currentUser._id) : "";
+            if (!uid) return;
+          
+            // Try loading from WatermelonDB first (most recent offline edits)
+            const profilesCollection = database.get('user_profiles');
+            const existingProfiles = await profilesCollection.query().fetch();
+            const userProfileFromDB = (existingProfiles as any[]).find((p: any) => {
+              const r = p._raw || {};
+              const pUserId = p.userId || r.userId || r.user_id;
+              return pUserId === uid;
+            });
+          
+            if (userProfileFromDB) {
+              const p = userProfileFromDB as any;
+              const r = p._raw || {};
+              console.log("📥 Loading profile from WatermelonDB on focus");
+            
+              setUserData((prev) => ({
+                ...prev,
+                age: p.age || r.age || prev.age || "",
+                address1: p.address1 || r.address1 || prev.address1 || "",
+                address2: p.address2 || r.address2 || prev.address2 || "",
+                city: p.city || r.city || prev.city || "",
+                province: p.province || r.province || prev.province || "",
+                postalCode: p.postalCode || r.postalCode || r.postal_code || prev.postalCode || "",
+                location: p.location || r.location || prev.location || "",
+                allergies: p.allergies || r.allergies || prev.allergies || "",
+                currentMedications: p.currentMedications || r.currentMedications || r.current_medications || prev.currentMedications || "",
+                emergencyContactName: p.emergencyContactName || r.emergencyContactName || r.emergency_contact_name || prev.emergencyContactName || "",
+                emergencyContactPhone: p.emergencyContactPhone || r.emergencyContactPhone || r.emergency_contact_phone || prev.emergencyContactPhone || "",
+                medicalConditions: p.medicalConditions || r.medicalConditions || r.medical_conditions || prev.medicalConditions || "",
+              }));
+              return;
+            }
+          
+            // Fall back to AsyncStorage cache if no WatermelonDB entry
+            const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+            if (raw) {
+              const cached = JSON.parse(raw) || {};
+              console.log("📥 Loading profile from AsyncStorage cache on focus");
+              setUserData((prev) => ({
+                ...prev,
+                age: cached.age ?? prev.age ?? "",
+                address1: cached.address1 ?? prev.address1 ?? "",
+                address2: cached.address2 ?? prev.address2 ?? "",
+                city: cached.city ?? prev.city ?? "",
+                province: cached.province ?? prev.province ?? "",
+                postalCode: cached.postalCode ?? prev.postalCode ?? "",
+                location: cached.location ?? prev.location ?? "",
+                allergies: cached.allergies ?? prev.allergies ?? "",
+                currentMedications: cached.currentMedications ?? prev.currentMedications ?? "",
+                emergencyContactName: cached.emergencyContactName ?? prev.emergencyContactName ?? "",
+                emergencyContactPhone: cached.emergencyContactPhone ?? prev.emergencyContactPhone ?? "",
+                medicalConditions: cached.medicalConditions ?? prev.medicalConditions ?? "",
+              }));
+            }
+          } catch (error) {
+            console.error("Error loading profile on focus:", error);
+          }
+        };
+      
+        loadFromWatermelon();
+      }, [currentUser?._id, database])
+    );
 
   // Prefill phone from current user
   React.useEffect(() => {
@@ -159,6 +282,158 @@ export default function ProfileInformation() {
         setModalMessage('Please correct the highlighted fields in Personal Information.');
         setModalVisible(true);
         return false;
+      }
+      
+      // If offline, persist to local cache AND WatermelonDB so data syncs later
+      if (!isOnline) {
+        try {
+          let uid = currentUser?._id ? String(currentUser._id) : "";
+          if (!uid) {
+            try {
+              const rawUser = await AsyncStorage.getItem("@profile_user");
+              if (rawUser) {
+                const parsed = JSON.parse(rawUser);
+                uid = parsed?._id || parsed?.id || uid;
+              }
+            } catch {}
+          }
+          if (uid) {
+            // Save to AsyncStorage cache for immediate visibility
+            const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+            const cached = raw ? JSON.parse(raw) : {};
+            const merged = {
+              ...cached,
+              age: userData.age,
+              address1: userData.address1,
+              address2: userData.address2,
+              city: userData.city,
+              province: userData.province,
+              postalCode: userData.postalCode,
+              location: userData.location,
+            };
+            await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(merged));
+              // Mark that a profile sync is needed on next online transition
+              try { await AsyncStorage.setItem(`${uid}:profile_needs_sync`, '1'); } catch {}
+            // Keep profile summary cache in sync for Profile index screen
+            try {
+              const rawProfile = await AsyncStorage.getItem("@profile_data");
+              const cachedProfile = rawProfile ? JSON.parse(rawProfile) : {};
+              const mergedProfile = { ...cachedProfile, ...merged };
+              await AsyncStorage.setItem("@profile_data", JSON.stringify(mergedProfile));
+            } catch {}
+            console.log("📦 Offline: saved personal info to cache", { _id: uid });
+            // Update local state immediately for persistence within session
+            setUserData((prev) => ({
+              ...prev,
+              age: userData.age,
+              address1: userData.address1,
+              address2: userData.address2,
+              city: userData.city,
+              province: userData.province,
+              postalCode: userData.postalCode,
+              location: userData.location,
+            }));
+            
+            // Also save to WatermelonDB so useSyncOnOnline can sync it when online
+            try {
+              const profilesCollection = database.get('user_profiles');
+              const existingProfiles = await profilesCollection.query().fetch();
+              const userProfile = (existingProfiles as any[]).find((p: any) => {
+                const r = p._raw || {};
+                const pUserId = p.userId || r.userId || r.user_id;
+                return pUserId === uid;
+              });
+              
+              console.log("📦 [Personal Info] Saving to WatermelonDB:", { 
+                uid, 
+                hasExisting: !!userProfile,
+                age: userData.age,
+                timestamp: new Date().toISOString(),
+                codeVersion: "v2_no_type_field"
+              });
+              
+              try {
+                await database.write(async () => {
+                  if (userProfile) {
+                    // Update existing profile (bulk)
+                    console.log("📦 [UPDATE PATH] Updating existing profile - NO TYPE FIELD");
+                    await (userProfile as any).update((prof: any) => {
+                      prof.age = userData.age;
+                      prof.address1 = userData.address1;
+                      prof.address2 = userData.address2;
+                      prof.city = userData.city;
+                      prof.province = userData.province;
+                      prof.postalCode = userData.postalCode;
+                      prof.location = userData.location;
+                      // Mark as ready to sync
+                      prof.onboardingCompleted = true;
+                    });
+                    console.log("📦 Offline: updated personal info in WatermelonDB");
+                  } else {
+                    // Create new profile entry
+                    await profilesCollection.create((prof: any) => {
+                      prof.userId = uid;
+                      prof.age = userData.age;
+                      prof.address1 = userData.address1;
+                      prof.address2 = userData.address2;
+                      prof.city = userData.city;
+                      prof.province = userData.province;
+                      prof.postalCode = userData.postalCode;
+                      prof.location = userData.location;
+                      prof.onboardingCompleted = true;
+                    });
+                    console.log("📦 Offline: created personal info in WatermelonDB");
+                  }
+                });
+              } catch (bulkErr) {
+                console.warn("🔎 [Personal Info] Bulk update failed, attempting field-by-field fallback:", bulkErr);
+                // Fallback: try updating fields one-by-one to identify any mismatched column
+                const fields: [string, any][] = [
+                  ["age", userData.age],
+                  ["address1", userData.address1],
+                  ["address2", userData.address2],
+                  ["city", userData.city],
+                  ["province", userData.province],
+                  ["postalCode", userData.postalCode],
+                  ["location", userData.location],
+                ];
+                const failed: string[] = [];
+                for (const [key, value] of fields) {
+                  try {
+                    await database.write(async () => {
+                      await (userProfile as any).update((prof: any) => {
+                        (prof as any)[key] = value;
+                      });
+                    });
+                    console.log(`✅ [Personal Info] Updated field '${key}'`);
+                  } catch (e) {
+                    console.warn(`⚠️ [Personal Info] Failed field '${key}' → skipping`, e);
+                    failed.push(key);
+                  }
+                }
+                try {
+                  await database.write(async () => {
+                    await (userProfile as any).update((prof: any) => {
+                      prof.onboardingCompleted = true;
+                    });
+                  });
+                } catch (e) {
+                  console.warn("⚠️ [Personal Info] Failed setting onboardingCompleted", e);
+                }
+                console.log("🧩 [Personal Info] Fallback update completed. Failed fields:", failed);
+              }
+            } catch (dbErr) {
+              console.error("⚠️ Failed to save to WatermelonDB (will retry on sync):", dbErr);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to save offline changes:", e);
+        }
+        setModalType('warning');
+        setModalTitle('Offline Mode');
+        setModalMessage('Changes saved locally. They will sync when you reconnect to the internet.');
+        setModalVisible(true);
+        return true;
       }
       
       // Update phone
@@ -209,6 +484,71 @@ export default function ProfileInformation() {
         return false;
       }
       
+      // Check if online before attempting server updates
+      if (!isOnline) {
+        // Save to WatermelonDB for later sync
+        try {
+          let uid = currentUser?._id ? String(currentUser._id) : "";
+          if (!uid) {
+            try {
+              const rawUser = await AsyncStorage.getItem("@profile_user");
+              if (rawUser) {
+                const parsed = JSON.parse(rawUser);
+                uid = parsed?._id || parsed?.id || uid;
+              }
+            } catch {}
+          }
+          if (uid) {
+            const profilesCollection = database.get('user_profiles');
+            const existingProfiles = await profilesCollection.query().fetch();
+            const userProfile = (existingProfiles as any[]).find((p: any) => {
+              const r = p._raw || {};
+              const pUserId = p.userId || r.userId || r.user_id;
+              return pUserId === uid;
+            });
+            
+            await database.write(async () => {
+              if (userProfile) {
+                await (userProfile as any).update((prof: any) => {
+                  prof.emergencyContactName = userData.emergencyContactName;
+                  prof.emergencyContactPhone = userData.emergencyContactPhone;
+                  prof.onboardingCompleted = true;
+                });
+                console.log("📦 Offline: updated emergency contact in WatermelonDB");
+              } else {
+                await profilesCollection.create((prof: any) => {
+                  prof.userId = uid;
+                  prof.emergencyContactName = userData.emergencyContactName;
+                  prof.emergencyContactPhone = userData.emergencyContactPhone;
+                  prof.onboardingCompleted = true;
+                });
+                console.log("📦 Offline: created emergency contact in WatermelonDB");
+              }
+            });
+            // Mark that a profile sync is needed on next online transition
+            try { await AsyncStorage.setItem(`${uid}:profile_needs_sync`, '1'); } catch {}
+            // Update cached profile summary for Profile index
+            try {
+              const rawProfile = await AsyncStorage.getItem("@profile_data");
+              const cachedProfile = rawProfile ? JSON.parse(rawProfile) : {};
+              const mergedProfile = {
+                ...cachedProfile,
+                emergencyContactName: userData.emergencyContactName,
+                emergencyContactPhone: userData.emergencyContactPhone,
+              };
+              await AsyncStorage.setItem("@profile_data", JSON.stringify(mergedProfile));
+            } catch {}
+          }
+        } catch (dbErr) {
+          console.warn("⚠️ Failed to save emergency contact to WatermelonDB:", dbErr);
+        }
+        setModalType('warning');
+        setModalTitle('Offline Mode');
+        setModalMessage('Changes saved locally. They will sync when you reconnect to the internet.');
+        setModalVisible(true);
+        return true;
+      }
+      
       await updateEmergencyContactMutation({
         emergencyContactName: userData.emergencyContactName,
         emergencyContactPhone: userData.emergencyContactPhone,
@@ -238,6 +578,74 @@ export default function ProfileInformation() {
         setModalMessage('Please correct the highlighted fields in Medical Information.');
         setModalVisible(true);
         return false;
+      }
+      
+      // Check if online before attempting server updates
+      if (!isOnline) {
+        // Save to WatermelonDB for later sync
+        try {
+          let uid = currentUser?._id ? String(currentUser._id) : "";
+          if (!uid) {
+            try {
+              const rawUser = await AsyncStorage.getItem("@profile_user");
+              if (rawUser) {
+                const parsed = JSON.parse(rawUser);
+                uid = parsed?._id || parsed?.id || uid;
+              }
+            } catch {}
+          }
+          if (uid) {
+            const profilesCollection = database.get('user_profiles');
+            const existingProfiles = await profilesCollection.query().fetch();
+            const userProfile = (existingProfiles as any[]).find((p: any) => {
+              const r = p._raw || {};
+              const pUserId = p.userId || r.userId || r.user_id;
+              return pUserId === uid;
+            });
+            
+            await database.write(async () => {
+              if (userProfile) {
+                await (userProfile as any).update((prof: any) => {
+                  prof.allergies = userData.allergies;
+                  prof.currentMedications = userData.currentMedications;
+                  prof.medicalConditions = userData.medicalConditions;
+                  prof.onboardingCompleted = true;
+                });
+                console.log("📦 Offline: updated medical info in WatermelonDB");
+              } else {
+                await profilesCollection.create((prof: any) => {
+                  prof.userId = uid;
+                  prof.allergies = userData.allergies;
+                  prof.currentMedications = userData.currentMedications;
+                  prof.medicalConditions = userData.medicalConditions;
+                  prof.onboardingCompleted = true;
+                });
+                console.log("📦 Offline: created medical info in WatermelonDB");
+              }
+            });
+            // Mark that a profile sync is needed on next online transition
+            try { await AsyncStorage.setItem(`${uid}:profile_needs_sync`, '1'); } catch {}
+            // Update cached profile summary for Profile index
+            try {
+              const rawProfile = await AsyncStorage.getItem("@profile_data");
+              const cachedProfile = rawProfile ? JSON.parse(rawProfile) : {};
+              const mergedProfile = {
+                ...cachedProfile,
+                allergies: userData.allergies,
+                currentMedications: userData.currentMedications,
+                medicalConditions: userData.medicalConditions,
+              };
+              await AsyncStorage.setItem("@profile_data", JSON.stringify(mergedProfile));
+            } catch {}
+          }
+        } catch (dbErr) {
+          console.warn("⚠️ Failed to save medical info to WatermelonDB:", dbErr);
+        }
+        setModalType('warning');
+        setModalTitle('Offline Mode');
+        setModalMessage('Changes saved locally. They will sync when you reconnect to the internet.');
+        setModalVisible(true);
+        return true;
       }
       
       await updateMedicalHistoryMutation({

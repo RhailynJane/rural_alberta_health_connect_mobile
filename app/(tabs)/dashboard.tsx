@@ -55,7 +55,7 @@ export default function Dashboard() {
   const getLast7DaysDateRange = () => {
     const today = new Date();
     const startDate = new Date(today);
-    startDate.setDate(today.getDate() - 7);
+    startDate.setDate(today.getDate() - 6); // Changed from -7 to -6 to include today (7 days total)
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = new Date(today);
@@ -395,8 +395,8 @@ export default function Dashboard() {
                   ]}
                 >
                   {weeklyEntries && weeklyEntries.length > 0
-                    ? `Based on ${weeklyEntries.length} entries this week`
-                    : "No entries this week"}
+                    ? `Based on ${weeklyEntries.length} ${weeklyEntries.length === 1 ? 'entry' : 'entries'} in last 7 days`
+                    : "No entries in last 7 days"}
                 </Text>
 
                 {/* Health Score Progress Bar - only show if there are entries */}
