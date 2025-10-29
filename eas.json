@@ -1,7 +1,8 @@
 {
   "cli": {
     "version": ">= 16.17.4",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "promptToConfigurePushNotifications": false
   },
   "build": {
     "development": {
@@ -32,7 +33,7 @@
       "autoIncrement": true,
       "distribution": "store",
       "android": {
-        "buildType": "app-bundle"  
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production",

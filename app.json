@@ -15,6 +15,7 @@
         "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone.",
         "NSUserNotificationUsageDescription": "We use notifications to remind you to complete your symptom assessment.",
+        "NSSpeechRecognitionUsageDescription": "$(PRODUCT_NAME) needs access to speech recognition for voice-based symptom input.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
