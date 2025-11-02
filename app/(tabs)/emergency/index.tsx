@@ -3,15 +3,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -243,6 +243,64 @@ export default function Emergency() {
   // Function to handle emergency calls
   const handleEmergencyCall = (number: string) => {
     const cleanNumber = number.replace(/[^0-9+]/g, "");
+    
+    // For 911, show immediate confirmation with clear cancel option
+    if (cleanNumber === "911") {
+      setModalTitle("⚠️ Call 911 Emergency?");
+      setModalMessage("You are about to call emergency services (911). This should only be used for life-threatening emergencies.\n\nCall 911 if:\n• Someone's life is in danger\n• Medical emergency requiring immediate attention\n• Fire or serious accident\n\nFor non-emergencies, use Health Link 811 instead.");
+      setModalButtons([
+        { 
+          label: "Cancel", 
+          onPress: () => setModalVisible(false), 
+          variant: 'secondary' 
+        },
+        { 
+          label: "Call 911 Now", 
+          onPress: () => {
+            setModalVisible(false);
+            Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
+              setModalTitle("Error");
+              setModalMessage("Could not make the call. Please check your device.");
+              setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+              setModalVisible(true);
+            });
+          }, 
+          variant: 'destructive' 
+        },
+      ]);
+      setModalVisible(true);
+      return;
+    }
+    
+    // For 811, show confirmation with health advice context
+    if (cleanNumber === "811") {
+      setModalTitle("📞 Call Health Link 811?");
+      setModalMessage("You are about to call Health Link Alberta (811) for 24/7 health advice from registered nurses.\n\nUse 811 for:\n• Health questions and concerns\n• Advice on medications\n• Help deciding if you need to see a doctor\n• Finding health services in your area\n\nThis is a free service available 24 hours a day.");
+      setModalButtons([
+        { 
+          label: "Cancel", 
+          onPress: () => setModalVisible(false), 
+          variant: 'secondary' 
+        },
+        { 
+          label: "Call 811", 
+          onPress: () => {
+            setModalVisible(false);
+            Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
+              setModalTitle("Error");
+              setModalMessage("Could not make the call. Please check your device.");
+              setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+              setModalVisible(true);
+            });
+          }, 
+          variant: 'primary' 
+        },
+      ]);
+      setModalVisible(true);
+      return;
+    }
+    
+    // For other numbers (clinics), proceed directly
     Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
       setModalTitle("Error");
       setModalMessage("Could not make the call. Please check your device.");

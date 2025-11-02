@@ -5,11 +5,18 @@
 
 ## Critical Priority (P1)
 
-### 🔴 Bug #1: Emergency call cannot be cancelled quickly
+### ✅ Bug #1: Emergency call cannot be cancelled quickly
 - **Reporter:** Joy Wong, Yue
 - **Test Case:** TC-021
 - **Description:** Cancellation requires two steps, 911 call connects before cancel completes
-- **Status:** ⏳ Open
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - Added confirmation modal before initiating 911 call
+  - Modal shows clear warning about emergency services usage
+  - Prominent "Cancel" button allows immediate cancellation
+  - "Call 911 Now" button with destructive (red) styling to emphasize severity
+  - Includes guidance on when to use 911 vs 811 (Health Link)
+  - User can now cancel within seconds before call connects
 
 ### 🔴 Bug #5: New entries not saved offline
 - **Reporter:** Sean Bauzon
@@ -150,11 +157,11 @@
 ## Summary Statistics
 
 - **Total Bugs Reported:** 21
-- **Critical (P1):** 2 open
+- **Critical (P1):** 1 fixed, 1 open
 - **High (P2):** 3 open
 - **Medium/Low (P3-P4):** 1 fixed, 1 open
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 1
+- **Fixed This Sprint:** 2
 - **Enhancements Completed:** 1
 
 ---
