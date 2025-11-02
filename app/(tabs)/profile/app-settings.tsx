@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import {
   addReminder,
+  clearReminderHistoryForReminder,
   deleteReminder,
   dismissAllNotifications,
   getReminders,
@@ -80,6 +81,12 @@ export default function AppSettings() {
   const daysOfWeek: ("Sun"|"Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat")[] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const [weeklyTimes, setWeeklyTimes] = useState<Record<string, string | null>>({ Sun:null, Mon:null, Tue:null, Wed:null, Thu:null, Fri:null, Sat:null });
   const [weeklyEditingDay, setWeeklyEditingDay] = useState<null | (typeof daysOfWeek)[number]>(null);
+  
+  // Modals for confirmation and success
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleteSuccessVisible, setDeleteSuccessVisible] = useState(false);
+  const [reminderToDelete, setReminderToDelete] = useState<number | null>(null);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
 
   // Load cached location status immediately for offline UX
   useEffect(() => {
@@ -109,12 +116,18 @@ export default function AppSettings() {
 
   // Memoize the sync callback to prevent infinite loops
   const syncCallback = useCallback(async (items: ReminderItem[]) => {
+    // Skip server sync when offline - reminders are already saved locally
+    if (!isOnline) {
+      console.log("📴 Offline: reminder sync skipped, saved locally only");
+      return;
+    }
+    
     try {
       await saveAllReminders({ reminders: JSON.stringify(items) });
     } catch (err) {
       console.error("⚠️ Convex sync failed:", err);
     }
-  }, [saveAllReminders]);
+  }, [saveAllReminders, isOnline]);
 
   // Load reminders
   useEffect(() => {
@@ -222,12 +235,35 @@ export default function AppSettings() {
   };
 
   const handleDeleteReminder = async (index: number) => {
-    const item = reminders[index];
-    await deleteReminder(item.id);
-    const updated = await getReminders();
-    setReminders(updated);
-    // Re-schedule all remaining reminders
-    await scheduleAllReminderItems(updated);
+    setReminderToDelete(index);
+    setDeleteConfirmVisible(true);
+  };
+  
+  const [isDeleting, setIsDeleting] = useState(false);
+  const confirmDeleteReminder = async () => {
+    if (reminderToDelete === null) return;
+    setIsDeleting(true);
+    try {
+      const item = reminders[reminderToDelete];
+      // Delete the reminder (local)
+      await deleteReminder(item.id);
+      // Clear notification history for this reminder (local)
+      await clearReminderHistoryForReminder(item.id);
+      // Refresh reminder list (local)
+      const updated = await getReminders();
+      setReminders(updated);
+      // Re-schedule all remaining reminders (local)
+      await scheduleAllReminderItems(updated);
+      // If offline, provide immediate feedback without waiting for server
+      // Show success feedback
+      setDeleteSuccessVisible(true);
+    } catch (err) {
+      console.error("Failed to delete reminder:", err);
+    } finally {
+      setDeleteConfirmVisible(false);
+      setReminderToDelete(null);
+      setIsDeleting(false);
+    }
   };
 
   const handleConfirmTime = async (time: string) => {
@@ -253,6 +289,8 @@ export default function AppSettings() {
         frequency: freq as any,
         time: freq === "daily" ? time : undefined,
       });
+      // Show success modal for new reminder
+      setSuccessModalVisible(true);
     }
     const updated = await getReminders();
     setReminders(updated);
@@ -620,6 +658,8 @@ export default function AppSettings() {
                       setPendingEnable(false);
                       setWeeklyModalVisible(false);
                       await scheduleAllReminderItems(updated);
+                      // Show success modal for custom reminders
+                      setSuccessModalVisible(true);
                     }}
                     style={{
                       paddingVertical: 10,
@@ -643,6 +683,65 @@ export default function AppSettings() {
             </View>
           </View>
         )}
+        
+        {/* Delete Confirmation Modal */}
+        <StatusModal
+          visible={deleteConfirmVisible}
+          type="error"
+          title="Delete Reminder?"
+          message="Are you sure you want to delete this reminder? This action cannot be undone."
+          onClose={() => {
+            setDeleteConfirmVisible(false);
+            setReminderToDelete(null);
+          }}
+          buttons={[
+            {
+              label: "Cancel",
+              variant: "secondary",
+              onPress: () => {
+                setDeleteConfirmVisible(false);
+                setReminderToDelete(null);
+              },
+            },
+            {
+              label: "Delete",
+              variant: "primary",
+              onPress: () => { if (!isDeleting) confirmDeleteReminder(); },
+            },
+          ]}
+        />
+        
+        {/* Success Modal */}
+        <StatusModal
+          visible={successModalVisible}
+          type="success"
+          title="Reminder Added!"
+          message="Your symptom assessment reminder has been successfully created."
+          onClose={() => setSuccessModalVisible(false)}
+          buttons={[
+            {
+              label: "OK",
+              variant: "primary",
+              onPress: () => setSuccessModalVisible(false),
+            },
+          ]}
+        />
+
+        {/* Delete Success Modal */}
+        <StatusModal
+          visible={deleteSuccessVisible}
+          type="success"
+          title="Reminder Deleted"
+          message={isOnline ? "Your reminder has been deleted." : "Reminder deleted locally. It will sync when you're back online."}
+          onClose={() => setDeleteSuccessVisible(false)}
+          buttons={[
+            {
+              label: "OK",
+              variant: "primary",
+              onPress: () => setDeleteSuccessVisible(false),
+            },
+          ]}
+        />
       </CurvedBackground>
     </SafeAreaView>
   );

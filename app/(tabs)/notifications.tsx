@@ -1,24 +1,29 @@
 import { api } from "@/convex/_generated/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { NotificationBellEvent } from "../_utils/NotificationBellEvent";
-import { checkAndUpdateAnyReminderDue, clearBellNotification, getReminders, isBellReadNotCleared, isBellUnread, markBellRead } from "../_utils/notifications";
+import { checkAndUpdateAnyReminderDue, clearBellNotification, clearReminderHistory, dismissAllNotifications, getReminders, isBellReadNotCleared, isBellUnread, markBellRead, markReminderHistoryItemRead } from "../_utils/notifications";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import { useNotifications } from "../components/NotificationContext";
 import { COLORS, FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
+
 
 export default function NotificationsScreen() {
   const { isOnline } = useNetworkStatus();
   const [refreshing, setRefreshing] = useState(false);
   const [localDue, setLocalDue] = useState(false);
   const [isReminderRead, setIsReminderRead] = useState(false);
-  const [cachedNotifications, setCachedNotifications] = useState<any[]>([]);
+  
+  // Use shared notification context instead of local state
+  const { notificationList, refreshNotifications } = useNotifications();
   
   // Online queries (skip when offline)
   const unreadCount = useQuery(
@@ -41,61 +46,56 @@ export default function NotificationsScreen() {
         try {
           await AsyncStorage.setItem(
             'notifications_cache',
-            JSON.stringify({
-              data: list,
-              unreadCount,
-              timestamp: Date.now(),
-            })
+            JSON.stringify({ data: list, unreadCount, timestamp: Date.now() })
           );
+          // Refresh the shared notification context
+          await refreshNotifications();
         } catch (error) {
           console.error('Failed to cache notifications:', error);
         }
       };
       cacheNotifications();
     }
-  }, [isOnline, list, unreadCount]);
+  }, [isOnline, list, unreadCount, refreshNotifications]);
 
-  // Load cached notifications when offline
-  useEffect(() => {
-    if (!isOnline) {
-      const loadCached = async () => {
-        try {
-          const cached = await AsyncStorage.getItem('notifications_cache');
-          if (cached) {
-            const { data } = JSON.parse(cached);
-            setCachedNotifications(data || []);
-          }
-        } catch (error) {
-          console.error('Failed to load cached notifications:', error);
-          setCachedNotifications([]);
-        }
-      };
-      loadCached();
-    }
-  }, [isOnline]);
+  // On screen focus, refresh the shared notification context
+  useFocusEffect(
+    useCallback(() => {
+      refreshNotifications();
+    }, [refreshNotifications])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (isOnline) {
-      // Online: useQuery will refetch automatically
+      await refreshNotifications();
       setTimeout(() => setRefreshing(false), 600);
     } else {
-      // Offline: just reload cached data
-      const cached = await AsyncStorage.getItem('notifications_cache');
-      if (cached) {
-        const { data } = JSON.parse(cached);
-        setCachedNotifications(data || []);
-      }
+      await refreshNotifications();
       setRefreshing(false);
     }
-  }, [isOnline]);
+  }, [isOnline, refreshNotifications]);
 
   const computedUnread = useMemo(() => unreadCount, [unreadCount]);
-  
-  // Use online or cached notifications
-  const displayList = isOnline ? list : cachedNotifications;
 
-  // Compute local due state on mount and when events fire
+  // Use the shared notification list directly (already merged and deduplicated)
+  const displayList = useMemo(() => notificationList, [notificationList]);
+  const hasUnreadLocal = useMemo(() => displayList.some(n => n._local && !n.read), [displayList]);
+
+  // Filter displayList to exclude the current "due now" notification shown in banner
+  const filteredDisplayList = useMemo(() => {
+    if (!localDue || !hasUnreadLocal) return displayList;
+    // If banner is showing, filter out the most recent unread reminder from the list
+    return displayList.filter((item, index) => {
+      if (index === 0 && item._local && !item.read && 
+          (item.title?.includes('Symptom Assessment Reminder') || item.title?.includes('reminder'))) {
+        return false; // Skip the first unread reminder (it's in the banner)
+      }
+      return true;
+    });
+  }, [displayList, localDue, hasUnreadLocal]);
+
+  // Compute local due banner state
   React.useEffect(() => {
     let mounted = true;
     const compute = async () => {
@@ -104,16 +104,19 @@ export default function NotificationsScreen() {
       const unread = await isBellUnread();
       const readNotCleared = await isBellReadNotCleared();
       if (mounted) {
-        // Show notification if it's either unread OR read-but-not-cleared
         setLocalDue(unread || readNotCleared);
-        // Set read state
         setIsReminderRead(readNotCleared && !unread);
       }
     };
     compute();
-    const offDue = NotificationBellEvent.on('due', () => {
+    const offDue = NotificationBellEvent.on('due', async () => {
+      // When a new notification arrives, only reset read state if there's actually a new unread notification
+      const unread = await isBellUnread();
       setLocalDue(true);
-      setIsReminderRead(false);
+      // Only reset to unread if the bell state is actually unread (meaning a truly new notification)
+      if (unread) {
+        setIsReminderRead(false);
+      }
     });
     const offCleared = NotificationBellEvent.on('cleared', () => {
       setLocalDue(false);
@@ -121,10 +124,9 @@ export default function NotificationsScreen() {
     });
     const offRead = NotificationBellEvent.on('read', () => {
       setIsReminderRead(true);
-      setLocalDue(true); // Keep showing it
+      setLocalDue(true);
     });
-    // Reduced interval frequency - only check every 5 minutes on this page
-    const interval = setInterval(compute, 300000); // 5 minutes
+    const interval = setInterval(compute, 300000);
     return () => { mounted = false; offDue(); offCleared(); offRead(); clearInterval(interval); };
   }, []);
 
@@ -141,10 +143,12 @@ export default function NotificationsScreen() {
         />
         <ScrollView
           style={styles.container}
+          contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
         >
-          {(computedUnread > 0 || localDue) && (
-            <View style={[styles.headerActions]}> 
+          {/* Show Clear all button whenever there are notifications */}
+          {(computedUnread > 0 || localDue || filteredDisplayList.length > 0) && (
+            <View style={[styles.headerActions]}>
               {computedUnread > 0 && (
                 <Text style={styles.unreadText}>
                   {computedUnread} {computedUnread === 1 ? "unread notification" : "unread notifications"}
@@ -152,8 +156,19 @@ export default function NotificationsScreen() {
               )}
               <TouchableOpacity
                 onPress={async () => {
-                  try { await markAllAsRead({}); } catch {}
+                  // Mark server notifications as read when online
+                  if (isOnline) {
+                    try { await markAllAsRead({}); } catch {}
+                  }
+                  // Clear local bell and reminder history completely
                   try { await clearBellNotification(); } catch {}
+                  try { await clearReminderHistory(); } catch {}
+                  // Dismiss all system notifications so they don't get re-harvested
+                  try { await dismissAllNotifications(); } catch {}
+                  // Refresh the shared notification context
+                  await refreshNotifications();
+                  setLocalDue(false);
+                  setIsReminderRead(false);
                   NotificationBellEvent.emit('cleared');
                 }}
                 style={styles.markAllBtn}
@@ -163,27 +178,41 @@ export default function NotificationsScreen() {
             </View>
           )}
 
-          {localDue && (
-            <View style={[styles.item, !isReminderRead && styles.itemUnread]}> 
-              <View style={styles.row}>
-                <Icon 
-                  name={isReminderRead ? "notifications-none" : "notifications-active"} 
-                  size={22} 
-                  color={isReminderRead ? COLORS.darkGray : COLORS.primary} 
-                />
-                <Text style={styles.title} numberOfLines={2}>
-                  Symptom reminder due now {isReminderRead && "(Read)"}
-                </Text>
-              </View>
-              <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
-              <View style={styles.footerRow}>
-                <Text style={styles.time}>{new Date().toLocaleString()}</Text>
-                <View style={styles.actionButtons}>
+          {localDue && hasUnreadLocal && (() => {
+            // Get the most recent unread notification time, or use current time as fallback
+            const latestNotif = displayList.find(n => n._local && !n.read);
+            const notifTime = latestNotif?.createdAt || Date.now();
+            const notifId = latestNotif ? (latestNotif.localId || String(latestNotif._id).replace(/^local-/, '')) : null;
+            
+            return (
+              <View style={[styles.item, !isReminderRead && styles.itemUnread]}>
+                <View style={styles.row}>
+                  <Icon
+                    name={isReminderRead ? "notifications-none" : "notifications-active"}
+                    size={22}
+                    color={isReminderRead ? COLORS.darkGray : COLORS.primary}
+                  />
+                  <Text style={styles.title} numberOfLines={2}>
+                    Symptom Assessment Reminder
+                  </Text>
+                  {isReminderRead && (
+                    <View style={styles.readBadge}>
+                      <Text style={styles.readBadgeText}>Read</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.body}>It&apos;s time to complete your symptoms check.</Text>
+                <View style={styles.footerRow}>
+                  <Text style={styles.time}>{new Date(notifTime).toLocaleString()}</Text>
                   {!isReminderRead && (
                     <TouchableOpacity
                       style={styles.smallBtn}
                       onPress={async () => {
                         try { await markBellRead(); } catch {}
+                        // Mark the SPECIFIC notification shown in banner, not just "latest"
+                        if (notifId) {
+                          try { await markReminderHistoryItemRead(notifId); await refreshNotifications(); } catch {}
+                        }
                         NotificationBellEvent.emit('read');
                         setIsReminderRead(true);
                       }}
@@ -191,43 +220,41 @@ export default function NotificationsScreen() {
                       <Text style={styles.smallBtnText}>Mark read</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity
-                    style={[styles.smallBtn, styles.clearBtn]}
-                    onPress={async () => {
-                      try { await clearBellNotification(); } catch {}
-                      NotificationBellEvent.emit('cleared');
-                      setLocalDue(false);
-                      setIsReminderRead(false);
-                    }}
-                  >
-                    <Text style={styles.smallBtnText}>Clear</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
-            </View>
-          )}
+            );
+          })()}
 
-          {displayList.length === 0 ? (
+          {filteredDisplayList.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="notifications-none" size={48} color={COLORS.darkGray} />
               <Text style={styles.emptyTitle}>No notifications yet</Text>
               <Text style={styles.emptySub}>You&apos;ll see important updates here</Text>
             </View>
           ) : (
-            displayList.map((n: any) => (
+            filteredDisplayList.map((n: any) => (
               <View key={String(n._id)} style={[styles.item, !n.read && styles.itemUnread]}>
                 <View style={styles.row}>
                   <Icon name={n.read ? "notifications-none" : "notifications-active"} size={22} color={n.read ? COLORS.darkGray : COLORS.primary} />
                   <Text style={styles.title} numberOfLines={2}>{n.title}</Text>
+                  {n.read && (
+                    <View style={styles.readBadge}>
+                      <Text style={styles.readBadgeText}>Read</Text>
+                    </View>
+                  )}
                 </View>
                 {!!n.body && <Text style={styles.body}>{n.body}</Text>}
                 <View style={styles.footerRow}>
                   <Text style={styles.time}>{new Date(n.createdAt).toLocaleString()}</Text>
-                  {!n.read && isOnline && (
+                  {!n.read && (
                     <TouchableOpacity
                       style={styles.smallBtn}
                       onPress={async () => {
-                        try { await markOneAsRead({ notificationId: n._id }); } catch {}
+                        if (n._local) {
+                          try { await markReminderHistoryItemRead(n.localId || String(n._id).replace(/^local-/, '')); await refreshNotifications(); } catch {}
+                        } else if (isOnline) {
+                          try { await markOneAsRead({ notificationId: n._id }); } catch {}
+                        }
                       }}
                     >
                       <Text style={styles.smallBtnText}>Mark read</Text>
@@ -246,6 +273,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16 },
+  scrollContent: { paddingBottom: 100 }, // Add bottom margin for BottomNavigation
   headerActions: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -276,6 +304,8 @@ const styles = StyleSheet.create({
   itemUnread: { borderLeftWidth: 3, borderLeftColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 15, color: COLORS.darkText },
+  readBadge: { backgroundColor: COLORS.darkGray, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
+  readBadgeText: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 10, color: COLORS.white },
   body: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkGray, marginTop: 4 },
   footerRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   time: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray },
@@ -284,3 +314,5 @@ const styles = StyleSheet.create({
   clearBtn: { backgroundColor: COLORS.darkGray },
   smallBtnText: { color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 12 },
 });
+
+ 

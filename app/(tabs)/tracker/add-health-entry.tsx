@@ -1,7 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -20,7 +20,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
-import { syncManager } from "../../../watermelon/sync/syncManager";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -31,7 +30,8 @@ import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 export default function AddHealthEntry() {
   const database = useDatabase();
   const { isOnline } = useNetworkStatus();
-  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
   const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
@@ -303,10 +303,12 @@ export default function AddHealthEntry() {
     try {
       const timestamp = createTimestamp(selectedDate, selectedTime);
       const dateString = formatDate(selectedDate);
-      const saveUserId = userId || 'offline_user';
+      // Use actual userId if available, skip saving if offline without userId
+      const saveUserId = userId;
 
       console.log("Saving entry:", {
         mode: isOnline ? 'online' : 'offline',
+        hasUserId: !!saveUserId,
         date: dateString,
         timestamp,
         symptoms,
@@ -317,53 +319,77 @@ export default function AddHealthEntry() {
       });
 
       if (isOnline && userId) {
-        // ONLINE: Save directly to Convex
-        await logManualEntry({
-          userId,
-          date: dateString,
-          timestamp,
-          symptoms,
-          severity: parseInt(severity),
-          notes,
-          photos: photos,
-          createdBy: currentUser.firstName || "User",
-        });
-        console.log("✅ Manual entry saved online");
-      } else {
-        // OFFLINE: Save to WatermelonDB
-        const healthEntriesCollection = database.collections.get('health_entries');
-        
-        await database.write(async () => {
-          await healthEntriesCollection.create((entry: any) => {
-            entry.userId = saveUserId;
-            entry.date = dateString;
-            entry.timestamp = timestamp;
-            entry.symptoms = symptoms;
-            entry.severity = parseInt(severity);
-            entry.notes = notes || '';
-            entry.photos = JSON.stringify([...photos, ...localPhotoUris]); // Combine uploaded and local
-            entry.type = 'manual';
-            entry.synced = false; // Mark for sync when online
-            entry.createdBy = currentUser?.firstName || 'User';
-          });
-        });
-        
-        console.log("📴 Entry saved offline, will sync when online");
-        
-        // Add to sync queue
-        await syncManager.addToQueue({
-          type: 'health_entry',
-          data: {
-            userId: saveUserId,
+        // ONLINE: Save to both Convex AND WatermelonDB
+        try {
+          const newId = await logManualEntry({
+            userId,
             date: dateString,
             timestamp,
             symptoms,
             severity: parseInt(severity),
             notes,
-            photos: [...photos, ...localPhotoUris],
-            createdBy: currentUser?.firstName || 'User',
-          },
+            photos: photos,
+            createdBy: currentUser.firstName || "User",
+          });
+          console.log("✅ Manual entry saved online");
+          
+          // Also save to WatermelonDB for offline access
+          const healthEntriesCollection = database.collections.get('health_entries');
+          await database.write(async () => {
+            await healthEntriesCollection.create((entry: any) => {
+              entry.userId = userId;
+              entry.date = dateString;
+              entry.timestamp = timestamp;
+              entry.symptoms = symptoms;
+              entry.severity = parseInt(severity);
+              entry.notes = notes || '';
+              entry.photos = JSON.stringify(photos);
+              entry.type = 'manual_entry';
+              entry.isSynced = true; // Already synced
+              entry.createdBy = currentUser?.firstName || 'User';
+              // tie local to server to avoid future hydration duplicates
+              entry.convexId = newId;
+            });
+          });
+          console.log("✅ Entry also saved to WatermelonDB for offline access");
+        } catch (error) {
+          console.error("❌ Failed to save online:", error);
+          throw error;
+        }
+      } else if (!isOnline && userId) {
+        // OFFLINE with valid userId: Save to WatermelonDB for later sync
+        const healthEntriesCollection = database.collections.get('health_entries');
+        
+        await database.write(async () => {
+          await healthEntriesCollection.create((entry: any) => {
+            entry.userId = userId;
+            entry.date = dateString;
+            entry.timestamp = timestamp;
+            entry.symptoms = symptoms;
+            entry.severity = parseInt(severity);
+            entry.notes = notes || '';
+            entry.photos = JSON.stringify([...photos, ...localPhotoUris]);
+            entry.type = 'manual_entry';
+            entry.isSynced = false; // Mark for sync when online
+            entry.createdBy = currentUser?.firstName || 'User';
+          });
         });
+        
+        console.log("📴 Entry saved offline, will sync when online");
+      } else {
+        // No userId available - can't save
+        console.error("❌ Cannot save entry: No user ID available");
+        setAlertModalTitle("Error");
+        setAlertModalMessage("Cannot save entry. Please sign in first.");
+        setAlertModalButtons([
+          {
+            label: "OK",
+            onPress: () => setAlertModalVisible(false),
+            variant: "primary",
+          },
+        ]);
+        setAlertModalVisible(true);
+        return;
       }
 
       setShowSuccessModal(true);

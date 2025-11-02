@@ -4,13 +4,14 @@ import { date, field, readonly } from '@nozbe/watermelondb/decorators';
 export default class Reminder extends Model {
   static table = 'reminders';
 
-  @field('user_id') userId!: string;
-  @field('reminder_id') reminderId!: string;
+  // Use camelCase columns (v7+); legacy snake_case columns remain in DB for back-compat
+  @field('userId') userId!: string;
+  @field('reminderId') reminderId!: string;
   @field('enabled') enabled!: boolean;
   @field('frequency') frequency!: string; // 'hourly' | 'daily' | 'weekly'
   @field('time') time?: string | null; // HH:mm
-  @field('day_of_week') dayOfWeek?: string | null; // Mon..Sun
+  @field('dayOfWeek') dayOfWeek?: string | null; // Mon..Sun
 
-  @readonly @date('created_at') createdAt!: Date;
-  @readonly @date('updated_at') updatedAt!: Date;
+  @readonly @date('createdAt') createdAt!: Date;
+  @readonly @date('updatedAt') updatedAt!: Date;
 }

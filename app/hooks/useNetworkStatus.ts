@@ -1,4 +1,4 @@
-import NetInfo from '@react-native-community/netinfo';
+import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { useEffect, useState } from 'react';
 
 export function useNetworkStatus() {
@@ -6,15 +6,23 @@ export function useNetworkStatus() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
+    // Helper: decide online using both flags when available
+    const computeOnline = (state: NetInfoState) => {
+      const connected = state.isConnected ?? false;
+      // Treat explicitly false as offline; null/undefined means unknown => assume offline
+      const reachable = state.isInternetReachable === true;
+      return connected && reachable;
+    };
+
     // Subscribe to network state changes
     const unsubscribe = NetInfo.addEventListener(state => {
-      setIsOnline(state.isConnected ?? false);
+      setIsOnline(computeOnline(state));
       setIsChecking(false);
     });
 
     // Initial check
     NetInfo.fetch().then(state => {
-      setIsOnline(state.isConnected ?? false);
+      setIsOnline(computeOnline(state));
       setIsChecking(false);
     });
 

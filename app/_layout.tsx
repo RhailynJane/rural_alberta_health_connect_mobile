@@ -1,5 +1,5 @@
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { DatabaseProvider } from '@nozbe/watermelondb/react';
+import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { ConvexReactClient } from "convex/react";
 import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
@@ -10,9 +10,11 @@ import { database } from '../watermelon/database';
 import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
+import { NotificationProvider } from "./components/NotificationContext";
+import { SyncProvider } from "./components/SyncProvider";
 import {
-    configureForegroundNotifications,
-    setupNotificationListeners,
+  configureForegroundNotifications,
+  setupNotificationListeners,
 } from "./utils/pushNotifications";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -110,32 +112,36 @@ export default function RootLayout() {
     <DatabaseProvider database={database}>
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
-          <SignUpFormProvider>
-            <SafeAreaProvider>
-              {/* In-app notification banner */}
-              {notificationBanner && (
-                <NotificationBanner
-                  title={notificationBanner.title}
-                  body={notificationBanner.body}
-                  onDismiss={() => setNotificationBanner(null)}
-                  onPress={() => {
-                    setNotificationBanner(null);
-                    // Handle navigation based on notification type
-                  }}
-                />
-              )}
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="index" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="auth/signin" />
-                <Stack.Screen name="auth/signup" />
-                <Stack.Screen name="auth/personal-info" />
-                <Stack.Screen name="auth/emergency-contact" />
-                <Stack.Screen name="auth/medical-history" />
-                <Stack.Screen name="(tabs)" />
-              </Stack>
-            </SafeAreaProvider>
-          </SignUpFormProvider>
+          <SyncProvider>
+            <NotificationProvider>
+              <SignUpFormProvider>
+                <SafeAreaProvider>
+                  {/* In-app notification banner */}
+                  {notificationBanner && (
+                    <NotificationBanner
+                      title={notificationBanner.title}
+                      body={notificationBanner.body}
+                      onDismiss={() => setNotificationBanner(null)}
+                      onPress={() => {
+                        setNotificationBanner(null);
+                        // Handle navigation based on notification type
+                      }}
+                    />
+                  )}
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="onboarding" />
+                    <Stack.Screen name="auth/signin" />
+                    <Stack.Screen name="auth/signup" />
+                    <Stack.Screen name="auth/personal-info" />
+                    <Stack.Screen name="auth/emergency-contact" />
+                    <Stack.Screen name="auth/medical-history" />
+                    <Stack.Screen name="(tabs)" />
+                  </Stack>
+                </SafeAreaProvider>
+              </SignUpFormProvider>
+            </NotificationProvider>
+          </SyncProvider>
         </ConvexAuthProvider>
       </SessionRefreshContext.Provider>
     </DatabaseProvider>

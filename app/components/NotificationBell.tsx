@@ -59,8 +59,8 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
       setUnread(false);
     });
 
-    // Reduced interval - check every 2 minutes instead of 15 seconds
-    const interval = setInterval(checkReminder, 120000);
+    // Check more frequently - every 30 seconds to catch reminders quickly
+    const interval = setInterval(checkReminder, 30000);
 
     return () => {
       clearInterval(interval);

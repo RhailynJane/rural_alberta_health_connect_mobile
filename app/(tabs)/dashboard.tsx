@@ -6,7 +6,6 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ActivityIndicator,
     Linking,
     ScrollView,
     StyleSheet,
@@ -35,7 +34,7 @@ export default function Dashboard() {
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const [cachedUser, setCachedUser] = useState<any>(null);
   const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
-  const queryArgs = isAuthenticated && isOnline ? {} : "skip";
+  const queryArgs = isAuthenticated && !isLoading ? {} : "skip";
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -43,20 +42,20 @@ export default function Dashboard() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get current user data (only when online)
+  // Get current user data (allow offline access via cache)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
   
-  // Get reminder settings (only when online)
+  // Get reminder settings (allow offline access via cache)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !isLoading && isOnline ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
 
   // Get entries for the last 7 days to calculate health score
   const getLast7DaysDateRange = () => {
     const today = new Date();
     const startDate = new Date(today);
-    startDate.setDate(today.getDate() - 7);
+    startDate.setDate(today.getDate() - 6); // Changed from -7 to -6 to include today (7 days total)
     startDate.setHours(0, 0, 0, 0);
 
     const endDate = new Date(today);
@@ -196,75 +195,12 @@ export default function Dashboard() {
     }
   }, [weeklyHealthScore, weeklyEntries]);
 
-  // Skip loading check if offline - go straight to rendering with offline mode
-  if (!isOnline) {
-    // Offline mode - render dashboard with empty/cached data
-    const userName = user?.firstName || "User";
-    const userEmail = user?.email || "";
-    
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <CurvedBackground style={{ flex: 1 }}>
-          {/* Due reminder banner (offline-capable) */}
-          <DueReminderBanner topOffset={120} />
-          {/* Offline Banner */}
-          <OfflineBanner />
-          
-          {/* Fixed Header */}
-          <CurvedHeader
-            title="Alberta Health Connect"
-            height={150}
-            showLogo={true}
-            screenType="signin"
-            bottomSpacing={0}
-            showNotificationBell={false}
-            reminderEnabled={false}
-            reminderSettings={null}
-          />
+  // Use displayUser and cached data for offline support
+  const userName = displayUser?.firstName || user?.firstName || "User";
+  const userEmail = displayUser?.email || user?.email || "";
 
-          {/* Content Area */}
-          <View style={styles.contentArea}>
-            <ScrollView
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.contentSection}>
-                {/* Welcome Section */}
-                <View style={styles.welcomeContainer}>
-                  <Text
-                    style={[
-                      styles.welcomeText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Welcome, {userName}!
-                  </Text>
-                  <Text style={[styles.offlineNotice, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    📴 You&apos;re currently offline. Some features may be limited.
-                  </Text>
-                </View>
-
-                {/* Offline message */}
-                <View style={styles.offlineCard}>
-                  <Text style={[styles.offlineCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                    Offline Mode Active
-                  </Text>
-                  <Text style={[styles.offlineCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Connect to the internet to access all features and sync your data.
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* Bottom Navigation */}
-          <BottomNavigation />
-        </CurvedBackground>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading || (!isAuthenticated && user === undefined)) {
+  // Check if loading during initial auth
+  if (isLoading && !displayUser) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -281,27 +217,25 @@ export default function Dashboard() {
     );
   }
 
-  if (!isAuthenticated || user === null || user === undefined) {
+  // Check if not authenticated and no cached user
+  if (!isAuthenticated && !displayUser) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2A7DE1" />
           <Text
             style={[
               styles.loadingText,
               { fontFamily: FONTS.BarlowSemiCondensed },
             ]}
           >
-            Loading your dashboard...
+            Please log in to continue
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  // Use displayUser instead of user for offline support
-  const userName = displayUser?.firstName || user?.firstName || "User";
-  const userEmail = displayUser?.email || user?.email || "";
+
 
   const handleSymptomAssessment = (): void => {
     // Navigate to symptom assessment screen using Expo Router
@@ -461,8 +395,8 @@ export default function Dashboard() {
                   ]}
                 >
                   {weeklyEntries && weeklyEntries.length > 0
-                    ? `Based on ${weeklyEntries.length} entries this week`
-                    : "No entries this week"}
+                    ? `Based on ${weeklyEntries.length} ${weeklyEntries.length === 1 ? 'entry' : 'entries'} in last 7 days`
+                    : "No entries in last 7 days"}
                 </Text>
 
                 {/* Health Score Progress Bar - only show if there are entries */}

@@ -1,4 +1,3 @@
-import { useDatabase } from "@nozbe/watermelondb/react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -16,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -25,7 +25,7 @@ import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../uti
 
 export default function PersonalInfo() {
   const router = useRouter();
-  const database = useDatabase();
+  const database = useWatermelonDatabase();
   const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
@@ -314,59 +314,89 @@ export default function PersonalInfo() {
         );
 
         if (existingProfile) {
-          // Update existing profile
-          await existingProfile.update((profile: any) => {
-            profile.age = age;
-            profile.address1 = address1;
-            profile.address2 = address2;
-            profile.city = city;
-            profile.province = province;
-            profile.postalCode = postalCode;
-            profile.location = location;
-          });
+          // Update existing profile - per-field to avoid schema mismatch errors
+          const fullAddress = [address1, address2, city, province, postalCode]
+            .filter(Boolean)
+            .join(', ');
+          
+          const safeUpdate = async (setter: (p: any) => void) => {
+            try {
+              await existingProfile.update(setter);
+            } catch (e) {
+              console.warn('⚠️ Failed to update profile field:', e);
+            }
+          };
+
+          await safeUpdate((profile: any) => { profile.userId = currentUser._id; });
+          await safeUpdate((profile: any) => { profile.age = age; });
+          await safeUpdate((profile: any) => { profile.ageRange = age; });
+          await safeUpdate((profile: any) => { profile.address1 = address1; });
+          await safeUpdate((profile: any) => { profile.address2 = address2; });
+          await safeUpdate((profile: any) => { profile.city = city; });
+          await safeUpdate((profile: any) => { profile.province = province; });
+          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
+          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          
           console.log("✅ Personal Info - Updated existing local profile");
         } else {
-          // Create new profile
-          await userProfilesCollection.create((profile: any) => {
+          // Create new profile - create minimal record first, then update fields
+          const fullAddress = [address1, address2, city, province, postalCode]
+            .filter(Boolean)
+            .join(', ');
+          
+          const newProfile = await userProfilesCollection.create((profile: any) => {
+            // Only set required fields during creation
             profile.userId = currentUser._id;
-            profile.age = age;
-            profile.address1 = address1;
-            profile.address2 = address2;
-            profile.city = city;
-            profile.province = province;
-            profile.postalCode = postalCode;
-            profile.location = location;
             profile.onboardingCompleted = false;
           });
+          
+          // Then update optional fields one by one
+          const safeUpdate = async (setter: (p: any) => void) => {
+            try {
+              await newProfile.update(setter);
+            } catch (e) {
+              console.warn('⚠️ Failed to set profile field:', e);
+            }
+          };
+
+          await safeUpdate((profile: any) => { profile.age = age; });
+          await safeUpdate((profile: any) => { profile.ageRange = age; });
+          await safeUpdate((profile: any) => { profile.address1 = address1; });
+          await safeUpdate((profile: any) => { profile.address2 = address2; });
+          await safeUpdate((profile: any) => { profile.city = city; });
+          await safeUpdate((profile: any) => { profile.province = province; });
+          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
+          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          
           console.log("✅ Personal Info - Created new local profile");
         }
       });
 
       console.log("✅ Personal Info - Saved to local database");
 
-      // Then sync with Convex (online) - this will work when there's internet
-      try {
-        await updatePersonalInfo({ 
-          age,
-          address1,
-          address2,
-          city,
-          province,
-          postalCode,
-          location, 
-          onboardingCompleted: false 
-        });
+      // Navigate immediately after local save - don't wait for Convex sync
+      console.log("➡️ Navigating to emergency contact");
+      router.push("/auth/emergency-contact");
+
+      // Then sync with Convex (online) in the background - this will work when there's internet
+      // Don't await this - let it sync in the background
+      updatePersonalInfo({ 
+        age,
+        address1,
+        address2,
+        city,
+        province,
+        postalCode,
+        location, 
+        onboardingCompleted: false 
+      }).then(() => {
         console.log("✅ Personal Info - Synced with Convex");
-      } catch (syncError) {
+      }).catch((syncError) => {
         console.log(
           "⚠️ Personal Info - Saved locally, will sync when online:",
           syncError
         );
-        // Don't show error to user - data is saved locally
-      }
-
-      console.log("➡️ Navigating to emergency contact");
-      router.push("/auth/emergency-contact");
+      });
     } catch (error) {
       console.error("❌ Personal Info - Error:", error);
       setErrorModalMessage("Failed to save personal information. Please try again.");

@@ -10,11 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.amirzhou.rahcapp",
+      "bundleIdentifier": "com.rahc.app",
       "infoPlist": {
         "NSCameraUsageDescription": "$(PRODUCT_NAME) needs access to your Camera.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) needs access to your Microphone.",
         "NSUserNotificationUsageDescription": "We use notifications to remind you to complete your symptom assessment.",
+        "NSSpeechRecognitionUsageDescription": "$(PRODUCT_NAME) needs access to speech recognition for voice-based symptom input.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -27,7 +28,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.amirzhou.rahcapp",
+      "package": "com.rahc.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -107,55 +108,5 @@
       }
     },
     "owner": "rahcapp"
-  },
-  "cli": {
-    "version": ">= 16.17.4",
-    "appVersionSource": "remote"
-  },
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_ENV": "development",
-        "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud"
-      },
-      "android": {
-        "buildType": "apk"
-      },
-      "ios": {
-        "simulator": true
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_ENV": "preview",
-        "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud"
-      },
-      "android": {
-        "buildType": "apk"
-      },
-      "ios": {
-        "simulator": true
-      }
-    },
-    "production": {
-      "autoIncrement": true,
-      "distribution": "store",
-      "env": {
-        "EXPO_PUBLIC_ENV": "production",
-        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud"
-      },
-      "android": {
-        "buildType": "app-bundle"
-      },
-      "ios": {
-        "enterpriseProvisioning": "universal"
-      }
-    }
-  },
-  "submit": {
-    "production": {}
   }
 }

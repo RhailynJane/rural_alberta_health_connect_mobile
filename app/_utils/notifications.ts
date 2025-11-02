@@ -8,15 +8,48 @@ const BELL_UNREAD_KEY = "notificationBellUnread";
 const BELL_READ_NOT_CLEARED_KEY = "notificationBellReadNotCleared";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
+const REMINDER_HISTORY_KEY = "symptomReminderHistory"; // array of { id, title, body, createdAt, read }
 // Android heads-up reminder channel
 const REMINDER_CHANNEL_ID = "reminders-high";
 // Per-user namespace for AsyncStorage keys to avoid cross-user leakage on the same device
 let USER_NS: string | null = null;
+const USER_NS_KEY = "reminderUserNsV1";
 export function setReminderUserKey(ns: string | null) {
   USER_NS = (ns && String(ns).trim().length > 0) ? String(ns) : null;
+  // Persist active namespace so other screens (that don't load Profile first) can adopt it
+  try {
+    if (USER_NS) AsyncStorage.setItem(USER_NS_KEY, USER_NS);
+    else AsyncStorage.removeItem(USER_NS_KEY);
+  } catch {}
 }
 function nk(key: string): string { return USER_NS ? `${USER_NS}:${key}` : key; }
 let handlerInitialized = false;
+
+// Ensure we use a stable per-user namespace when available and migrate legacy non-namespaced keys
+async function ensureUserNamespace() {
+  try {
+    if (!USER_NS) {
+      // First, adopt persisted namespace if available (set during prior sessions or by Profile/App Settings)
+      const savedNs = await AsyncStorage.getItem(USER_NS_KEY);
+      if (savedNs && savedNs.trim().length > 0) {
+        USER_NS = savedNs.trim();
+        return;
+      }
+      // Fallback: try to infer from cached user (set by profile page)
+      const cachedUserRaw = await AsyncStorage.getItem("@profile_user");
+      if (cachedUserRaw) {
+        try {
+          const cachedUser = JSON.parse(cachedUserRaw);
+          const uid = String(cachedUser?._id || cachedUser?.id || "").trim();
+          if (uid) {
+            USER_NS = uid;
+            try { await AsyncStorage.setItem(USER_NS_KEY, uid); } catch {}
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+}
 
 // Convex sync callback - set by the app component that has access to useMutation
 let convexSyncCallback: ((reminders: ReminderItem[]) => Promise<void>) | null = null;
@@ -51,6 +84,7 @@ function genId(): string {
 }
 
 export async function getReminders(): Promise<ReminderItem[]> {
+  await ensureUserNamespace();
   try {
     const raw = await AsyncStorage.getItem(nk(REMINDERS_KEY));
     if (!raw) return [];
@@ -63,6 +97,7 @@ export async function getReminders(): Promise<ReminderItem[]> {
 }
 
 async function saveReminders(list: ReminderItem[]): Promise<void> {
+  await ensureUserNamespace();
   try { await AsyncStorage.setItem(nk(REMINDERS_KEY), JSON.stringify(list)); } catch {}
   // Mirror to WatermelonDB for offline/local queries
   try { await syncRemindersToWatermelon(list); } catch {}
@@ -126,6 +161,9 @@ export async function initializeNotificationsOnce() {
   if (handlerInitialized) return;
   handlerInitialized = true;
 
+  // Adopt per-user namespace as early as possible so all screens use the same keys
+  try { await ensureUserNamespace(); } catch {}
+
   const Notifications = await getNotificationsModule();
   if (typeof (Notifications as any).setNotificationHandler === 'function') {
     (Notifications as any).setNotificationHandler({
@@ -155,7 +193,49 @@ export async function initializeNotificationsOnce() {
         if (isReminder) {
           try { await setBellUnread(true); } catch {}
           NotificationBellEvent.emit('due');
+          // Append to local reminder history so the Notifications screen can show all previous reminders
+          try {
+            const title = notification?.request?.content?.title || 'Symptom Assessment Reminder';
+            const body = notification?.request?.content?.body || "It's time to complete your symptoms check.";
+            const deliveredAt = typeof (notification as any)?.date === 'number' ? (notification as any).date : Date.now();
+            const notifId = `${notification?.request?.identifier || 'reminder'}-${deliveredAt}`;
+            await appendReminderHistory({
+              id: notifId,
+              title,
+              body,
+              createdAt: deliveredAt,
+              read: false,
+            });
+          } catch {}
         }
+      });
+    }
+  } catch {}
+
+  // Capture when user taps a delivered notification while the app is backgrounded/cold-started
+  try {
+    if (typeof (Notifications as any).addNotificationResponseReceivedListener === 'function') {
+      (Notifications as any).addNotificationResponseReceivedListener(async (response: any) => {
+        try {
+          const n = response?.notification;
+          const type = n?.request?.content?.data?.type;
+          const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
+          if (!isReminder) return;
+          const deliveredAt = typeof (n as any)?.date === 'number' ? (n as any).date : Date.now();
+          const id = `${n?.request?.identifier || 'reminder'}-${deliveredAt}`;
+          // Ensure the tapped notification exists in history (deduped) then mark it as read
+          await appendReminderHistory({
+            id,
+            title: n?.request?.content?.title || 'Symptom Assessment Reminder',
+            body: n?.request?.content?.body || "It's time to complete your symptoms check.",
+            createdAt: deliveredAt,
+            read: false,
+          });
+          try { await markReminderHistoryItemRead(id); } catch {}
+          // Clear bell unread state since user interacted with the notification
+          try { await setBellUnread(false); } catch {}
+          NotificationBellEvent.emit('read');
+        } catch {}
       });
     }
   } catch {}
@@ -225,6 +305,7 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 export async function cancelSymptomReminder() {
+  await ensureUserNamespace();
   const Notifications = await getNotificationsModule();
   const existingId = await AsyncStorage.getItem(nk(STORAGE_KEY));
   if (existingId) {
@@ -304,6 +385,7 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
       repeats: true,
       channelId: REMINDER_CHANNEL_ID,
     } as any;
+    // response listener is registered in initializeNotificationsOnce()
   }
 
   if (typeof (Notifications as any).scheduleNotificationAsync !== 'function') {
@@ -376,6 +458,7 @@ export async function getSymptomReminderDetails(): Promise<{
 
 // Bell unread helpers
 export async function setBellUnread(unread: boolean): Promise<void> {
+  await ensureUserNamespace();
   try {
     const prev = await AsyncStorage.getItem(nk(BELL_UNREAD_KEY));
     const prevBool = prev === "1";
@@ -395,6 +478,7 @@ export async function setBellUnread(unread: boolean): Promise<void> {
 }
 
 export async function isBellUnread(): Promise<boolean> {
+  await ensureUserNamespace();
   try {
     const v = await AsyncStorage.getItem(nk(BELL_UNREAD_KEY));
     return v === "1";
@@ -404,6 +488,7 @@ export async function isBellUnread(): Promise<boolean> {
 }
 
 export async function isBellReadNotCleared(): Promise<boolean> {
+  await ensureUserNamespace();
   try {
     const v = await AsyncStorage.getItem(nk(BELL_READ_NOT_CLEARED_KEY));
     return v === "1";
@@ -413,6 +498,7 @@ export async function isBellReadNotCleared(): Promise<boolean> {
 }
 
 export async function markBellRead(): Promise<void> {
+  await ensureUserNamespace();
   await setBellUnread(false);
   // Mark as read but not cleared
   try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "1"); } catch {}
@@ -422,9 +508,292 @@ export async function markBellRead(): Promise<void> {
 }
 
 export async function clearBellNotification(): Promise<void> {
+  await ensureUserNamespace();
   await setBellUnread(false);
   try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "0"); } catch {}
 }
+
+// --- Reminder history helpers -------------------------------------------------
+type ReminderHistoryItem = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: number; // epoch ms
+  read: boolean;
+};
+
+async function loadReminderHistory(): Promise<ReminderHistoryItem[]> {
+  await ensureUserNamespace();
+  try {
+    const currentKey = nk(REMINDER_HISTORY_KEY);
+    const rawCurrent = await AsyncStorage.getItem(currentKey);
+    let main: ReminderHistoryItem[] = [];
+    if (rawCurrent) {
+      try {
+        const arr = JSON.parse(rawCurrent);
+        if (Array.isArray(arr)) main = arr as ReminderHistoryItem[];
+      } catch {}
+    }
+    // If we have a user namespace, merge any legacy non-namespaced data
+    if (USER_NS) {
+      const rawLegacy = await AsyncStorage.getItem(REMINDER_HISTORY_KEY);
+      if (rawLegacy) {
+        try {
+          const legacyArr = JSON.parse(rawLegacy);
+          if (Array.isArray(legacyArr)) {
+            // Merge, preferring read=true when duplicate ids found
+            const byId: Record<string, ReminderHistoryItem> = {};
+            for (const it of [...main, ...legacyArr]) {
+              const ex = byId[it.id];
+              if (!ex) byId[it.id] = it;
+              else if (!ex.read && it.read) byId[it.id] = { ...it, read: true };
+              else if (ex.read === it.read) {
+                // Keep the newer createdAt for stability
+                byId[it.id] = ex.createdAt >= it.createdAt ? ex : it;
+              }
+            }
+            main = Object.values(byId);
+            // Migrate: write merged to namespaced key and remove legacy key
+            try { await AsyncStorage.setItem(currentKey, JSON.stringify(main.slice(-100))); } catch {}
+            try { await AsyncStorage.removeItem(REMINDER_HISTORY_KEY); } catch {}
+            console.log(`🧹 [loadReminderHistory] Migrated legacy reminder history to namespaced key for user ${USER_NS}`);
+          }
+        } catch {}
+      }
+    }
+    console.log(`🧹 [loadReminderHistory] Loaded ${main.length} notifications from storage:`, main.map((item: any) => ({ id: item.id, read: item.read, time: new Date(item.createdAt).toLocaleTimeString() })));
+    return main;
+  } catch (err) {
+    console.error(`🧹 [loadReminderHistory] Error loading history:`, err);
+  }
+  return [];
+}
+
+async function saveReminderHistory(list: ReminderHistoryItem[]) {
+  await ensureUserNamespace();
+  // Ensure we always save to the correct (possibly namespaced) key
+  try { await AsyncStorage.setItem(nk(REMINDER_HISTORY_KEY), JSON.stringify(list.slice(-100))); } catch {}
+  // If we have a namespace, also remove legacy key to avoid divergence
+  if (USER_NS) {
+    try { await AsyncStorage.removeItem(REMINDER_HISTORY_KEY); } catch {}
+  }
+}
+
+async function appendReminderHistory(item: ReminderHistoryItem) {
+  console.log(`📝 [appendReminderHistory] Adding new notification:`, { id: item.id, title: item.title, read: item.read, time: new Date(item.createdAt).toLocaleTimeString() });
+  const list = await loadReminderHistory();
+  console.log(`📝 [appendReminderHistory] Current history before append:`, list.map(r => ({ id: r.id, read: r.read, time: new Date(r.createdAt).toLocaleTimeString() })));
+  // De-dupe by id: if an entry already exists, do NOT create another copy.
+  // Preserve existing read status (especially if user already marked it as read).
+  const existingIdx = list.findIndex(r => r.id === item.id);
+  if (existingIdx !== -1) {
+    const existing = list[existingIdx];
+    // Merge title/body if missing on existing, but never downgrade read=true to false
+    list[existingIdx] = {
+      ...existing,
+      title: existing.title || item.title,
+      body: existing.body || item.body,
+      createdAt: existing.createdAt || item.createdAt,
+      read: existing.read || item.read,
+    };
+    await saveReminderHistory(list);
+    console.log(`📝 [appendReminderHistory] Skipped duplicate; preserved existing item`, { id: item.id, read: list[existingIdx].read });
+    return;
+  }
+  list.push(item);
+  await saveReminderHistory(list);
+  console.log(`📝 [appendReminderHistory] History after append:`, list.map(r => ({ id: r.id, read: r.read, time: new Date(r.createdAt).toLocaleTimeString() })));
+}
+
+export async function getReminderHistory(): Promise<ReminderHistoryItem[]> {
+  const list = await loadReminderHistory();
+  console.log(`📚 [getReminderHistory] Loaded ${list.length} items before sorting/dedup`);
+  // newest first
+  const sorted = list.sort((a, b) => b.createdAt - a.createdAt);
+  // Deduplicate by id, preferring a version marked read=true if present among duplicates
+  const byId: Record<string, ReminderHistoryItem> = {};
+  for (const it of sorted) {
+    const existing = byId[it.id];
+    if (!existing) {
+      byId[it.id] = it;
+    } else if (!existing.read && it.read) {
+      // Upgrade to read=true if any duplicate has been read
+      byId[it.id] = { ...it, read: true };
+    }
+  }
+  const deduped = Object.values(byId).sort((a, b) => b.createdAt - a.createdAt);
+  console.log(`📚 [getReminderHistory] Returning ${deduped.length} sorted+deduped items:`, deduped.map(r => ({ id: r.id, read: r.read, time: new Date(r.createdAt).toLocaleTimeString() })));
+  return deduped;
+}
+
+export async function markReminderHistoryAllRead(): Promise<void> {
+  const list = await loadReminderHistory();
+  if (list.length === 0) return;
+  for (const it of list) it.read = true;
+  await saveReminderHistory(list);
+}
+
+export async function markLatestReminderHistoryRead(): Promise<void> {
+  const list = await loadReminderHistory();
+  if (list.length === 0) return;
+  // mark most recent item as read
+  const newestIndex = list.reduce((idx, it, i, arr) => (it.createdAt > arr[idx].createdAt ? i : idx), 0);
+  list[newestIndex].read = true;
+  await saveReminderHistory(list);
+}
+
+// Mark a specific reminder history item as read by id
+export async function markReminderHistoryItemRead(id: string): Promise<void> {
+  console.log(`📖 [markReminderHistoryItemRead] Marking notification as read:`, id);
+  const list = await loadReminderHistory();
+  console.log(`📖 [markReminderHistoryItemRead] Current history before update:`, list.map(r => ({ id: r.id, read: r.read, time: new Date(r.createdAt).toLocaleTimeString() })));
+  let changed = false;
+  for (const it of list) {
+    if (it.id === id && !it.read) {
+      it.read = true;
+      changed = true;
+      console.log(`📖 [markReminderHistoryItemRead] Marked as read:`, { id: it.id, time: new Date(it.createdAt).toLocaleTimeString() });
+    }
+  }
+  if (changed) {
+    await saveReminderHistory(list);
+    console.log(`📖 [markReminderHistoryItemRead] Saved updated history`);
+  } else {
+    console.log(`📖 [markReminderHistoryItemRead] No changes made - item already read or not found`);
+  }
+}
+
+// Clear all locally stored reminder history and dismiss delivered notifications
+export async function clearReminderHistory(): Promise<void> {
+  await ensureUserNamespace();
+  try {
+    await AsyncStorage.removeItem(nk(REMINDER_HISTORY_KEY));
+  } catch {}
+  // Also clear bell state so UI reflects empty state
+  try { await setBellUnread(false); } catch {}
+  try { await AsyncStorage.setItem(nk(BELL_READ_NOT_CLEARED_KEY), "0"); } catch {}
+  // Mark the current time as "last read" so checkAndUpdateReminderDue doesn't recreate old entries
+  try { 
+    await AsyncStorage.setItem(nk(LAST_READ_DATE_KEY), new Date().toISOString());
+    console.log(`📅 [clearReminderHistory] Updated last read date to now - preventing recreation of old notifications`);
+  } catch {}
+  // Best-effort: dismiss delivered notifications from tray
+  try { await dismissAllNotifications(); } catch {}
+}
+
+// Clear notification history entries for a specific reminder
+export async function clearReminderHistoryForReminder(reminderId: string): Promise<void> {
+  await ensureUserNamespace();
+  try {
+    const list = await loadReminderHistory();
+    // Filter out any notification with ID containing this reminder ID
+    // Format is: occ-{reminderId}-{timestamp} or {identifier}-{timestamp}
+    const filtered = list.filter(item => !item.id.includes(reminderId));
+    const removedCount = list.length - filtered.length;
+    if (removedCount > 0) {
+      await saveReminderHistory(filtered);
+      console.log(`🗑️ [clearReminderHistoryForReminder] Removed ${removedCount} notification(s) for reminder ${reminderId}`);
+    }
+  } catch (err) {
+    console.error(`🗑️ [clearReminderHistoryForReminder] Error:`, err);
+  }
+}
+
+// Ingest delivered notifications still sitting in the tray (e.g., after app cold start)
+export async function harvestDeliveredReminderNotifications(): Promise<number> {
+  await ensureUserNamespace();
+  const Notifications = await getNotificationsModule();
+  if (typeof (Notifications as any).getDeliveredNotificationsAsync !== 'function') return 0;
+  try {
+    const delivered = await (Notifications as any).getDeliveredNotificationsAsync();
+    const list = await loadReminderHistory();
+    let added = 0;
+    for (const d of delivered || []) {
+      const type = d?.request?.content?.data?.type;
+      const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
+      if (!isReminder) continue;
+      const deliveredAt = typeof d?.date === 'number' ? d.date : Date.now();
+      const id = `${d?.request?.identifier || 'reminder'}-${deliveredAt}`;
+      // De-dupe by the stable id (identifier + time) rather than bare identifier
+      if (!list.find((x) => x.id === id)) {
+        list.push({
+          id,
+          title: d?.request?.content?.title || 'Symptom Assessment Reminder',
+          body: d?.request?.content?.body || "It's time to complete your symptoms check.",
+          createdAt: deliveredAt,
+          read: false,
+        });
+        added++;
+      }
+    }
+    if (added > 0) await saveReminderHistory(list);
+    return added;
+  } catch {
+    return 0;
+  }
+}
+
+// Backfill synthetic history entries for recent occurrences based on schedule.
+// This helps users see a short list of previous reminders even if the OS replaced old notifications.
+// 
+// ⚠️ DISABLED: This function creates synthetic notifications with hardcoded read: false,
+// causing bugs where previously read notifications reappear as unread.
+// Real notifications are now properly tracked by the notification listener.
+/*
+export async function backfillReminderHistory(maxDaysBack: number = 2, maxWeeksBack: number = 1): Promise<number> {
+  const reminders = (await getReminders()).filter(r => r.enabled && r.frequency !== 'hourly');
+  if (reminders.length === 0) return 0;
+  const now = new Date();
+  const history = await loadReminderHistory();
+  let added = 0;
+
+  const ensureEntry = (id: string, whenMs: number) => {
+    if (!history.find(h => h.id === id)) {
+      history.push({
+        id,
+        title: 'Symptom Assessment Reminder',
+        body: "It's time to complete your symptoms check.",
+        createdAt: whenMs,
+        read: false,
+      });
+      added++;
+    }
+  };
+
+  for (const r of reminders) {
+    if (r.frequency === 'daily') {
+      if (!r.time) continue;
+      const { hour, minute } = parseTimeToHourMinute(r.time);
+      for (let i = 0; i <= Math.max(0, maxDaysBack); i++) {
+        const d = new Date(now);
+        d.setHours(hour, minute, 0, 0);
+        d.setDate(d.getDate() - i);
+        if (d.getTime() <= now.getTime()) {
+          ensureEntry(`occ-${r.id}-${d.getTime()}`, d.getTime());
+        }
+      }
+    } else if (r.frequency === 'weekly') {
+      if (!r.time) continue;
+      const { hour, minute } = parseTimeToHourMinute(r.time);
+      const targetWeekday = weekdayStringToNumber(r.dayOfWeek);
+      // current week and previous few weeks
+      for (let w = 0; w <= Math.max(0, maxWeeksBack); w++) {
+        const d = new Date(now);
+        d.setHours(hour, minute, 0, 0);
+        // Set to target weekday of current week, then subtract weeks
+        const today = now.getDay() + 1;
+        const diff = targetWeekday - today;
+        d.setDate(d.getDate() + diff - w * 7);
+        if (d.getTime() <= now.getTime()) {
+          ensureEntry(`occ-${r.id}-${d.getTime()}`, d.getTime());
+        }
+      }
+    }
+  }
+  if (added > 0) await saveReminderHistory(history);
+  return added;
+}
+*/
 
 // Legacy helper no longer used; kept for reference
 // function hasReadTodaysNotification(reminderTime: string): Promise<boolean> { return Promise.resolve(false); }
@@ -453,6 +822,7 @@ export async function checkAndUpdateReminderDue(settings: ReminderSettings | nul
 }
 
 export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promise<boolean> {
+  await ensureUserNamespace();
   // Ignore deprecated 'hourly' reminders entirely for due logic
   const reminders = (list ?? (await getReminders()))
     .filter(r => r.enabled)
@@ -508,13 +878,15 @@ export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promi
   };
 
   let anyDue = false;
-  const NOTIFICATION_WINDOW_MS = 60 * 60 * 1000; // 1 hour window after scheduled time
+  // Track due occurrences so we can persist a history entry even if the OS replaced tray notifications
+  const dueOccurrences: { id: string; createdAt: number; title: string; body: string }[] = [];
+  const NOTIFICATION_WINDOW_MS = 5 * 60 * 1000; // 5 minute window after scheduled time (reduced from 1 hour to avoid showing old notifications)
   
   for (const r of reminders) {
     const occ = latestOccurrence(r);
     if (!occ) continue;
     
-    // Check if we're within the notification window (scheduled time to 1 hour after)
+    // Check if we're within the notification window (scheduled time to 5 minutes after)
     const timeSinceOccurrence = now.getTime() - occ.getTime();
     const isWithinWindow = timeSinceOccurrence >= 0 && timeSinceOccurrence <= NOTIFICATION_WINDOW_MS;
     
@@ -522,12 +894,40 @@ export async function checkAndUpdateAnyReminderDue(list?: ReminderItem[]): Promi
       // If never read or last read is before this occurrence -> due
       if (!lastRead || lastRead < occ) {
         anyDue = true;
-        break;
+        // Prepare a stable history id for this occurrence so it doesn't get overwritten by the OS
+        dueOccurrences.push({
+          id: `occ-${r.id}-${occ.getTime()}`,
+          createdAt: occ.getTime(),
+          title: 'Symptom Assessment Reminder',
+          body: "It's time to complete your symptoms check.",
+        });
+        // Don't break - check all reminders to add all due occurrences
       }
     }
   }
 
   await setBellUnread(anyDue);
+
+  // Persist due occurrences into local reminder history if missing,
+  // so the Notifications screen shows a list even when the tray only keeps the latest
+  if (dueOccurrences.length > 0) {
+    try {
+      const history = await loadReminderHistory();
+      let changed = false;
+      for (const occ of dueOccurrences) {
+        const existing = history.find(h => h.id === occ.id);
+        if (!existing) {
+          // Only add if it doesn't exist - preserve read status if it does
+          history.push({ id: occ.id, title: occ.title, body: occ.body, createdAt: occ.createdAt, read: false });
+          changed = true;
+          console.log(`➕ [checkAndUpdateReminderDue] Added new due occurrence:`, { id: occ.id, time: new Date(occ.createdAt).toLocaleTimeString() });
+        } else {
+          console.log(`✅ [checkAndUpdateReminderDue] Occurrence already exists, preserving read status:`, { id: occ.id, read: existing.read, time: new Date(occ.createdAt).toLocaleTimeString() });
+        }
+      }
+      if (changed) await saveReminderHistory(history);
+    } catch {}
+  }
   return anyDue;
 }
 
@@ -613,22 +1013,25 @@ async function syncRemindersToWatermelon(list: ReminderItem[]) {
   try {
     await (database as any).write(async () => {
       const collection = (database as any).get('reminders');
-      // Remove existing rows for this user
-      const existing = await collection.query(Q.where('user_id', userId)).fetch();
-      for (const row of existing) {
+      // Remove existing rows for this user (both legacy snake_case and new camelCase)
+      const existingCamel = await collection.query(Q.where('userId', userId)).fetch();
+      for (const row of existingCamel) {
         await row.destroyPermanently();
       }
-      // Insert current list
+      const existingSnake = await collection.query(Q.where('user_id', userId)).fetch();
+      for (const row of existingSnake) {
+        await row.destroyPermanently();
+      }
+      // Insert current list using camelCase columns (v7+)
       for (const r of list) {
         await collection.create((rec: any) => {
-          rec.user_id = userId;
-          rec.reminder_id = r.id;
+          rec.userId = userId;
+          rec.reminderId = r.id;
           rec.enabled = !!r.enabled;
           rec.frequency = r.frequency;
           rec.time = r.time || null;
-          rec.day_of_week = r.dayOfWeek || null;
-          rec.created_at = new Date(r.createdAt).getTime();
-          rec.updated_at = new Date(r.updatedAt).getTime();
+          rec.dayOfWeek = r.dayOfWeek || null;
+          // createdAt and updatedAt are @readonly and set automatically by WatermelonDB
         });
       }
     });

@@ -1,15 +1,15 @@
  
 import { Q } from "@nozbe/watermelondb";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -188,7 +188,8 @@ const styles = StyleSheet.create({
 export default function DailyLog() {
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
-  const currentUser = useQuery(api.users.getCurrentUser, isOnline ? {} : "skip");
+  const { isAuthenticated } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
   const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
 
@@ -212,28 +213,38 @@ export default function DailyLog() {
 
   // Offline query from WatermelonDB
   useEffect(() => {
-    if (!isOnline) {
+    const userId = currentUser?._id;
+    
+    if (!isOnline && userId) {
       const fetchOfflineEntries = async () => {
         try {
           const collection = database.get("health_entries");
           const entries = await collection
             .query(
-              Q.where("local_date", todayLocalDate),
+              Q.where('userId', userId),
+              Q.where("date", todayLocalDate),
               Q.sortBy("timestamp", Q.desc)
             )
             .fetch();
 
+          console.log(`🔍 [OFFLINE DAILY LOG] Fetched ${entries.length} entries for date ${todayLocalDate}`);
+          
           // Map WatermelonDB entries to match Convex format
-          const mapped = entries.map((entry: any) => ({
-            _id: entry.id,
-            symptoms: entry.symptoms || "",
-            severity: entry.severity || 0,
-            category: entry.category || "",
-            notes: entry.notes || "",
-            timestamp: entry.timestamp || Date.now(),
-            createdBy: entry.createdBy || "User",
-            type: entry.type || "manual_entry",
-          }));
+          const mapped = entries.map((entry: any) => {
+            console.log(`📝 [OFFLINE ENTRY] id: ${entry.id}, type: ${entry.type}, symptoms: ${entry.symptoms?.substring(0, 30)}`);
+            return {
+              _id: entry.id,
+              symptoms: entry.symptoms || "",
+              severity: entry.severity || 0,
+              category: entry.category || "",
+              notes: entry.notes || "",
+              timestamp: entry.timestamp || Date.now(),
+              createdBy: entry.createdBy || "User",
+              type: entry.type || "manual_entry",
+            };
+          });
+          
+          console.log(`✅ [OFFLINE DAILY LOG] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
           setOfflineEntries(mapped);
         } catch (error) {
           console.error("Error fetching offline entries:", error);
@@ -241,14 +252,116 @@ export default function DailyLog() {
         }
       };
       fetchOfflineEntries();
+    } else if (!isOnline && !userId) {
+      // If offline but no user ID, show empty
+      setOfflineEntries([]);
     }
-  }, [isOnline, todayLocalDate, database]);
+  }, [isOnline, todayLocalDate, database, currentUser?._id]);
 
-  // Use online or offline data
-  const todaysEntries = useMemo(
-    () => (isOnline ? todaysEntriesOnline : offlineEntries),
-    [isOnline, todaysEntriesOnline, offlineEntries]
-  );
+  // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
+  const todaysEntries = useMemo(() => {
+    const base = isOnline ? todaysEntriesOnline : offlineEntries;
+    if (!Array.isArray(base)) return base;
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const eRaw of base as any[]) {
+      const e = eRaw || {};
+      const key = (e as any).convexId || `${(e as any).timestamp || '0'}_${(e as any).type || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
+    return out;
+  }, [isOnline, todaysEntriesOnline, offlineEntries]);
+
+  // Status log to ensure we can see state regardless of offline branch
+  useEffect(() => {
+    console.log(
+      "📈 [DAILY LOG STATUS] isOnline=",
+      isOnline,
+      " userId=",
+      currentUser?._id,
+      " onlineLen=",
+      Array.isArray(todaysEntriesOnline) ? todaysEntriesOnline.length : (todaysEntriesOnline === undefined ? 'undefined' : '0'),
+      " offlineLen=",
+      offlineEntries.length,
+      " date=",
+      todayLocalDate
+    );
+  }, [isOnline, currentUser?._id, todayLocalDate, todaysEntriesOnline, offlineEntries]);
+
+  // Hydrate WatermelonDB with online entries so they are available offline later
+  useEffect(() => {
+    const userId = currentUser?._id;
+    if (!isOnline || !userId || !Array.isArray(todaysEntriesOnline)) return;
+    const hydrate = async () => {
+      try {
+        const collection = database.get('health_entries');
+        for (const eRaw of todaysEntriesOnline as any[]) {
+          const e = eRaw as any;
+          if (!e || !e._id) {
+            console.warn('⚠️ [HYDRATE] Skipping invalid entry:', e);
+            continue;
+          }
+          try {
+            // Skip if already present by convexId
+            const existing = await collection.query(Q.where('convexId', e._id)).fetch();
+            if (existing.length > 0) continue;
+            // Try to match existing offline record by exact timestamp/user/date
+            const candidates = await collection
+              .query(
+                Q.where('userId', userId),
+                Q.where('date', todayLocalDate),
+                Q.where('timestamp', (e as any)?.timestamp || 0)
+              )
+              .fetch();
+            if (candidates.length > 0) {
+              // Update the first candidate to attach convexId and refresh fields
+              const match = candidates[0] as any;
+              await database.write(async () => {
+                await match.update((entry: any) => {
+                  entry.convexId = e._id;
+                  entry.isSynced = true;
+                  entry.type = (e as any)?.type || entry.type || 'manual_entry';
+                  entry.category = (e as any)?.category || entry.category || '';
+                  entry.notes = (e as any)?.notes || entry.notes || '';
+                  entry.createdBy = (e as any)?.createdBy || entry.createdBy || 'User';
+                  if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
+                  if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                });
+              });
+              console.log('🔗 [HYDRATE] Linked existing offline entry to server id:', e._id, (e as any)?.type);
+              continue;
+            }
+            await database.write(async () => {
+              await collection.create((entry: any) => {
+                entry.userId = userId;
+                entry.convexId = e._id;
+                entry.date = todayLocalDate;
+                entry.timestamp = (e as any)?.timestamp || Date.now();
+                entry.symptoms = (e as any)?.symptoms || '';
+                entry.severity = (e as any)?.severity ?? 0;
+                entry.category = (e as any)?.category || '';
+                entry.notes = (e as any)?.notes || '';
+                entry.createdBy = (e as any)?.createdBy || 'User';
+                entry.type = (e as any)?.type || 'manual_entry';
+                // photos and aiContext if available
+                if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
+                if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                entry.isSynced = true; // mirrors server state
+              });
+            });
+            console.log('💾 [HYDRATE] Mirrored online entry into WatermelonDB:', e._id, (e as any)?.type);
+          } catch (err) {
+            console.warn('⚠️ [HYDRATE] Failed to mirror entry', e?._id, err);
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ [HYDRATE] Could not hydrate local DB:', err);
+      }
+    };
+    hydrate();
+  }, [isOnline, currentUser?._id, todayLocalDate, todaysEntriesOnline, database]);
 
   // Filter entries based on search query (case-insensitive)
   const filteredEntries = todaysEntries?.filter((entry) => {

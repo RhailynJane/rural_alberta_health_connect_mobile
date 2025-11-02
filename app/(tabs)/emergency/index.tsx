@@ -3,15 +3,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -82,20 +82,20 @@ export default function Emergency() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
-  // Get location services status and emergency details (only when online)
+  // Get location services status and emergency details (allow offline access via cache)
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
-    isOnline ? undefined : "skip"
+    isAuthenticated && !authLoading ? {} : "skip"
   );
   const emergencyDetails = useQuery(
     api.locationServices.getEmergencyLocationDetails,
-    isOnline ? undefined : "skip"
+    isAuthenticated && !authLoading ? {} : "skip"
   );
   
-  // Get reminder settings (only when online)
+  // Get reminder settings (allow offline access via cache)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !authLoading && isOnline ? {} : "skip"
+    isAuthenticated && !authLoading ? {} : "skip"
   );
 
   // Mutation to toggle location services (only when online)

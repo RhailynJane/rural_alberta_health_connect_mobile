@@ -19,5 +19,11 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "**/*.js"
+  ],
+  "exclude": [
+    "node_modules/@rnmapbox/maps",
+    "node_modules/@react-native-community",
+    "node_modules/@shopify/react-native-skia",
+    "node_modules/expo-modules-core"
   ]
 }
