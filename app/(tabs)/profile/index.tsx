@@ -7,11 +7,11 @@ import { ConvexError } from "convex/values";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -1010,6 +1010,24 @@ export default function Profile() {
             </View>
             <Text style={styles.cardSubtitle}>
               Manage symptom assessment reminders and location services
+            </Text>
+          </TouchableOpacity>
+
+          {/* Help & Support - Navigation Card */}
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => router.push("/profile/help-support" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.cardHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Icon name="help-outline" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
+                <Text style={styles.cardTitle}>Help & Support</Text>
+              </View>
+              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
+            </View>
+            <Text style={styles.cardSubtitle}>
+              FAQs, user guide, feedback, and report issues
             </Text>
           </TouchableOpacity>
 
