@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Alberta Health Connect is a React Native mobile application designed to improve healthcare access in rural Alberta. The app features AI-powered triage, symptom assessment, health tracking, and on-device machine learning for visual analysis.
+Alberta Health Connect is a React Native mobile application designed to improve healthcare access in rural Alberta. The app features AI-powered triage, symptom assessment, health tracking, offline-first architecture with WatermelonDB, local notifications, and vision camera integration for symptom analysis.
 
 ## Development Commands
 
@@ -37,22 +37,25 @@ npx convex deploy      # Deploy backend to production
 ## Technical Architecture
 
 ### Frontend Stack
-- **Framework**: React Native 0.81.4 with Expo SDK 54
+- **Framework**: React Native 0.81.5 with Expo SDK 54
 - **Routing**: Expo Router (file-based) with typed routes enabled
-- **Language**: TypeScript with strict mode
-- **State Management**: Local state + Convex realtime subscriptions
+- **Language**: TypeScript (strict mode disabled, experimentalDecorators enabled)
+- **State Management**: Local state + Convex realtime subscriptions + WatermelonDB for offline
 - **UI**: Custom curved components with react-native-svg
 - **Form Handling**: Formik + Yup validation
-- **ML/AI**:
-  - TensorFlow Lite (`react-native-fast-tflite`) for on-device object detection
-  - ExecutorCH integration (`react-native-executorch`) for edge models
-  - COCO-SSD MobileNetV1 model for vision tasks
+- **Offline Storage**: WatermelonDB (v0.28.0) for local-first data persistence
+- **Camera**: React Native Vision Camera (v4.7.2) for symptom image capture
+- **Maps**: @rnmapbox/maps (v10.2.6) for location-based services
+- **Notifications**: Expo Notifications with local scheduling and reminder management
+- **ML/AI**: Vision camera integration with worklets for real-time processing
 
 ### Backend (Convex)
 - **Architecture**: BFF (Backend for Frontend) pattern with layered structure
 - **Authentication**: Convex Auth with Password provider + Expo SecureStore
 - **Database**: Convex's built-in datastore with realtime sync
-- **Key Schemas**: users, userProfiles, healthEntries
+- **Key Schemas**: users, userProfiles, healthEntries, notifications, pushTokens, passwordResetCodes
+- **AI Integration**: Google Gemini API for symptom assessment (via Convex actions)
+- **Password Reset**: OTP-based system with Resend/Brevo email integration
 
 ### Navigation Structure
 ```
@@ -65,14 +68,31 @@ npx convex deploy      # Deploy backend to production
   ├── emergency-contact          # Emergency contact
   └── medical-history            # Medical history
 /(tabs)/*                        # Main app (tab navigation)
-  ├── dashboard                  # Home dashboard
-  ├── ai-assess                  # AI symptom assessment
-  ├── tracker                    # Health tracker
-  ├── emergency                  # Emergency info
-  ├── profile                    # User profile
-  ├── vision-test                # TFLite object detection demo
-  └── ai-test                    # AI testing features
+  ├── dashboard                  # Home dashboard with recent assessments
+  ├── ai-assess                  # AI symptom assessment (multi-step flow)
+  ├── tracker                    # Health tracker (daily logs, history)
+  ├── emergency                  # Emergency info and nearby facilities
+  ├── profile                    # User profile and app settings
+  ├── vision-test                # Vision camera demo with session context
+  └── notifications              # Notification center
 ```
+
+### Offline-First Architecture (WatermelonDB)
+
+The app uses WatermelonDB for offline-first data persistence with bidirectional sync to Convex:
+
+**Local Schema** (watermelon/database/schema.ts):
+- `users` - Cached user data with snake_case and camelCase fields
+- `user_profiles` - Profile data including reminders (JSON array)
+- `health_entries` - Health logs with offline creation support
+- `medical_facilities` - Cached clinic/hospital locations
+- `reminders` - Symptom assessment reminders
+
+**Sync Strategy** (watermelon/sync/):
+- `syncManager.ts` - Queue-based sync with retry logic
+- `convexSync.ts` - Bidirectional sync between WatermelonDB and Convex
+- Network-aware: Auto-syncs when connection restored
+- Conflict resolution: Last-write-wins with timestamp comparison
 
 ## Convex Backend Architecture
 
@@ -81,20 +101,28 @@ The backend follows a **BFF (Backend for Frontend) layered pattern** with clear 
 ### Directory Structure
 ```
 convex/
-├── personalInfoOnboarding/      # Personal info API endpoints
-├── emergencyContactOnboarding/  # Emergency contact API endpoints
-├── medicalHistoryOnboarding/    # Medical history API endpoints
-├── profile/                     # Profile queries
-├── dashboard/                   # Dashboard data
+├── personalInfoOnboarding/      # Personal info API (update.ts)
+├── emergencyContactOnboarding/  # Emergency contact API
+├── medicalHistoryOnboarding/    # Medical history API
+├── profile/                     # Profile queries (ensureProfileExists, personalInformation, reminders)
+├── dashboard/                   # Dashboard data (user.ts)
 ├── model/                       # Business logic layer (reusable)
-│   ├── user.ts
-│   └── userProfile.ts
+│   ├── user.ts                  # User-related business logic
+│   └── userProfile.ts           # UserProfile business logic
 ├── utils/                       # Utility functions
-├── aiAssessment.ts              # AI assessment logic with Gemini
+├── aiAssessment.ts              # AI assessment with Gemini (action)
 ├── healthEntries.ts             # Health tracking mutations/queries
-├── locationServices.ts          # Location-based services
-├── auth.ts                      # Auth configuration
-└── schema.ts                    # Database schema
+├── locationServices.ts          # Location-based healthcare facility search
+├── notifications.ts             # In-app and push notification helpers
+├── sync.ts                      # WatermelonDB sync endpoints
+├── passwordReset.ts             # Password reset mutations
+├── ResendOTPPasswordReset.ts    # Resend email integration
+├── BrevoOTPPasswordReset.ts     # Brevo email integration
+├── users.ts                     # User queries
+├── auth.ts                      # Auth configuration (Convex Auth)
+├── auth.config.ts               # Auth provider configuration
+├── http.ts                      # HTTP endpoints
+└── schema.ts                    # Database schema (authTables + custom tables)
 ```
 
 ### API Layer Pattern
@@ -112,20 +140,26 @@ convex/
 
 ### Key Convex Endpoints
 - `api.auth.signIn/signOut` - Authentication
-- `api.aiAssessment.generateContextWithGemini` - AI symptom analysis
-- `api.healthEntries.logAIAssessment/logManualEntry` - Health tracking
-- `api.profile.getOnboardingStatus/getProfile` - User profile
+- `api.aiAssessment.generateContextWithGemini` - AI symptom analysis (action)
+- `api.healthEntries.logAIAssessment/logManualEntry` - Health tracking with idempotency
+- `api.profile.*` - Profile queries (getOnboardingStatus, getProfile, ensureProfileExists)
 - `api.dashboard.user.getUserWithProfile` - Dashboard data
 - `api.locationServices.*` - Location-based healthcare facility search
+- `api.notifications.*` - Create/send notifications, manage push tokens
+- `api.sync.*` - WatermelonDB sync endpoints
+- `api.passwordReset.*` - OTP generation and verification
 
 ## Environment Setup
 
 ### Required Environment Variables (.env.local)
 ```
-EXPO_PUBLIC_CONVEX_URL=<your-convex-deployment-url>
+EXPO_PUBLIC_CONVEX_URL=<convex-deployment-url>
 CONVEX_DEPLOYMENT=<convex-deployment-id>
-FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
+EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=<mapbox-public-token>
+RNMAPBOX_MAPS_DOWNLOAD_TOKEN=<mapbox-download-token>
 ```
+
+Note: EAS builds use environment variables from eas.json (development, preview, production)
 
 ### Convex Deployment
 - Development: `npx convex dev` (uses dev deployment from .env.local)
@@ -138,16 +172,20 @@ FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
 - Models stored in `assets/models/`
 
 ### TypeScript (tsconfig.json)
-- Strict mode enabled
+- Strict mode: **disabled** (strict: false)
+- Experimental decorators enabled (for WatermelonDB models)
 - Path alias: `@/*` maps to root directory
 - Includes Convex generated types
+- Excludes: @rnmapbox/maps, @react-native-community, @shopify/react-native-skia
 
 ### Expo (app.json)
 - **New Architecture**: Enabled (`newArchEnabled: true`)
 - **React Compiler**: Experimental feature enabled
 - **Typed Routes**: Enabled for type-safe navigation
-- **Platform Support**: iOS (tablet), Android (edge-to-edge), Web (static)
-- **EAS Project ID**: d37c258e-54b3-4dc4-83d2-1422379e9f4a
+- **Platform Support**: iOS (tablet), Android (edge-to-edge, minSdk 26), Web (static)
+- **EAS Project ID**: 15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6
+- **Plugins**: expo-router, react-native-vision-camera, @rnmapbox/maps, expo-notifications
+- **Permissions**: Camera, microphone, location, notifications (see infoPlist/Android permissions)
 
 ### EAS Build (eas.json)
 ```
@@ -172,39 +210,60 @@ FOURSQUARE_SERVICE_KEY=<optional-for-location-services>
    - Updates `hasCompletedOnboarding` flag on completion
    - Data stored in `userProfiles` table
 
-## Machine Learning Integration
+## Camera & Vision Integration
 
-### TensorFlow Lite (Vision Test)
-- **Model**: COCO-SSD MobileNetV1 (`coco_ssd_mobilenet_v1.tflite`)
-- **Hook**: `useTensorflowModel` from `react-native-fast-tflite`
-- **Implementation**: app/(tabs)/vision-test/index.tsx
-- **Labels**: Static import from `assets/models/coco_labels.json`
-- **Use Case**: Object detection demo for future symptom image analysis
-
-### ExecutorCH Integration
-- Package: `react-native-executorch` (v0.5.8)
-- Purpose: On-device edge model execution for privacy-focused AI
+### React Native Vision Camera
+- **Package**: react-native-vision-camera (v4.7.2)
+- **Implementation**: app/(tabs)/vision-test/
+  - `VisionSessionContext.tsx` - Session state management for camera flow
+  - `camera.tsx` - Camera capture screen
+  - `review.tsx` - Photo review and retake
+- **Worklets**: react-native-worklets-core (v1.6.2) for frame processing
+- **Plugins**: vision-camera-resize-plugin (v3.2.0) for image optimization
+- **Use Case**: Symptom image capture for AI-powered visual assessment
 
 ### AI Assessment (Convex Action)
 - **Service**: Google Gemini API (via Convex action)
 - **Endpoint**: `api.aiAssessment.generateContextWithGemini`
-- **Flow**: Symptom → Severity → Duration → AI Context Generation
-- **Fallback**: Rule-based assessment when AI unavailable
+- **Flow**: Symptom input → Severity rating → Duration selection → AI Context Generation
+- **Image Support**: Base64 photo upload with size checking (~800KB limit)
+- **Fallback**: Rule-based assessment when AI unavailable or image too large
 
 ## Health Tracking System
 
 ### Data Models
-- **healthEntries** table:
+- **healthEntries** table (Convex):
   - AI assessments (`type: "ai_assessment"`)
   - Manual entries (`type: "manual"`)
-  - Fields: symptoms, severity (0-10), category, duration, aiContext, photos
+  - Fields: symptoms, severity (0-10), category, duration, aiContext, photos[], notes
+  - Idempotency: Prevents duplicate entries on reconnection (timestamp + date check)
+- **health_entries** (WatermelonDB):
+  - Local-first storage with offline creation support
+  - Syncs to Convex when online
 
 ### Tracking Features
-- Daily health logs
-- Symptom severity rating
-- Photo attachments (image picker integration)
+- Daily health logs with symptom severity rating (0-10 scale)
+- Photo attachments via expo-image-picker
 - AI-generated context and recommendations
-- Historical tracking and visualization
+- Historical tracking with date-based queries
+- Offline creation with automatic sync
+
+## Notifications System
+
+### Local Notifications (app/_utils/notifications.ts)
+- **Channels**: High-priority reminder channel for Android
+- **Reminder Management**: Multiple reminders per user (stored as JSON array)
+- **User Namespacing**: Per-user AsyncStorage keys to prevent cross-user data leakage
+- **Reminder History**: Tracks notification delivery and read status
+- **Migration**: Legacy single-reminder to multi-reminder migration
+- **Scheduling**: Daily/weekly reminders with configurable time and day
+
+### In-App Notifications (convex/notifications.ts)
+- **Schema**: notifications table with userId, title, body, type, read status
+- **Push Integration**: Expo push tokens stored in pushTokens table
+- **Helper**: `createAndPushNotification()` for unified notification creation
+- **Banner**: NotificationBanner component for foreground notifications
+- **Bell Icon**: NotificationBell with unread count badge
 
 ## Common Development Patterns
 
@@ -234,18 +293,46 @@ const { refreshSession, isRefreshing } = useSessionRefresh();
 - Email validation, password requirements
 - Custom error messages
 
+### WatermelonDB Patterns
+```typescript
+import { database } from '@/watermelon/database';
+import { Q } from '@nozbe/watermelondb';
+
+// Query local data
+const healthEntries = await database.collections
+  .get('health_entries')
+  .query(Q.where('user_id', userId))
+  .fetch();
+
+// Create with offline support
+await database.write(async () => {
+  await database.collections.get('health_entries').create(entry => {
+    entry.userId = userId;
+    entry.symptoms = 'Headache';
+    // Auto-syncs when online
+  });
+});
+```
+
 ### Custom UI Components
-- **CurvedHeader**: Reusable header with SVG curves
-- **CurvedBackground**: Background with curved design
-- **HealthStatusTag**: Status indicators
-- **BottomNavigation**: Custom tab navigation
+- **CurvedHeader/CurvedBackground**: SVG-based curved designs
+- **HealthStatusTag**: Severity-based status indicators
+- **BottomNavigation**: Custom tab bar
+- **NotificationBanner**: Foreground notification display
+- **NotificationBell**: Bell icon with unread count
+- **SpeechToTextButton**: Voice input for symptom entry
+- **TimePickerModal**: Reminder time selection
+- **OfflineBanner/MapDownloader**: Offline mode indicators
 
 ## Security & Privacy
 
-- **Data Storage**: Expo SecureStore for auth tokens
-- **On-Device Processing**: TFLite models run locally (no data sent to cloud)
-- **PIPEDA/HIPAA Considerations**: Health data handled according to regulations
+- **Token Storage**: Expo SecureStore for auth tokens (encrypted storage)
+- **Local-First**: WatermelonDB for offline health data (device-local encryption)
+- **User Namespacing**: Per-user AsyncStorage keys prevent data leakage on shared devices
+- **Password Reset**: OTP-based with expiration (passwordResetCodes table)
+- **PIPEDA/HIPAA**: Health data handled according to Canadian/US regulations
 - **Disclaimer**: App is not a substitute for professional medical advice
+- **Encryption**: ITSAppUsesNonExemptEncryption set to false (iOS)
 
 ## Testing Strategy
 
@@ -258,13 +345,16 @@ Currently no automated testing framework configured. Future considerations:
 
 ### iOS
 - Tablet support enabled
-- Bundle ID: `com.amirzhou.rahcapp`
+- Bundle ID: `com.rahc.app`
+- Permissions: Camera, microphone, location, speech recognition, notifications
 
 ### Android
 - Edge-to-edge enabled
-- Adaptive icons configured
+- Min SDK: 26
+- Adaptive icons configured (foreground, background, monochrome)
 - Predictive back gesture disabled
-- Package: `com.amirzhou.rahcapp`
+- Package: `com.rahc.app`
+- Permissions: Camera, audio recording, location (fine/coarse), notifications
 
 ### Web
 - Static output configured
@@ -272,27 +362,45 @@ Currently no automated testing framework configured. Future considerations:
 
 ## Development Workflow Best Practices
 
-1. **Start Convex First**: Run `npx convex dev` before starting Expo
-2. **Check Auth State**: Use session refresh context for auth-dependent screens
-3. **Type Safety**: Leverage Convex generated types in `convex/_generated/`
+1. **Start Convex First**: Always run `npx convex dev` before starting Expo
+2. **Auth State**: Use `useSessionRefresh()` from app/_layout.tsx for auth-dependent screens
+3. **Type Safety**: Leverage Convex generated types in `convex/_generated/api`
 4. **Path Aliases**: Use `@/*` imports for cleaner code
-5. **Asset Management**: Place ML models in `assets/models/`, images in `assets/images/`
-6. **Screen Options**: Configure in `_layout.tsx` files per route group
+5. **Offline Testing**: Test with airplane mode - WatermelonDB should handle gracefully
+6. **Notifications**:
+   - Call `setReminderUserKey(userId)` when user logs in to namespace AsyncStorage
+   - Use `initializeNotificationsOnce()` to setup channels (called in app/_layout.tsx)
+7. **Camera Permissions**: Request via expo-camera plugin, configured in app.json
+8. **Mapbox**: Requires both public token (runtime) and download token (build time)
 
 ## Known Issues & Limitations
 
-- AI assessment requires active internet connection (Gemini API)
-- TFLite integration is demo/foundation (not yet integrated with health assessment)
-- ExecutorCH integration is in progress
-- No offline-first sync strategy implemented yet
-- Testing infrastructure needs setup
+- AI assessment requires internet (Gemini API) - falls back to rule-based when offline
+- Large images (>800KB) may cause Gemini API payload issues - compression implemented
+- WatermelonDB schema v7 - migrations must be handled carefully
+- TypeScript strict mode disabled - type safety not enforced
+- No automated testing infrastructure
+- Speech recognition (@react-native-voice/voice) requires device support
 
-## Future Development Areas
+## Important Implementation Details
 
-- Complete ExecutorCH integration for edge AI models
-- Integrate vision analysis with symptom assessment
-- Implement offline-first data sync
-- Add push notifications for health reminders
-- Enhance location-based healthcare facility search
-- Build comprehensive testing suite
-- Add accessibility improvements (screen reader support, etc.)
+### WatermelonDB Schema Migrations
+- Current version: 7
+- Schema uses both snake_case (legacy) and camelCase (Convex alignment)
+- Migration files in watermelon/database/migrations.ts
+- **Critical**: Always add new migration when changing schema, never modify existing ones
+
+### Session Refresh Workaround
+- `useSessionRefresh()` remounts ConvexAuthProvider to force session refresh
+- Used after sign up/sign in to ensure auth state propagates
+- `isRefreshing` flag prevents UI flickering during refresh
+
+### Notification User Namespacing
+- **Critical**: Each user's reminders stored with userId prefix in AsyncStorage
+- Call `setReminderUserKey(userId)` on login to prevent cross-user data leakage
+- Legacy non-namespaced keys migrated on first access
+
+### Idempotency in Health Entries
+- `logAIAssessment` checks for duplicate entries (userId + timestamp + date)
+- Prevents duplicate logs on network reconnection/retry
+- Returns existing entry ID if duplicate detected

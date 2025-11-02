@@ -1,7 +1,8 @@
 {
   "cli": {
     "version": ">= 16.17.4",
-    "appVersionSource": "remote"
+    "appVersionSource": "remote",
+    "promptToConfigurePushNotifications": false
   },
   "build": {
     "development": {
@@ -23,9 +24,6 @@
       "android": {
         "buildType": "apk"
       },
-      "ios": {
-        "simulator": true
-      },
       "env": {
         "EXPO_PUBLIC_ENV": "preview",
         "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud"
@@ -35,10 +33,7 @@
       "autoIncrement": true,
       "distribution": "store",
       "android": {
-        "buildType": "app-bundle"  
-      },
-      "ios": {
-        "enterpriseProvisioning": "universal"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production",
