@@ -35,7 +35,7 @@ export function useSyncOnOnline() {
   );
 
   // Wait for WatermelonDB to finish setting up/migrating before syncing
-  const waitForDatabaseReady = async (retries = 5, delayMs = 400): Promise<void> => {
+  const waitForDatabaseReady = async (retries = 3, delayMs = 150): Promise<void> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         // Try a harmless query on a small table
@@ -46,7 +46,7 @@ export function useSyncOnOnline() {
           console.warn('⚠️ Database not ready after retries, proceeding anyway:', err);
           return;
         }
-        const wait = delayMs * attempt; // linear backoff
+        const wait = delayMs * attempt; // linear backoff: 150ms, 300ms, 450ms
         console.log(`⏳ Waiting for DB (attempt ${attempt}/${retries}) for ${wait}ms...`);
         await new Promise((res) => setTimeout(res, wait));
       }
@@ -602,8 +602,11 @@ export function useSyncOnOnline() {
         
         // Only sync if we have current user data
         if (currentUser?._id) {
-          await syncHealthEntries();
-          await syncPersonalInfo();
+          // Sync both in parallel for faster completion
+          await Promise.all([
+            syncHealthEntries(),
+            syncPersonalInfo()
+          ]);
           hasSyncedProfilesRef.current = true;
         } else {
           console.log('⏭️ Skipping sync - current user not loaded yet');
@@ -614,8 +617,8 @@ export function useSyncOnOnline() {
       }
     };
 
-    // Small delay to ensure Convex client is ready
-    const timer = setTimeout(syncOfflineData, 500);
+    // Reduced delay - Convex client is usually ready quickly
+    const timer = setTimeout(syncOfflineData, 200);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, isAuthenticated]);
@@ -636,8 +639,8 @@ export function useSyncOnOnline() {
         console.error('❌ Error syncing personal info after user loaded:', e);
       }
     };
-    // slight delay to ensure convex client settled
-    const t = setTimeout(run, 200);
+    // Reduced delay for faster sync
+    const t = setTimeout(run, 100);
     return () => clearTimeout(t);
   }, 
   // eslint-disable-next-line react-hooks/exhaustive-deps

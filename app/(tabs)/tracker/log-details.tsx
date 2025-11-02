@@ -154,6 +154,7 @@ function renderAssessmentCards(text: string | null) {
 export default function LogDetails() {
   const params = useLocalSearchParams();
   const entryId = params.entryId as string;
+  const convexIdParam = (params.convexId as string) || undefined;
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
@@ -170,7 +171,7 @@ export default function LogDetails() {
 
   // Offline query from WatermelonDB
   useEffect(() => {
-      if (entryId && (!isOnline || !isConvexId)) {
+      if ((entryId || convexIdParam) && (!isOnline || !isConvexId)) {
         // Query WatermelonDB if:
         // 1. We're offline, OR
         // 2. We're online but the entryId is a WatermelonDB ID (not Convex format)
@@ -180,7 +181,7 @@ export default function LogDetails() {
           let localEntry: any = null;
           
             // Try to find by WatermelonDB ID first
-            if (!isConvexId) {
+            if (entryId && !isConvexId) {
             try {
               localEntry = await healthCollection.find(entryId);
             } catch {
@@ -190,16 +191,19 @@ export default function LogDetails() {
           
             // If not found, try querying by convexId field
           if (!localEntry) {
+            const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
+            if (convexLookup) {
             const results = await healthCollection.query(
-              Q.where('convexId', entryId)
+              Q.where('convexId', convexLookup)
             ).fetch();
             if (results.length > 0) {
               localEntry = results[0];
             }
+            }
           }
           
           if (!localEntry) {
-            console.error(`Failed to find entry with id: ${entryId}`);
+            console.error(`Failed to find entry with id(s): localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
             setOfflineEntry(null);
             return;
           }
@@ -237,7 +241,7 @@ export default function LogDetails() {
       };
       loadOfflineEntry();
     }
-    }, [isOnline, entryId, database, isConvexId]);
+  }, [isOnline, entryId, database, isConvexId, convexIdParam]);
 
   // Use online entry if available, otherwise offline entry
   const entry = isOnline ? entryOnline : offlineEntry;

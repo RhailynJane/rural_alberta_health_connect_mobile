@@ -76,8 +76,10 @@ export default function History() {
   useEffect(() => {
     const fetchOfflineEntries = async () => {
       try {
-        if (isOnline) return;
-        // Determine user id offline
+        // ALWAYS load from WatermelonDB first for instant display
+        // Then online data will replace it when loaded
+        
+        // Determine user id
         let uid: string | undefined = currentUser?._id as any;
         if (!uid) {
           try {
@@ -101,7 +103,7 @@ export default function History() {
           } catch {}
         }
         if (!uid) {
-          console.log('⚠️ [OFFLINE HISTORY] No user id available offline');
+          console.log('⚠️ [OFFLINE HISTORY] No user id available');
           setOfflineEntries([]);
           return;
         }
@@ -114,11 +116,10 @@ export default function History() {
           )
           .fetch();
 
-        console.log(`🔍 [OFFLINE HISTORY] Fetched ${entries.length} total entries for user ${uid}`);
+        console.log(`🔍 [LOCAL HISTORY] Fetched ${entries.length} entries from WatermelonDB for user ${uid}`);
         
         // Map WatermelonDB entries to match Convex format
         const mapped = entries.map((entry: any) => {
-          console.log(`📝 [OFFLINE ENTRY] id: ${entry.id}, type: ${entry.type}, date: ${entry.date}`);
           return {
             _id: entry.id,
             symptoms: entry.symptoms || "",
@@ -128,22 +129,26 @@ export default function History() {
             timestamp: entry.timestamp || Date.now(),
             createdBy: entry.createdBy || "User",
             type: entry.type || "manual_entry",
+            convexId: entry.convexId, // For de-duplication
           };
         });
         
-        console.log(`✅ [OFFLINE HISTORY] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
+        console.log(`✅ [LOCAL HISTORY] Loaded ${mapped.length} entries instantly from local cache`);
         setOfflineEntries(mapped);
       } catch (error) {
         console.error("Error fetching offline entries:", error);
         setOfflineEntries([]);
       }
     };
+    // Fetch immediately on mount for instant display
     fetchOfflineEntries();
-  }, [isOnline, database, currentUser?._id]);
+  }, [database, currentUser?._id]); // Removed isOnline dependency - always load local cache
 
   // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
   const allEntries = useMemo(() => {
-    const base = isOnline ? allEntriesOnline : offlineEntries;
+    // If online and have server data, use that (it's fresher)
+    // Otherwise use local cache
+    const base = (isOnline && allEntriesOnline) ? allEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
     const seen = new Set<string>();
     const out: any[] = [];

@@ -4,12 +4,12 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -211,11 +211,12 @@ export default function DailyLog() {
       : "skip"
   );
 
-  // Offline query from WatermelonDB
+  // Load local cache from WatermelonDB FIRST for instant display
+  // Then online data will update the display when available
   useEffect(() => {
     const userId = currentUser?._id;
     
-    if (!isOnline && userId) {
+    if (userId) {
       const fetchOfflineEntries = async () => {
         try {
           const collection = database.get("health_entries");
@@ -227,13 +228,14 @@ export default function DailyLog() {
             )
             .fetch();
 
-          console.log(`🔍 [OFFLINE DAILY LOG] Fetched ${entries.length} entries for date ${todayLocalDate}`);
+          console.log(`🔍 [DAILY LOG LOCAL CACHE] Fetched ${entries.length} entries for date ${todayLocalDate}`);
           
           // Map WatermelonDB entries to match Convex format
           const mapped = entries.map((entry: any) => {
-            console.log(`📝 [OFFLINE ENTRY] id: ${entry.id}, type: ${entry.type}, symptoms: ${entry.symptoms?.substring(0, 30)}`);
+            console.log(`📝 [CACHED ENTRY] id: ${entry.id}, type: ${entry.type}, symptoms: ${entry.symptoms?.substring(0, 30)}`);
             return {
               _id: entry.id,
+              convexId: entry.convexId, // Add for de-duplication
               symptoms: entry.symptoms || "",
               severity: entry.severity || 0,
               category: entry.category || "",
@@ -244,23 +246,24 @@ export default function DailyLog() {
             };
           });
           
-          console.log(`✅ [OFFLINE DAILY LOG] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
+          console.log(`✅ [DAILY LOG LOCAL CACHE] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
           setOfflineEntries(mapped);
         } catch (error) {
-          console.error("Error fetching offline entries:", error);
+          console.error("Error fetching local cache entries:", error);
           setOfflineEntries([]);
         }
       };
       fetchOfflineEntries();
-    } else if (!isOnline && !userId) {
-      // If offline but no user ID, show empty
+    } else {
+      // If no user ID, show empty
       setOfflineEntries([]);
     }
-  }, [isOnline, todayLocalDate, database, currentUser?._id]);
+  }, [todayLocalDate, database, currentUser?._id]);
 
-  // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
+  // Prefer online data when available, but show local cache first for instant display
+  // De-duplication by convexId if present, else timestamp+type
   const todaysEntries = useMemo(() => {
-    const base = isOnline ? todaysEntriesOnline : offlineEntries;
+    const base = (isOnline && todaysEntriesOnline) ? todaysEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
     const seen = new Set<string>();
     const out: any[] = [];
@@ -297,7 +300,7 @@ export default function DailyLog() {
     const hydrate = async () => {
       try {
         const collection = database.get('health_entries');
-        for (const eRaw of todaysEntriesOnline as any[]) {
+        for (const eRaw of (todaysEntriesOnline as any[]).filter(Boolean)) {
           const e = eRaw as any;
           if (!e || !e._id) {
             console.warn('⚠️ [HYDRATE] Skipping invalid entry:', e);
@@ -353,7 +356,8 @@ export default function DailyLog() {
             });
             console.log('💾 [HYDRATE] Mirrored online entry into WatermelonDB:', e._id, (e as any)?.type);
           } catch (err) {
-            console.warn('⚠️ [HYDRATE] Failed to mirror entry', e?._id, err);
+            const errMsg = (err as any)?.message || String(err);
+            console.warn('⚠️ [HYDRATE] Failed to mirror entry', (e && e._id) ? e._id : '(unknown id)', errMsg);
           }
         }
       } catch (err) {
@@ -375,8 +379,12 @@ export default function DailyLog() {
     );
   });
 
-  const handleViewEntryDetails = (entryId: string) => {
-    router.push({ pathname: "/tracker/log-details", params: { entryId } });
+  const handleViewEntryDetails = (entry: any) => {
+    // Always pass both local WatermelonDB id and server convexId (if any)
+    // so log-details can resolve entries even when offline/hydration hasn't linked yet
+    const localId = entry?._id || "";
+    const convexId = entry?.convexId || "";
+    router.push({ pathname: "/tracker/log-details", params: { entryId: localId, convexId } });
   };
 
   const getSeverityColor = (severity: number) => {
@@ -526,7 +534,7 @@ export default function DailyLog() {
                       <TouchableOpacity
                         key={entry._id}
                         style={styles.entryItem}
-                        onPress={() => handleViewEntryDetails(entry._id)}
+                        onPress={() => handleViewEntryDetails(entry)}
                       >
                         <View style={styles.entryHeader}>
                           <View style={styles.entryTime}>
@@ -617,7 +625,7 @@ export default function DailyLog() {
                         {/* View Details Button */}
                         <TouchableOpacity
                           style={styles.viewDetailsButton}
-                          onPress={() => handleViewEntryDetails(entry._id)}
+                          onPress={() => handleViewEntryDetails(entry)}
                         >
                           <Text style={styles.viewDetailsText}>
                             View Details
