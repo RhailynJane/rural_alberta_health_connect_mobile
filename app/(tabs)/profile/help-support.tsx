@@ -10,11 +10,12 @@ import { useEffect, useState } from "react";
 import {
     Alert,
     Image,
-    SafeAreaView, ScrollView,
+    ScrollView,
     StyleSheet,
     Text, TextInput, TouchableOpacity,
     View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
