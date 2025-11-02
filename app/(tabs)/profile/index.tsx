@@ -853,7 +853,7 @@ export default function Profile() {
   // Show loading while auth is loading
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground>
           <CurvedHeader
             title="Profile"
@@ -874,7 +874,7 @@ export default function Profile() {
   if (!isAuthenticated) {
     // This should trigger automatically due to your AuthGuard, but as a safeguard:
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground>
           <CurvedHeader 
             title="Profile" 
@@ -896,7 +896,7 @@ export default function Profile() {
   // but since we're checking isAuthenticated above, it should load data
   if (userProfile === undefined) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground>
           <CurvedHeader 
             title="Profile" 
@@ -916,7 +916,7 @@ export default function Profile() {
   // Handle case where profile is null (shouldn't happen due to auth check above)
   if (userProfile === null) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground>
           <CurvedHeader 
             title="Profile" 
@@ -934,7 +934,7 @@ export default function Profile() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground>
         <CurvedHeader 
           title="Profile" 

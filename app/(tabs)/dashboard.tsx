@@ -21,7 +21,6 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
 import HealthStatusTag from "../components/HealthStatusTag";
-import { OfflineBanner } from "../components/OfflineBanner";
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -202,7 +201,7 @@ export default function Dashboard() {
   // Check if loading during initial auth
   if (isLoading && !displayUser) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <View style={styles.loadingContainer}>
           <Text
             style={[
@@ -220,7 +219,7 @@ export default function Dashboard() {
   // Check if not authenticated and no cached user
   if (!isAuthenticated && !displayUser) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <View style={styles.loadingContainer}>
           <Text
             style={[
@@ -305,12 +304,10 @@ export default function Dashboard() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
-        {/* Offline Banner */}
-        <OfflineBanner />
         
         {/* Fixed Header */}
         <CurvedHeader

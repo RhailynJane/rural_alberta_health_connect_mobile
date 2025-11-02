@@ -416,7 +416,7 @@ export default function AddHealthEntry() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader

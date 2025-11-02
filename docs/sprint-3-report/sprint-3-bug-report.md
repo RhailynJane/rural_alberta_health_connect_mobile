@@ -1,0 +1,167 @@
+# Sprint 3 Bug Report & Fixes
+## Sprint Period: Nov 1-28, 2025
+
+---
+
+## Critical Priority (P1)
+
+### 🔴 Bug #1: Emergency call cannot be cancelled quickly
+- **Reporter:** Joy Wong, Yue
+- **Test Case:** TC-021
+- **Description:** Cancellation requires two steps, 911 call connects before cancel completes
+- **Status:** ⏳ Open
+
+### 🔴 Bug #5: New entries not saved offline
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-028
+- **Description:** Health entries created offline are lost when connection restored
+- **Status:** ⏳ Open
+
+---
+
+## High Priority (P2)
+
+### 🟡 Bug #2: Profile information not displaying consistently
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-004
+- **Description:** User profile data entered during registration displays intermittently
+- **Status:** ⏳ Open
+
+### 🟡 Bug #3: Notification reminders not functioning
+- **Reporter:** Sean Bauzon, Joy Wong
+- **Test Case:** TC-024
+- **Description:** Reminders save successfully but notifications never trigger at scheduled time
+- **Status:** ⏳ Open
+
+### 🟡 Bug #4: Location services toggle malfunction
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-026
+- **Description:** Toggle only visual, location services remain active after attempting to disable
+- **Status:** ⏳ Open
+
+---
+
+## Medium/Low Priority (P3-P4)
+
+### 🟢 Bug #6: Date picker malfunction in Health Tracker
+- **Reporter:** Yue, Sean Bauzon
+- **Test Case:** TC-018
+- **Description:** Second date picker clickable but non-functional, doesn't close when clicking outside
+- **Priority:** P3
+- **Status:** ⏳ Open
+
+### ✅ Bug #7: Offline indicator only shows on dashboard
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-027
+- **Description:** Other tabs don't show offline status, confusing for users
+- **Priority:** P4
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - Implemented global `OfflineBanner` component with dynamic safe area handling
+  - Applied consistent offline banner across all tab screens (Dashboard, Emergency, Profile, Tracker, AI Assessment, Notifications)
+  - Updated 25+ SafeAreaView instances with dynamic edges pattern: `edges={isOnline ? ['top', 'bottom'] : ['bottom']}`
+  - Fixed white gap issues by preventing duplicate safe area padding
+  - Banner now shows on all screens when offline, maintains proper spacing when online
+
+---
+
+## Additional Issues
+
+### Invalid email validation
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-001
+- **Description:** System allows registration with invalid email addresses
+- **Status:** ⏳ Open
+
+### Offline maps unclear access
+- **Reporter:** Joy Wong, Yue
+- **Test Case:** TC-022
+- **Description:** Download completes but unclear where to access offline maps
+- **Status:** ⏳ Open
+
+### Notifications list navigation
+- **Reporter:** Joy Wong, Sean Bauzon
+- **Test Case:** TC-023
+- **Description:** Unable to locate how to add/generate notifications
+- **Status:** ⏳ Open
+
+### Image upload inconsistent feedback
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-016
+- **Description:** 'No images added' message during upload, but images appear later
+- **Status:** ⏳ Open
+
+### Email verification missing
+- **Reporter:** Joy Wong, Yue
+- **Test Case:** TC-001
+- **Description:** No email verification step during registration
+- **Status:** ⏳ Open
+
+### iOS password autofill not working
+- **Reporter:** Joy Wong
+- **Test Case:** TC-004
+- **Description:** iOS autofill inactive, requires manual credential entry
+- **Status:** ⏳ Open
+
+### Keyboard dismissal issue
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-011
+- **Description:** Cannot dismiss keyboard after typing in AI Assessment
+- **Status:** ⏳ Open
+
+### iOS performance slower than Android
+- **Reporter:** Joy Wong
+- **Test Case:** TC-019
+- **Description:** Loading clinic data 3-4 seconds slower on iOS
+- **Status:** ⏳ Open
+
+### Clinic list not sorted by proximity
+- **Reporter:** Joy Wong
+- **Test Case:** TC-020
+- **Description:** Same list appears regardless of location, not showing closest first
+- **Status:** ⏳ Open
+
+### Profile edit validation missing
+- **Reporter:** Sean Bauzon
+- **Test Case:** TC-026
+- **Description:** Allows saving invalid data without error messages
+- **Status:** ⏳ Open
+
+---
+
+## ✨ Enhancements Completed
+
+### 🎯 Help & Support Feature
+- **Description:** Comprehensive Help & Support feature added to Profile tab
+- **Features Implemented:**
+  - **FAQ Section:** Common questions and answers for quick assistance
+  - **User Guide:** Step-by-step instructions for using app features
+  - **Feedback & Report Issue:** Users can submit feedback and report bugs directly from the app
+  - **Accessible Navigation:** Easy access from Profile screen with clear UI/UX
+- **Status:** ✅ **COMPLETED**
+- **Benefits:**
+  - Improved user self-service capabilities
+  - Reduced support overhead
+  - Better user engagement and feedback collection
+  - Enhanced user experience with in-app documentation
+
+---
+
+## Summary Statistics
+
+- **Total Bugs Reported:** 21
+- **Critical (P1):** 2 open
+- **High (P2):** 3 open
+- **Medium/Low (P3-P4):** 1 fixed, 1 open
+- **Additional Issues:** 10 open
+- **Fixed This Sprint:** 1
+- **Enhancements Completed:** 1
+
+---
+
+## Next Actions
+
+1. **Priority Focus:** Address critical P1 bugs (Emergency call cancellation, Offline data persistence)
+2. **High Priority:** Fix P2 issues (Profile consistency, Notifications, Location services)
+3. **Continue Testing:** Validate Bug #7 fix across all devices and scenarios
+4. **Enhancement Testing:** Gather user feedback on new Help & Support feature

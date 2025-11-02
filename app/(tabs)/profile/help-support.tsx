@@ -354,7 +354,7 @@ export default function HelpSupport() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground>
         <CurvedHeader
           title="Help & Support"

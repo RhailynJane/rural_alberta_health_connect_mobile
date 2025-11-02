@@ -21,7 +21,6 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
-import { OfflineBanner } from "../../components/OfflineBanner";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
@@ -345,12 +344,10 @@ export default function Emergency() {
   const nearestClinic = realTimeClinics[0]; // Get the closest clinic
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
-        {/* Offline Banner */}
-        <OfflineBanner />
         
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader

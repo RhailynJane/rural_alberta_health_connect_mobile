@@ -267,7 +267,7 @@ export default function LogDetails() {
 
   if (!entry) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground style={{ flex: 1 }}>
           <DueReminderBanner topOffset={120} />
           <CurvedHeader
@@ -294,7 +294,7 @@ export default function LogDetails() {
   const dateTime = formatDateTime(entry.timestamp);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Fixed Header (not scrollable) */}
         <DueReminderBanner topOffset={120} />

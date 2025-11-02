@@ -334,7 +334,7 @@ export default function AppSettings() {
   } : null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground>
         <CurvedHeader
           title="App Settings"

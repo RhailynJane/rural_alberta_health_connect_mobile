@@ -6,14 +6,14 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Image,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -22,6 +22,7 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // AI Context Types
 type SymptomCategory =
@@ -77,6 +78,7 @@ async function convertImageToBase64(uri: string): Promise<string> {
 export default function SymptomAssessment() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [selectedCategory, setSelectedCategory] =
     useState<SymptomCategory | null>(null);
   const [symptomDescription, setSymptomDescription] = useState("");
@@ -397,7 +399,7 @@ export default function SymptomAssessment() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
