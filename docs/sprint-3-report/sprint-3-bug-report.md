@@ -102,6 +102,30 @@
   - Count stays accurate throughout sync process
 - **Code Location:** `app/(tabs)/dashboard.tsx` lines ~228-250
 
+### ✅ Bug #9: Add Health Entry UI issues
+- **Reporter:** User Testing
+- **Test Case:** TC-016 (related)
+- **Description:** Two UI problems in Add Health Entry screen:
+  1. Action buttons (Save/Cancel) hidden when form has content - must scroll to see them
+  2. Offline photos not showing in preview - selected photos appear missing until back online
+- **Priority:** P3
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - **Buttons visibility:** Reduced `contentContainer` paddingBottom from 200 to 120, making buttons always accessible without excessive scrolling
+  - **Offline photos display:**
+    - Added offline photo preview alongside online photos (previously only `photos` array was shown, not `localPhotoUris`)
+    - Combined photo count display: `({photos.length + localPhotoUris.length}/3)`
+    - Added visual "offline" badge (cloud-offline icon) on photos saved locally
+    - Implemented remove functionality for offline photos
+    - Fixed photo limit checks to count both online and offline photos together
+    - Updated button disabled states to check combined count
+- **User Experience:**
+  - Save/Cancel buttons always visible with less scrolling required
+  - Offline photos immediately visible after selection with clear offline indicator
+  - Accurate photo count (0/3, 1/3, etc.) includes both online and offline photos
+  - Can remove offline photos before submitting
+- **Code Location:** `app/(tabs)/tracker/add-health-entry.tsx` lines ~104-107, ~137-140, ~181-184, ~520-632, ~935
+
 ---
 
 ## Additional Issues
@@ -188,12 +212,12 @@
 
 ## Summary Statistics
 
-- **Total Bugs Reported:** 22
+- **Total Bugs Reported:** 23
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 3 open
-- **Medium/Low (P3-P4):** 2 fixed, 1 open
+- **Medium/Low (P3-P4):** 3 fixed, 1 open
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 4
+- **Fixed This Sprint:** 5
 - **Enhancements Completed:** 1
 
 ---

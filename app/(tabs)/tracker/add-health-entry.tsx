@@ -97,8 +97,8 @@ export default function AddHealthEntry() {
   // Handle image picker
   const pickImage = async () => {
     try {
-      // Check photo limit
-      if (photos.length >= 3) {
+      // Check photo limit (combine both online and offline photos)
+      if (photos.length + localPhotoUris.length >= 3) {
         setErrorModalMessage("You can only add up to 3 photos per health entry.");
         setErrorModalVisible(true);
         return;
@@ -134,8 +134,8 @@ export default function AddHealthEntry() {
   // Take photo with camera
   const takePhoto = async () => {
     try {
-      // Check photo limit
-      if (photos.length >= 3) {
+      // Check photo limit (combine both online and offline photos)
+      if (photos.length + localPhotoUris.length >= 3) {
         setErrorModalMessage("You can only add up to 3 photos per health entry.");
         setErrorModalVisible(true);
         return;
@@ -430,17 +430,17 @@ export default function AddHealthEntry() {
         <DueReminderBanner topOffset={120} />
 
         {/* Scrollable content under header */}
-        <View style={styles.contentArea}>
-          <KeyboardAvoidingView
-            style={styles.keyboardAvoidingView}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardAvoidingView
+          style={styles.contentArea}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            <ScrollView
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.contentSection}>
+            <View style={styles.contentSection}>
                 {/* Date selection */}
                 <View style={styles.inputGroup}>
                   <Text
@@ -508,7 +508,7 @@ export default function AddHealthEntry() {
                   )}
                 </View>
 
-                {/* Photo Upload Section */}
+                  {/* Photo Upload Section */}
                 <View style={styles.inputGroup}>
                   <Text
                     style={[
@@ -516,7 +516,7 @@ export default function AddHealthEntry() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Add Photos ({photos.length}/3)
+                    Add Photos ({photos.length + localPhotoUris.length}/3)
                   </Text>
 
                   {/* Photo Upload Buttons */}
@@ -524,20 +524,20 @@ export default function AddHealthEntry() {
                     <TouchableOpacity
                       style={[
                         styles.photoButton,
-                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                        (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonDisabled,
                       ]}
                       onPress={pickImage}
-                      disabled={uploading || photos.length >= 3}
+                      disabled={uploading || photos.length + localPhotoUris.length >= 3}
                     >
                       <Ionicons
                         name="image-outline"
                         size={20}
-                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
+                        color={uploading || photos.length + localPhotoUris.length >= 3 ? "#999" : "#2A7DE1"}
                       />
                       <Text 
                         style={[
                           styles.photoButtonText,
-                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                          (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonTextDisabled,
                         ]}
                       >
                         Choose from Library
@@ -547,20 +547,20 @@ export default function AddHealthEntry() {
                     <TouchableOpacity
                       style={[
                         styles.photoButton,
-                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                        (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonDisabled,
                       ]}
                       onPress={takePhoto}
-                      disabled={uploading || photos.length >= 3}
+                      disabled={uploading || photos.length + localPhotoUris.length >= 3}
                     >
                       <Ionicons
                         name="camera-outline"
                         size={20}
-                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
+                        color={uploading || photos.length + localPhotoUris.length >= 3 ? "#999" : "#2A7DE1"}
                       />
                       <Text 
                         style={[
                           styles.photoButtonText,
-                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                          (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonTextDisabled,
                         ]}
                       >
                         Take Photo
@@ -577,17 +577,20 @@ export default function AddHealthEntry() {
                     </View>
                   )}
 
-                  {/* Selected Photos Preview */}
-                  {photos.length > 0 && (
+                  {/* Selected Photos Preview - Show both online and offline photos */}
+                  {(photos.length > 0 || localPhotoUris.length > 0) && (
                     <View style={styles.photosContainer}>
-                      <Text style={styles.photosLabel}>Selected Photos:</Text>
+                      <Text style={styles.photosLabel}>
+                        Selected Photos: {photos.length + localPhotoUris.length}
+                      </Text>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                       >
                         <View style={styles.photosList}>
+                          {/* Online photos */}
                           {photos.map((photo, index) => (
-                            <View key={index} style={styles.photoItem}>
+                            <View key={`online-${index}`} style={styles.photoItem}>
                               <Image
                                 source={{ uri: photo }}
                                 style={styles.photoPreview}
@@ -602,6 +605,31 @@ export default function AddHealthEntry() {
                                   color="#DC3545"
                                 />
                               </TouchableOpacity>
+                            </View>
+                          ))}
+                          {/* Offline photos (local URIs) */}
+                          {localPhotoUris.map((photoUri, index) => (
+                            <View key={`offline-${index}`} style={styles.photoItem}>
+                              <Image
+                                source={{ uri: photoUri }}
+                                style={styles.photoPreview}
+                              />
+                              <TouchableOpacity
+                                style={styles.removePhotoButton}
+                                onPress={() => {
+                                  setLocalPhotoUris((prev) => prev.filter((_, i) => i !== index));
+                                }}
+                              >
+                                <Ionicons
+                                  name="close-circle"
+                                  size={20}
+                                  color="#DC3545"
+                                />
+                              </TouchableOpacity>
+                              {/* Offline indicator badge */}
+                              <View style={styles.offlineBadge}>
+                                <Ionicons name="cloud-offline" size={12} color="white" />
+                              </View>
                             </View>
                           ))}
                         </View>
@@ -763,7 +791,6 @@ export default function AddHealthEntry() {
               </View>
             </ScrollView>
           </KeyboardAvoidingView>
-        </View>
 
         {/* Success Modal */}
         <Modal
@@ -898,12 +925,9 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
   },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 200,
+    paddingBottom: 140, // Extra padding to ensure buttons are always visible above bottom nav
   },
   contentSection: {
     padding: 24,
@@ -1021,6 +1045,17 @@ const styles = StyleSheet.create({
     right: -8,
     backgroundColor: "white",
     borderRadius: 10,
+  },
+  offlineBadge: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
   },
   modalOverlay: {
     flex: 1,
