@@ -1,26 +1,25 @@
 import { api } from "@/convex/_generated/api";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
+
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Alert,
-    ScrollView,
+    SafeAreaView, ScrollView,
     StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+    Text, TextInput, TouchableOpacity,
+    View
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Icon from "react-native-vector-icons/MaterialIcons";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
+import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+
+import Icon from "react-native-vector-icons/MaterialIcons";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
-import { COLORS, FONTS } from "../../constants/constants";
-import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 interface FAQ {
   id: number;
@@ -33,7 +32,6 @@ export default function HelpSupport() {
   const router = useRouter();
   const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
-  
   const currentUser = useQuery(
     api.users.getCurrentUser,
     isAuthenticated ? {} : "skip"
@@ -148,30 +146,22 @@ export default function HelpSupport() {
     setExpandedFAQ(expandedFAQ === id ? null : id);
   };
 
-  const handleViewUserGuide = () => {
-    Alert.alert(
-      "User Guide",
-      "The comprehensive user guide is available in the app documentation. Would you like to access it?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "View Guide",
-          onPress: () => {
-            // In a production app, this would open a PDF viewer or web view
-            // For now, we'll show a message
-            setModalType('info');
-            setModalTitle('User Guide');
-            setModalMessage('The complete RAHC User Guide is available in the docs folder. It includes detailed instructions for all app features, troubleshooting tips, and important limitations.');
-            setModalVisible(true);
-          },
-        },
-      ]
-    );
+  const handleViewUserGuide = async () => {
+    const url = "https://rahc-website.vercel.app/user-guide";
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert(
+        "User Guide",
+        "Unable to open the user guide. Please visit: https://rahc-website.vercel.app/user-guide",
+        [{ text: "OK" }]
+      );
+    }
   };
 
+  // Use Convex actions for feedback and issue reporting
+  const sendFeedbackAction = useAction(api.feedbackActions.sendFeedbackEmail);
   const handleSendFeedback = async () => {
     if (!feedbackText.trim()) {
       setModalType('error');
@@ -180,7 +170,6 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-
     if (!isOnline) {
       setModalType('warning');
       setModalTitle('Offline');
@@ -188,34 +177,23 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-
     try {
       const userEmail = currentUser?.email || "unknown";
-      const subject = encodeURIComponent("RAHC App Feedback");
-      const body = encodeURIComponent(
-        `Feedback from: ${userEmail}\n\nFeedback:\n${feedbackText}\n\n---\nSent from RAHC Mobile App`
-      );
-      const mailtoUrl = `mailto:ruralalbertahealthconnect@gmail.com?subject=${subject}&body=${body}`;
-      
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-        setFeedbackText("");
-        setModalType('success');
-        setModalTitle('Email App Opened');
-        setModalMessage('Your email app has been opened with the feedback pre-filled. Please review and send.');
-        setModalVisible(true);
-      } else {
-        throw new Error("Cannot open email app");
-      }
+      await sendFeedbackAction({ userEmail, message: feedbackText });
+      setFeedbackText("");
+      setModalType('success');
+      setModalTitle('Feedback Sent');
+      setModalMessage('Thank you for your feedback! It has been sent to our team.');
+      setModalVisible(true);
     } catch {
       setModalType('error');
       setModalTitle('Error');
-      setModalMessage('Could not open email app. Please send your feedback directly to ruralalbertahealthconnect@gmail.com');
+      setModalMessage('Could not send feedback. Please try again later.');
       setModalVisible(true);
     }
   };
 
+  const reportIssueAction = useAction(api.feedbackActions.reportIssueEmail);
   const handleReportIssue = async () => {
     if (!issueTitle.trim() || !issueDescription.trim()) {
       setModalType('error');
@@ -224,7 +202,6 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-
     if (!isOnline) {
       setModalType('warning');
       setModalTitle('Offline');
@@ -232,31 +209,19 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-
     try {
       const userEmail = currentUser?.email || "unknown";
-      const subject = encodeURIComponent(`RAHC Issue Report: ${issueTitle}`);
-      const body = encodeURIComponent(
-        `Issue reported by: ${userEmail}\n\nIssue Title: ${issueTitle}\n\nDescription:\n${issueDescription}\n\n---\nSent from RAHC Mobile App`
-      );
-      const mailtoUrl = `mailto:ruralalbertahealthconnect@gmail.com?subject=${subject}&body=${body}`;
-      
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-        setIssueTitle("");
-        setIssueDescription("");
-        setModalType('success');
-        setModalTitle('Email App Opened');
-        setModalMessage('Your email app has been opened with the issue report pre-filled. Please review and send.');
-        setModalVisible(true);
-      } else {
-        throw new Error("Cannot open email app");
-      }
+      await reportIssueAction({ userEmail, title: issueTitle, description: issueDescription });
+      setIssueTitle("");
+      setIssueDescription("");
+      setModalType('success');
+      setModalTitle('Issue Reported');
+      setModalMessage('Thank you for reporting the issue! Our team will review it as soon as possible.');
+      setModalVisible(true);
     } catch {
       setModalType('error');
       setModalTitle('Error');
-      setModalMessage('Could not open email app. Please send your issue report directly to ruralalbertahealthconnect@gmail.com');
+      setModalMessage('Could not send issue report. Please try again later.');
       setModalVisible(true);
     }
   };
