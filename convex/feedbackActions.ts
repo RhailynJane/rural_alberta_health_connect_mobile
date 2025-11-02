@@ -52,8 +52,25 @@ export const reportIssueEmail = action({
     userEmail: v.string(),
     title: v.string(),
     description: v.string(),
+    priority: v.union(
+      v.literal("Low"),
+      v.literal("Medium"),
+      v.literal("High"),
+      v.literal("Critical")
+    ),
+    photos: v.optional(
+      v.array(
+        v.object({
+          fileName: v.string(),
+          mimeType: v.string(),
+          base64: v.string(),
+        })
+      )
+    ),
   },
   handler: async (ctx, args) => {
+    // Enforce server-side max photo validation for robustness
+    const safePhotos = (args.photos || []).slice(0, 2);
     const emailPayload = {
       sender: {
         name: "RAHC App Issue Report",
@@ -62,11 +79,20 @@ export const reportIssueEmail = action({
       to: [
         { email: "ruralalbertahealthconnect@gmail.com" },
       ],
-      subject: `RAHC Issue Report: ${args.title} (${args.userEmail})`,
-      htmlContent: `<div style='font-family: Arial, sans-serif;'><h2>Issue Report from ${args.userEmail}</h2><h3>${args.title}</h3><p>${args.description.replace(/\n/g, '<br/>')}</p></div>`,
-      textContent: `Issue Report from ${args.userEmail}\nTitle: ${args.title}\n${args.description}`,
+      subject: `RAHC Issue Report: ${args.title} [${args.priority}] (${args.userEmail})`,
+      htmlContent: `<div style='font-family: Arial, sans-serif;'>
+  <h2>Issue Report from ${args.userEmail}</h2>
+  <p><strong>Priority:</strong> ${args.priority}</p>
+  <h3>${args.title}</h3>
+  <p>${args.description.replace(/\n/g, '<br/>')}</p>
+</div>`,
+      textContent: `Issue Report from ${args.userEmail}\nPriority: ${args.priority}\nTitle: ${args.title}\n${args.description}`,
+        attachment: safePhotos.length
+        ? safePhotos.map((p) => ({ name: p.fileName, content: p.base64 }))
+        : undefined,
     };
     try {
+        console.log("📎 Sending issue email with attachments:", (emailPayload as any).attachment?.length || 0);
       const response = await fetch(BREVO_API_URL, {
         method: "POST",
         headers: {

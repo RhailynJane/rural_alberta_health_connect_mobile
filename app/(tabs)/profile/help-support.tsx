@@ -1,15 +1,19 @@
 import { api } from "@/convex/_generated/api";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 
+// Removed Picker in favor of StatusModal-based selector for priority
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
     Alert,
+    Image,
     SafeAreaView, ScrollView,
     StyleSheet,
     Text, TextInput, TouchableOpacity,
-    View
+    View,
 } from "react-native";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
 import { COLORS, FONTS } from "../../constants/constants";
@@ -64,6 +68,12 @@ export default function HelpSupport() {
   const [feedbackText, setFeedbackText] = useState("");
   const [issueTitle, setIssueTitle] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
+  const [issuePriority, setIssuePriority] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
+  const [issuePhotos, setIssuePhotos] = useState<{ uri: string; base64: string; mimeType: string; fileName: string }[]>([]);
+  const DESCRIPTION_MAX = 1000;
+  const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2 MB
+  const MAX_PHOTO_DIM = 1280; // px
+  const [priorityModalVisible, setPriorityModalVisible] = useState(false);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -195,10 +205,24 @@ export default function HelpSupport() {
 
   const reportIssueAction = useAction(api.feedbackActions.reportIssueEmail);
   const handleReportIssue = async () => {
-    if (!issueTitle.trim() || !issueDescription.trim()) {
+    if (!issueTitle.trim()) {
       setModalType('error');
-      setModalTitle('Missing Information');
-      setModalMessage('Please fill in both the issue title and description.');
+      setModalTitle('Missing Title');
+      setModalMessage('Please enter an issue title.');
+      setModalVisible(true);
+      return;
+    }
+    if (!issueDescription.trim()) {
+      setModalType('error');
+      setModalTitle('Missing Description');
+      setModalMessage('Please provide a description of the issue.');
+      setModalVisible(true);
+      return;
+    }
+    if (issueDescription.length > DESCRIPTION_MAX) {
+      setModalType('error');
+      setModalTitle('Description Too Long');
+      setModalMessage(`Please keep the description under ${DESCRIPTION_MAX} characters.`);
       setModalVisible(true);
       return;
     }
@@ -211,9 +235,19 @@ export default function HelpSupport() {
     }
     try {
       const userEmail = currentUser?.email || "unknown";
-      await reportIssueAction({ userEmail, title: issueTitle, description: issueDescription });
+      await reportIssueAction({
+        userEmail,
+        title: issueTitle,
+        description: issueDescription,
+        priority: issuePriority,
+        photos: issuePhotos.length
+          ? issuePhotos.map(p => ({ fileName: p.fileName, mimeType: p.mimeType, base64: p.base64 }))
+          : undefined,
+      });
       setIssueTitle("");
       setIssueDescription("");
+      setIssuePriority("Medium");
+      setIssuePhotos([]);
       setModalType('success');
       setModalTitle('Issue Reported');
       setModalMessage('Thank you for reporting the issue! Our team will review it as soon as possible.');
@@ -225,6 +259,76 @@ export default function HelpSupport() {
       setModalVisible(true);
     }
   };
+
+  const pickIssuePhoto = async () => {
+    if (issuePhotos.length >= 2) {
+      setModalType('warning');
+      setModalTitle('Attachment Limit');
+      setModalMessage('You can attach up to 2 photos. Remove one to add another.');
+      setModalVisible(true);
+      return;
+    }
+    // Request media library permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      setModalType('warning');
+      setModalTitle('Permission Needed');
+      setModalMessage('We need access to your photos to attach an image.');
+      setModalVisible(true);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      selectionLimit: 1,
+    });
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const asset = result.assets[0];
+      const uri = asset.uri ?? '';
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const fileName = asset.fileName ?? `issue_${Date.now()}.jpg`;
+
+      // Resize and compress to keep under size limits
+      const needsResize = (asset.width ?? 0) > MAX_PHOTO_DIM || (asset.height ?? 0) > MAX_PHOTO_DIM;
+      const resizeAction = needsResize
+        ? (asset.width ?? 0) >= (asset.height ?? 0)
+          ? [{ resize: { width: MAX_PHOTO_DIM } }]
+          : [{ resize: { height: MAX_PHOTO_DIM } }]
+        : [];
+
+      const manipulated = await manipulateAsync(uri, resizeAction, {
+        compress: 0.6,
+        format: SaveFormat.JPEG,
+        base64: true,
+      });
+
+      const finalBase64 = manipulated.base64 ?? asset.base64 ?? '';
+      const finalUri = manipulated.uri ?? uri;
+      if (!finalBase64) {
+        setModalType('error');
+        setModalTitle('Attachment Error');
+        setModalMessage('Could not process image data. Please try another photo.');
+        setModalVisible(true);
+        return;
+      }
+
+      const approxBytes = Math.floor((finalBase64.length * 3) / 4);
+      if (approxBytes > MAX_PHOTO_BYTES) {
+        setModalType('warning');
+        setModalTitle('Photo Too Large');
+        setModalMessage('Each photo must be under 2 MB. Try a smaller image.');
+        setModalVisible(true);
+        return;
+      }
+
+      setIssuePhotos(prev => [...prev, { uri: finalUri, base64: finalBase64, mimeType, fileName }]);
+    }
+  };
+  
+  const removeIssuePhotoAt = (index: number) =>
+    setIssuePhotos(prev => prev.filter((_, i) => i !== index));
 
   const handleEmailSupport = async () => {
     try {
@@ -446,6 +550,7 @@ export default function HelpSupport() {
                 <Text style={styles.formLabel}>
                   Found a bug or issue? Let us know so we can fix it.
                 </Text>
+
                 <Text style={styles.inputLabel}>Issue Title</Text>
                 <TextInput
                   style={styles.input}
@@ -454,17 +559,53 @@ export default function HelpSupport() {
                   placeholder="Brief description of the issue"
                   placeholderTextColor={COLORS.lightGray}
                 />
+
+                <Text style={styles.inputLabel}>Priority</Text>
+                <TouchableOpacity
+                  style={styles.selectRow}
+                  onPress={() => setPriorityModalVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.selectRowValue}>{issuePriority}</Text>
+                  <Icon name="keyboard-arrow-down" size={22} color={COLORS.darkGray} />
+                </TouchableOpacity>
+
                 <Text style={styles.inputLabel}>Issue Description</Text>
                 <TextInput
                   style={styles.textArea}
                   value={issueDescription}
-                  onChangeText={setIssueDescription}
-                  placeholder="Detailed description of the issue, including steps to reproduce..."
+                  onChangeText={(t) => setIssueDescription(t.slice(0, DESCRIPTION_MAX))}
+                  placeholder={`Detailed description of the issue (max ${DESCRIPTION_MAX} characters)...`}
                   placeholderTextColor={COLORS.lightGray}
                   multiline
                   numberOfLines={6}
                   textAlignVertical="top"
                 />
+                <Text style={styles.charCount}>{issueDescription.length}/{DESCRIPTION_MAX}</Text>
+
+                <View style={styles.attachmentRow}>
+                  <TouchableOpacity style={styles.actionButton} onPress={pickIssuePhoto} activeOpacity={0.7}>
+                    <Icon name="attach-file" size={20} color={COLORS.white} />
+                    <Text style={styles.actionButtonText}>Add Photo</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.limitNote}>Up to 2 photos, each under 2 MB</Text>
+                </View>
+                {issuePhotos.length > 0 && (
+                  <View>
+                    {issuePhotos.map((p, idx) => (
+                      <View key={`${p.fileName}-${idx}`} style={styles.attachmentPreview}>
+                        <Image source={{ uri: p.uri }} style={styles.attachmentImage} />
+                        <View style={styles.attachmentActions}>
+                          <Text style={styles.attachmentName}>{p.fileName}</Text>
+                          <TouchableOpacity onPress={() => removeIssuePhotoAt(idx)}>
+                            <Text style={styles.removeAttachment}>Remove</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={styles.submitButton}
                   onPress={handleReportIssue}
@@ -496,9 +637,28 @@ export default function HelpSupport() {
         message={modalMessage}
         onClose={() => setModalVisible(false)}
       />
+
+      {/* Priority selection modal */}
+      <StatusModal
+        visible={priorityModalVisible}
+        type="info"
+        title="Select Priority"
+        message="Choose an issue priority."
+        onClose={() => setPriorityModalVisible(false)}
+        buttons={[
+          { label: 'Low', onPress: () => { setIssuePriority('Low'); setPriorityModalVisible(false); } },
+          { label: 'Medium', onPress: () => { setIssuePriority('Medium'); setPriorityModalVisible(false); } },
+          { label: 'High', onPress: () => { setIssuePriority('High'); setPriorityModalVisible(false); } },
+          { label: 'Critical', onPress: () => { setIssuePriority('Critical'); setPriorityModalVisible(false); } },
+          { label: 'Cancel', onPress: () => setPriorityModalVisible(false), variant: 'secondary' },
+        ]}
+      />
     </SafeAreaView>
   );
 }
+
+// Priority selection modal using StatusModal for consistency
+// Rendered after component to keep JSX readable
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -699,5 +859,78 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 16,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    backgroundColor: COLORS.white,
+  },
+  charCount: {
+    alignSelf: "flex-end",
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 4,
+  },
+  attachmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  attachmentPreview: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  attachmentImage: {
+    width: "100%",
+    height: 160,
+  },
+  attachmentActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#fafafa",
+  },
+  attachmentName: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+  },
+  removeAttachment: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    color: COLORS.primary,
+    textDecorationLine: "underline",
+  },
+  selectRow: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: COLORS.white,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectRowValue: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+  },
+  limitNote: {
+    flex: 1,
+    marginLeft: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    flexWrap: 'wrap',
   },
 });
