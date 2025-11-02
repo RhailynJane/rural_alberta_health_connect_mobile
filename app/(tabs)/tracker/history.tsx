@@ -58,9 +58,14 @@ export default function History() {
     return newDate;
   };
 
-  const [startDate, setStartDate] = useState(
-    getDateWithoutTime(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-  );
+  // Initialize with last 7 days (6 days ago + today = 7 days total, matching Dashboard)
+  const getInitialStartDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6); // 6 days back + today = 7 days
+    return getDateWithoutTime(date);
+  };
+
+  const [startDate, setStartDate] = useState(getInitialStartDate());
   const [endDate, setEndDate] = useState(getEndOfDay(new Date()));
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
@@ -211,19 +216,17 @@ export default function History() {
         setEndDate(getEndOfDay(today));
         break;
       case "7d":
-        setStartDate(
-          getDateWithoutTime(
-            new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-          )
-        );
+        // Last 7 days: 6 days ago + today = 7 days (matching Dashboard)
+        const sevenDaysStart = new Date(today);
+        sevenDaysStart.setDate(today.getDate() - 6);
+        setStartDate(getDateWithoutTime(sevenDaysStart));
         setEndDate(getEndOfDay(today));
         break;
       case "30d":
-        setStartDate(
-          getDateWithoutTime(
-            new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-          )
-        );
+        // Last 30 days: 29 days ago + today = 30 days
+        const thirtyDaysStart = new Date(today);
+        thirtyDaysStart.setDate(today.getDate() - 29);
+        setStartDate(getDateWithoutTime(thirtyDaysStart));
         setEndDate(getEndOfDay(today));
         break;
       case "custom":

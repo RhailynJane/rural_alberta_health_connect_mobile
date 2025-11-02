@@ -6,12 +6,12 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Linking,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -33,6 +33,7 @@ export default function Dashboard() {
   const [healthStatus, setHealthStatus] = useState<string>("Good");
   const [cachedUser, setCachedUser] = useState<any>(null);
   const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
+  const [localWeeklyEntries, setLocalWeeklyEntries] = useState<any[]>([]);
   const queryArgs = isAuthenticated && !isLoading ? {} : "skip";
   
   // Modal state
@@ -60,9 +61,14 @@ export default function Dashboard() {
     const endDate = new Date(today);
     endDate.setHours(23, 59, 59, 999);
 
+    const startStr = startDate.toISOString().split("T")[0];
+    const endStr = endDate.toISOString().split("T")[0];
+    
+    console.log(`📊 [DASHBOARD DATE RANGE] Start: ${startStr}, End: ${endStr}, 7 days from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`);
+
     return {
-      startDate: startDate.toISOString().split("T")[0],
-      endDate: endDate.toISOString().split("T")[0],
+      startDate: startStr,
+      endDate: endStr,
     };
   };
 
@@ -99,85 +105,172 @@ export default function Dashboard() {
     }
   }, [isOnline, weeklyEntriesOnline]);
 
-  // Load cached data when offline
+  // Load cached data when offline (and fetch current user's last 7 days from WatermelonDB)
   useEffect(() => {
     if (!isOnline) {
-      // Load cached user
-      AsyncStorage.getItem("@dashboard_user")
-        .then((cached) => {
-          if (cached) {
-            setCachedUser(JSON.parse(cached));
-          }
-        })
-        .catch((err) => console.error("Failed to load cached user:", err));
-
-      // Load cached weekly entries
-      AsyncStorage.getItem("@dashboard_weekly_entries")
-        .then((cached) => {
-          if (cached) {
-            setCachedWeeklyEntries(JSON.parse(cached));
-          }
-        })
-        .catch((err) => console.error("Failed to load cached entries:", err));
-
-      // Also try to load from WatermelonDB
-      const fetchOfflineEntries = async () => {
+      (async () => {
         try {
+          // Load cached user (needed for userId filter)
+          let uid: string | undefined = undefined;
+          try {
+            const cached = await AsyncStorage.getItem("@dashboard_user");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              setCachedUser(parsed);
+              uid = parsed?._id;
+            }
+          } catch (err) {
+            console.error("Failed to load cached user:", err);
+          }
+
+          // Also load cached weekly entries for immediate display (may be stale by one entry)
+          try {
+            const cachedEntries = await AsyncStorage.getItem("@dashboard_weekly_entries");
+            if (cachedEntries) {
+              setCachedWeeklyEntries(JSON.parse(cachedEntries));
+            }
+          } catch (err) {
+            console.error("Failed to load cached entries:", err);
+          }
+
+          // If we couldn't read userId from cache, there's nothing meaningful to show
+          if (!uid) {
+            setCachedWeeklyEntries([]);
+            return;
+          }
+
+          // Load from WatermelonDB for the current user (align with online: last 7 days incl. today)
           const collection = database.get("health_entries");
-          const sevenDaysAgo = new Date();
-          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-          
+          const start = new Date();
+          start.setDate(start.getDate() - 6);
+          start.setHours(0, 0, 0, 0);
+
+          const end = new Date();
+          end.setHours(23, 59, 59, 999);
+
           const entries = await collection
             .query(
-              Q.where("timestamp", Q.gte(sevenDaysAgo.getTime())),
+              Q.where("userId", uid),
+              Q.where("timestamp", Q.gte(start.getTime())),
+              Q.where("timestamp", Q.lte(end.getTime())),
               Q.sortBy("timestamp", Q.desc)
             )
             .fetch();
 
-          if (entries.length > 0) {
-            const mapped = entries.map((entry: any) => ({
-              _id: entry.id,
-              symptoms: entry.symptoms || "",
-              severity: entry.severity || 0,
-              timestamp: entry.timestamp || Date.now(),
-            }));
-            setCachedWeeklyEntries(mapped);
-          }
+          const mapped = entries.map((entry: any) => ({
+            _id: entry.id,
+            symptoms: entry.symptoms || "",
+            severity: entry.severity || 0,
+            timestamp: entry.timestamp || Date.now(),
+          }));
+          console.log(`📊 [DASHBOARD OFFLINE] Loaded ${mapped.length} entries for last 7 days (local cache, user=${uid})`);
+          setCachedWeeklyEntries(mapped);
+          setLocalWeeklyEntries(mapped);
         } catch (error) {
           console.error("Error fetching offline entries from WatermelonDB:", error);
         }
-      };
-      fetchOfflineEntries();
+      })();
     }
   }, [isOnline, database]);
+
+  // Always fetch local last 7 days for current user as a fast, stable baseline (even when online)
+  useEffect(() => {
+    const uid = (user as any)?._id || (cachedUser as any)?._id;
+    if (!uid) return;
+    (async () => {
+      try {
+        const collection = database.get("health_entries");
+        const start = new Date();
+        start.setDate(start.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+
+        console.log(`📊 [DASHBOARD LOCAL QUERY] Querying WatermelonDB from ${start.toISOString()} to ${end.toISOString()} for user ${uid}`);
+
+        const entries = await collection
+          .query(
+            Q.where("userId", uid),
+            Q.where("timestamp", Q.gte(start.getTime())),
+            Q.where("timestamp", Q.lte(end.getTime())),
+            Q.sortBy("timestamp", Q.desc)
+          )
+          .fetch();
+
+        const mapped = entries.map((entry: any) => ({
+          _id: entry.id,
+          convexId: entry.convexId,
+          symptoms: entry.symptoms || "",
+          severity: entry.severity || 0,
+          timestamp: entry.timestamp || Date.now(),
+          type: entry.type || "",
+        }));
+        
+        console.log(`📊 [DASHBOARD LOCAL RESULT] Found ${mapped.length} local entries for last 7 days`);
+        
+        setLocalWeeklyEntries(mapped);
+      } catch (error) {
+        console.error("Error fetching local weekly entries:", error);
+      }
+    })();
+  }, [database, isOnline, user, cachedUser]);
 
   // Use online or cached data
   const displayUser = useMemo(
     () => (isOnline ? user : cachedUser),
     [isOnline, user, cachedUser]
   );
-  const weeklyEntries = useMemo(
-    () => (isOnline ? weeklyEntriesOnline : cachedWeeklyEntries),
-    [isOnline, weeklyEntriesOnline, cachedWeeklyEntries]
+  const currentUserId = useMemo(
+    () => (user as any)?._id || (cachedUser as any)?._id,
+    [user, cachedUser]
   );
+  // Merge local and online results to avoid temporary regressions when coming online
+  const displayedWeeklyEntries = useMemo(() => {
+    const onlineArr = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
+    const localArr = Array.isArray(localWeeklyEntries) && localWeeklyEntries.length > 0
+      ? localWeeklyEntries
+      : cachedWeeklyEntries;
+    
+    console.log(`📊 [DASHBOARD MERGE] Online: ${onlineArr.length}, Local: ${localArr.length}, Cached: ${cachedWeeklyEntries.length}`);
+    
+    // When online: prefer whichever has MORE entries (more up-to-date)
+    // This handles the case where sync completes but Convex query hasn't refetched yet
+    if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
+      if (localArr.length > onlineArr.length) {
+        console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
+        return localArr;
+      }
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
+      return onlineArr;
+    }
+    
+    // Fallback: prefer online if available, else local
+    if (onlineArr.length > 0) {
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
+      return onlineArr;
+    }
+    
+    // Offline mode: use local entries
+    console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries: ${localArr.length}`);
+    return localArr;
+  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries]);
 
-  // Calculate weekly health score
-  const calculateWeeklyHealthScore = () => {
-    if (!weeklyEntries || weeklyEntries.length === 0) return "0.0";
 
-    const totalScore = weeklyEntries.reduce(
+
+  const weeklyHealthScore = (() => {
+    if (!displayedWeeklyEntries || displayedWeeklyEntries.length === 0) return "0.0";
+    const totalScore = displayedWeeklyEntries.reduce(
       (sum, entry) => sum + (10 - entry.severity),
       0
     );
-    const averageScore = totalScore / weeklyEntries.length;
+    const averageScore = totalScore / displayedWeeklyEntries.length;
     return averageScore.toFixed(1);
-  };
-
-  const weeklyHealthScore = calculateWeeklyHealthScore();
+  })();
 
   // Determine health status based on weekly health score
   useEffect(() => {
-    if (!weeklyEntries || weeklyEntries.length === 0) {
+    if (!displayedWeeklyEntries || displayedWeeklyEntries.length === 0) {
       setHealthStatus("Unknown");
       return;
     }
@@ -192,7 +285,7 @@ export default function Dashboard() {
     } else {
       setHealthStatus("Poor");
     }
-  }, [weeklyHealthScore, weeklyEntries]);
+  }, [weeklyHealthScore, displayedWeeklyEntries]);
 
   // Use displayUser and cached data for offline support
   const userName = displayUser?.firstName || user?.firstName || "User";
@@ -381,7 +474,7 @@ export default function Dashboard() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  {weeklyEntries && weeklyEntries.length > 0
+                  {displayedWeeklyEntries && displayedWeeklyEntries.length > 0
                     ? `${weeklyHealthScore}/10`
                     : "N/A"}
                 </Text>
@@ -391,13 +484,13 @@ export default function Dashboard() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  {weeklyEntries && weeklyEntries.length > 0
-                    ? `Based on ${weeklyEntries.length} ${weeklyEntries.length === 1 ? 'entry' : 'entries'} in last 7 days`
+                  {displayedWeeklyEntries && displayedWeeklyEntries.length > 0
+                    ? `Based on ${displayedWeeklyEntries.length} ${displayedWeeklyEntries.length === 1 ? 'entry' : 'entries'} in last 7 days`
                     : "No entries in last 7 days"}
                 </Text>
 
                 {/* Health Score Progress Bar - only show if there are entries */}
-                {weeklyEntries && weeklyEntries.length > 0 && (
+                {displayedWeeklyEntries && displayedWeeklyEntries.length > 0 && (
                   <>
                     <View style={styles.progressBarContainer}>
                       <View

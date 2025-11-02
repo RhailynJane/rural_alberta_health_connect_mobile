@@ -82,6 +82,26 @@
   - Fixed white gap issues by preventing duplicate safe area padding
   - Banner now shows on all screens when offline, maintains proper spacing when online
 
+### ✅ Bug #8: Dashboard entry count not updating immediately when coming online
+- **Reporter:** Developer Testing
+- **Related:** Bug #5 (Offline sync)
+- **Description:** Dashboard shows old entry count (e.g., 11) when coming online, updates to correct count (e.g., 12) only after navigating to History screen or after several seconds delay
+- **Root Cause:** Convex query caching - online query takes time to refetch after sync completes, causing temporary display of stale data
+- **Priority:** P3
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - Enhanced `displayedWeeklyEntries` merge logic to intelligently choose data source
+  - **When online with both local and online data available:** Compares entry counts and uses whichever has MORE entries (the newer data)
+  - Local entries immediately show after sync (count: 12) while Convex query is still cached (count: 11)
+  - Once Convex refetches and matches local count, switches back to using online as authoritative source
+  - **Result:** Zero delay in showing updated counts, no temporary regression when transitioning online
+  - Added `isOnline` dependency to merge logic for proper state awareness
+- **User Experience:**
+  - Entry count updates **instantly** when coming online (no 3-5 second delay)
+  - Seamless transition between offline and online states
+  - Count stays accurate throughout sync process
+- **Code Location:** `app/(tabs)/dashboard.tsx` lines ~228-250
+
 ---
 
 ## Additional Issues
@@ -168,12 +188,12 @@
 
 ## Summary Statistics
 
-- **Total Bugs Reported:** 21
+- **Total Bugs Reported:** 22
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 3 open
-- **Medium/Low (P3-P4):** 1 fixed, 1 open
+- **Medium/Low (P3-P4):** 2 fixed, 1 open
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 3
+- **Fixed This Sprint:** 4
 - **Enhancements Completed:** 1
 
 ---
