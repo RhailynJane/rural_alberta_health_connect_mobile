@@ -164,21 +164,31 @@ export default function EmergencyContact() {
         );
 
         if (existingProfile) {
-          // Update fields individually to avoid aborting if a column is missing on this device
-          try {
-            await existingProfile.update((profile: any) => {
-              profile.emergencyContactName = contactName;
-            });
-          } catch (e) {
-            console.warn('⚠️ Could not set emergencyContactName locally:', e);
-          }
-          try {
-            await existingProfile.update((profile: any) => {
-              profile.emergencyContactPhone = contactPhone;
-            });
-          } catch (e) {
-            console.warn('⚠️ Could not set emergencyContactPhone locally:', e);
-          }
+          // Update using batch update for better safety
+          await existingProfile.update((profile: any) => {
+            try {
+              console.log('🔍 [EmergencyContact] Starting batch update');
+              const updates = {
+                emergencyContactName: contactName || '',
+                emergencyContactPhone: contactPhone || ''
+              };
+
+              for (const [key, value] of Object.entries(updates)) {
+                try {
+                  console.log(`🔍 [EmergencyContact] Setting ${key} to:`, value);
+                  (profile as any)[key] = value;
+                  console.log(`✅ [EmergencyContact] Successfully set ${key}`);
+                } catch (fieldError: any) {
+                  console.error(`❌ [EmergencyContact] Failed to set ${key}:`, fieldError);
+                  console.error(`❌ [EmergencyContact] Error details:`, fieldError?.message);
+                }
+              }
+              console.log('✅ [EmergencyContact] Batch update completed');
+            } catch (e: any) {
+              console.error('❌ [EmergencyContact] Batch update failed:', e);
+              console.error('❌ [EmergencyContact] Error stack:', e?.stack);
+            }
+          });
           console.log("✅ Emergency Contact - Updated existing local profile (best-effort)");
         } else {
           // Create minimal row first, then set optional fields individually
@@ -192,16 +202,29 @@ export default function EmergencyContact() {
             console.warn('⚠️ Could not create local profile record:', createErr);
           }
           if (created) {
-            try {
-              await created.update((p: any) => { p.emergencyContactName = contactName; });
-            } catch (e) {
-              console.warn('⚠️ Could not set emergencyContactName on new record:', e);
-            }
-            try {
-              await created.update((p: any) => { p.emergencyContactPhone = contactPhone; });
-            } catch (e) {
-              console.warn('⚠️ Could not set emergencyContactPhone on new record:', e);
-            }
+            // Update using batch update for better safety
+            await created.update((p: any) => {
+              try {
+                console.log('🔍 [EmergencyContact-Create] Starting batch update');
+                const updates = {
+                  emergencyContactName: contactName || '',
+                  emergencyContactPhone: contactPhone || ''
+                };
+
+                for (const [key, value] of Object.entries(updates)) {
+                  try {
+                    console.log(`🔍 [EmergencyContact-Create] Setting ${key} to:`, value);
+                    (p as any)[key] = value;
+                    console.log(`✅ [EmergencyContact-Create] Successfully set ${key}`);
+                  } catch (fieldError: any) {
+                    console.error(`❌ [EmergencyContact-Create] Failed to set ${key}:`, fieldError);
+                  }
+                }
+                console.log('✅ [EmergencyContact-Create] Batch update completed');
+              } catch (e: any) {
+                console.error('❌ [EmergencyContact-Create] Batch update failed:', e);
+              }
+            });
             console.log("✅ Emergency Contact - Created/updated new local profile (best-effort)");
           }
         }

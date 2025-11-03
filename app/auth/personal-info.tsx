@@ -2,16 +2,16 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -19,6 +19,7 @@ import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
@@ -319,23 +320,42 @@ export default function PersonalInfo() {
             .filter(Boolean)
             .join(', ');
           
-          const safeUpdate = async (setter: (p: any) => void) => {
-            try {
-              await existingProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to update profile field:', e);
-            }
-          };
+          // (Removed unused helper 'safeUpdate' to satisfy linter)
 
-          await safeUpdate((profile: any) => { profile.userId = currentUser._id; });
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          // Update using prepareUpdate for better safety
+          await existingProfile.update((profile: any) => {
+            try {
+              console.log('🔍 [PersonalInfo] Starting batch update');
+              // Use bracket notation for safer property access
+              const updates = {
+                userId: currentUser._id,
+                age: age || '',
+                ageRange: age || '',
+                address1: address1 || '',
+                address2: address2 || '',
+                city: city || '',
+                province: province || '',
+                postalCode: postalCode || '',
+                location: fullAddress || location || ''
+              };
+
+              for (const [key, value] of Object.entries(updates)) {
+                try {
+                  console.log(`🔍 [PersonalInfo] Setting ${key} to:`, value);
+                  // Use bracket notation to avoid decorator issues
+                  (profile as any)[key] = value;
+                  console.log(`✅ [PersonalInfo] Successfully set ${key}`);
+                } catch (fieldError: any) {
+                  console.error(`❌ [PersonalInfo] Failed to set ${key}:`, fieldError);
+                  console.error(`❌ [PersonalInfo] Error details:`, fieldError?.message);
+                }
+              }
+              console.log('✅ [PersonalInfo] Batch update completed');
+            } catch (e: any) {
+              console.error('❌ [PersonalInfo] Batch update failed:', e);
+              console.error('❌ [PersonalInfo] Error stack:', e?.stack);
+            }
+          });
           
           console.log("✅ Personal Info - Updated existing local profile");
         } else {
@@ -351,22 +371,37 @@ export default function PersonalInfo() {
           });
           
           // Then update optional fields one by one
-          const safeUpdate = async (setter: (p: any) => void) => {
-            try {
-              await newProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to set profile field:', e);
-            }
-          };
+          // (Removed unused helper 'safeUpdate' to satisfy linter)
 
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
+          // Update using batch update for better safety
+          await newProfile.update((profile: any) => {
+            try {
+              console.log('🔍 [PersonalInfo-Create] Starting batch update');
+              const updates = {
+                age: age || '',
+                ageRange: age || '',
+                address1: address1 || '',
+                address2: address2 || '',
+                city: city || '',
+                province: province || '',
+                postalCode: postalCode || '',
+                location: fullAddress || location || ''
+              };
+
+              for (const [key, value] of Object.entries(updates)) {
+                try {
+                  console.log(`🔍 [PersonalInfo-Create] Setting ${key} to:`, value);
+                  (profile as any)[key] = value;
+                  console.log(`✅ [PersonalInfo-Create] Successfully set ${key}`);
+                } catch (fieldError: any) {
+                  console.error(`❌ [PersonalInfo-Create] Failed to set ${key}:`, fieldError);
+                }
+              }
+              console.log('✅ [PersonalInfo-Create] Batch update completed');
+            } catch (e: any) {
+              console.error('❌ [PersonalInfo-Create] Batch update failed:', e);
+            }
+          });
           
           console.log("✅ Personal Info - Created new local profile");
         }
@@ -423,6 +458,9 @@ export default function PersonalInfo() {
               height={150}
               showLogo={true}
             />
+
+            {/* Inline offline banner for onboarding screen */}
+            <OfflineBanner variant="inline" />
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
@@ -704,7 +742,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
+    paddingTop: 16,
   },
   progressContainer: {
     paddingHorizontal: 24,

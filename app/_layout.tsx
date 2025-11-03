@@ -2,7 +2,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { ConvexReactClient } from "convex/react";
 import * as Notifications from "expo-notifications";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
 import { View } from "react-native";
@@ -71,6 +71,8 @@ export default function RootLayout() {
     body: string;
   } | null>(null);
   const { isOnline } = useNetworkStatus();
+  const pathname = usePathname();
+  const suppressGlobalOfflineOnPersonalInfo = pathname === "/auth/personal-info";
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
@@ -134,7 +136,7 @@ export default function RootLayout() {
                   )}
                   <View style={{ flex: 1 }}>
                     {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
-                    {!isOnline && <OfflineBanner />}
+                    {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
                     <Stack screenOptions={{ headerShown: false }}>
                       <Stack.Screen name="index" />
                       <Stack.Screen name="onboarding" />

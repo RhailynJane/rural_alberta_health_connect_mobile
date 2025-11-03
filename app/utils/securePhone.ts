@@ -4,13 +4,23 @@ import { Platform } from "react-native";
 const PHONE_KEY = "user_phone_number";
 
 // Compose a per-user storage key to avoid cross-account leakage on shared devices
-function keyFor(userId?: string | null): string {
-  return userId ? `${PHONE_KEY}:${userId}` : PHONE_KEY; // legacy fallback when userId is not provided
+function keyFor(userId?: string | null): string | null {
+  const id = (userId ?? "").toString().trim();
+  // Only allow [A-Za-z0-9._-] in keys and disallow empty
+  if (!id || !/^[A-Za-z0-9._-]+$/.test(id)) {
+    return null;
+  }
+  // NOTE: expo-secure-store keys must NOT contain ':'; use '__' as separator instead
+  return `${PHONE_KEY}__${id}`;
 }
 
 export async function savePhoneSecurely(phone: string, userId?: string | null): Promise<void> {
   try {
     const storageKey = keyFor(userId);
+    if (!storageKey) {
+      console.warn("savePhoneSecurely: skipped - invalid or empty user id for SecureStore key");
+      return;
+    }
     if (Platform.OS === "android") {
       await SecureStore.setItemAsync(storageKey, phone, {
         requireAuthentication: false,
@@ -28,6 +38,7 @@ export async function savePhoneSecurely(phone: string, userId?: string | null): 
 export async function getPhoneSecurely(userId?: string | null): Promise<string | null> {
   try {
     const storageKey = keyFor(userId);
+    if (!storageKey) return null;
     return await SecureStore.getItemAsync(storageKey);
   } catch (e) {
     console.warn("Failed to retrieve secure phone number", e);
@@ -38,6 +49,7 @@ export async function getPhoneSecurely(userId?: string | null): Promise<string |
 export async function clearPhoneSecurely(userId?: string | null): Promise<void> {
   try {
     const storageKey = keyFor(userId);
+    if (!storageKey) return;
     await SecureStore.deleteItemAsync(storageKey);
   } catch (e) {
     console.warn("Failed to clear secure phone number", e);

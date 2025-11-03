@@ -40,11 +40,13 @@
 
 ## High Priority (P2)
 
-### 🟡 Bug #2: Profile information not displaying consistently
+### ✅ Bug #2: Profile information not displaying consistently
 - **Reporter:** Sean Bauzon
 - **Test Case:** TC-004
-- **Description:** User profile data entered during registration displays intermittently
+- **Description:** User profile data entered during registration displays intermittently - sometimes shows, sometimes disappears, data appears incomplete. Offline edits not persisting on screen.
+- **Priority:** P2
 - **Status:** ⏳ Open
+
 
 ### 🟡 Bug #3: Notification reminders not functioning
 - **Reporter:** Sean Bauzon, Joy Wong
@@ -214,10 +216,10 @@
 
 - **Total Bugs Reported:** 23
 - **Critical (P1):** 2 fixed, 0 open ✅
-- **High (P2):** 3 open
+- **High (P2):** 2 fixed, 1 open
 - **Medium/Low (P3-P4):** 3 fixed, 1 open
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 5
+- **Fixed This Sprint:** 7
 - **Enhancements Completed:** 1
 
 ---

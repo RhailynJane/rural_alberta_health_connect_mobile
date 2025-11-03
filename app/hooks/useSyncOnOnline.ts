@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
+import { ensureUserProfilesSchema } from '../../watermelon/database/selfHeal';
 import { useWatermelonDatabase } from '../../watermelon/hooks/useDatabase';
 import { useNetworkStatus } from './useNetworkStatus';
 
@@ -307,10 +308,25 @@ export function useSyncOnOnline() {
       const userProfilesCollection = database.get('user_profiles');
       const usersCollection = database.get('users');
       const authUserId = currentUser?._id ? String(currentUser._id) : '';
+      // Proactively heal device schema before any profile writes
+      await ensureUserProfilesSchema(database);
       
       // First, log ALL profiles in the database
       const allProfiles = await userProfilesCollection.query().fetch();
       console.log(`📋 Total profiles in WatermelonDB: ${allProfiles.length}`);
+      // Debug: Inspect actual SQLite columns to detect migration/schema drift
+      try {
+        const adapter: any = (database as any)?.adapter;
+        if (adapter?.unsafeSqlQuery) {
+          const pragma: any = await adapter.unsafeSqlQuery("PRAGMA table_info('user_profiles')");
+          const cols = Array.isArray(pragma)
+            ? pragma.map((c: any) => c.name)
+            : (pragma?.map ? pragma.map((c: any) => c.name) : pragma);
+          console.log('🧪 [WMDB] user_profiles actual columns:', cols);
+        }
+      } catch (e) {
+        console.warn('⚠️ [WMDB] Failed to read PRAGMA table_info(user_profiles):', e);
+      }
       
       if (allProfiles.length > 0) {
         allProfiles.forEach((profile, index) => {
@@ -340,7 +356,10 @@ export function useSyncOnOnline() {
             if (!(user as any).convexUserId && raw.convex_user_id) { await safeUpdate((u: any) => { u.convexUserId = raw.convex_user_id; }); changed = true; }
             if (!(user as any).firstName && raw.first_name) { await safeUpdate((u: any) => { u.firstName = raw.first_name; }); changed = true; }
             if (!(user as any).lastName && raw.last_name) { await safeUpdate((u: any) => { u.lastName = raw.last_name; }); changed = true; }
-            if ((user as any).hasCompletedOnboarding === undefined && raw.has_completed_onboarding !== undefined) { await safeUpdate((u: any) => { u.hasCompletedOnboarding = raw.has_completed_onboarding; }); changed = true; }
+            // Promote to true if remote/local legacy flag is true; never downgrade true->false
+            if (((user as any).hasCompletedOnboarding !== true) && raw.has_completed_onboarding === true) {
+              await safeUpdate((u: any) => { u.hasCompletedOnboarding = true; }); changed = true;
+            }
             if ((user as any).emailVerificationTime === undefined && raw.email_verification_time !== undefined) { await safeUpdate((u: any) => { u.emailVerificationTime = raw.email_verification_time; }); changed = true; }
             if ((user as any).phoneVerificationTime === undefined && raw.phone_verification_time !== undefined) { await safeUpdate((u: any) => { u.phoneVerificationTime = raw.phone_verification_time; }); changed = true; }
             if ((user as any).isAnonymous === undefined && raw.is_anonymous !== undefined) { await safeUpdate((u: any) => { u.isAnonymous = raw.is_anonymous; }); changed = true; }
@@ -366,7 +385,8 @@ export function useSyncOnOnline() {
           if (!(profile as any).ageRange && raw.age_range) { await safeUpdate((p: any) => { p.ageRange = raw.age_range; }); changed = true; }
           if (!(profile as any).age && raw.age) { await safeUpdate((p: any) => { p.age = raw.age; }); changed = true; }
           if (!(profile as any).location && raw.location) { await safeUpdate((p: any) => { p.location = raw.location; }); changed = true; }
-          if ((profile as any).onboardingCompleted === undefined && raw.onboarding_completed !== undefined) { await safeUpdate((p: any) => { p.onboardingCompleted = raw.onboarding_completed; }); changed = true; }
+          // Promote to true if legacy flag indicates completion; never downgrade true->false
+          if (((profile as any).onboardingCompleted !== true) && raw.onboarding_completed === true) { await safeUpdate((p: any) => { p.onboardingCompleted = true; }); changed = true; }
           if (!(profile as any).emergencyContactName && raw.emergency_contact_name) { await safeUpdate((p: any) => { p.emergencyContactName = raw.emergency_contact_name; }); changed = true; }
           if (!(profile as any).emergencyContactPhone && raw.emergency_contact_phone) { await safeUpdate((p: any) => { p.emergencyContactPhone = raw.emergency_contact_phone; }); changed = true; }
           if (!(profile as any).medicalConditions && raw.medical_conditions) { await safeUpdate((p: any) => { p.medicalConditions = raw.medical_conditions; }); changed = true; }
@@ -501,6 +521,42 @@ export function useSyncOnOnline() {
           const finalAge = bestAge || bestAgeRange || '';
           const location = bestLocation;
 
+          // If server/user indicates onboarding completed, ensure local profile flag is set to true
+          const serverOnboardingTrue = !!((currentUser as any)?.hasCompletedOnboarding || (currentUser as any)?.has_completed_onboarding);
+          if (serverOnboardingTrue) {
+            for (const pr of profiles) {
+              if ((pr as any).onboardingCompleted !== true) {
+                try {
+                  await database.write(async () => {
+                    await pr.update((p: any) => { p.onboardingCompleted = true; });
+                  });
+                  console.log(`✅ Promoted onboardingCompleted=true locally for profile ${pr.id} based on server state`);
+                } catch (e) {
+                  console.warn(`⚠️ Failed to promote onboardingCompleted for profile ${pr.id}:`, e);
+                  // Fallback: ensure Users table reflects completion so UI logic has a reliable flag
+                  try {
+                    const usersCol = database.get('users');
+                    const allUsers = await usersCol.query().fetch();
+                    await database.write(async () => {
+                      for (const u of allUsers as any[]) {
+                        const raw = u._raw || {};
+                        const uid = (u as any).convexUserId || raw.convex_user_id || '';
+                        if (!authUserId || uid === authUserId) {
+                          try {
+                            await u.update((uu: any) => { uu.hasCompletedOnboarding = true; });
+                          } catch {}
+                        }
+                      }
+                    });
+                    console.log('✅ Fallback: marked users.hasCompletedOnboarding=true');
+                  } catch (e2) {
+                    console.warn('⚠️ Fallback failed to update users.hasCompletedOnboarding:', e2);
+                  }
+                }
+              }
+            }
+          }
+
           // Sync personal info if any fields present
           const shouldSyncPersonal = !!(needsSyncFlag || finalAge || location || bestAddress1 || bestCity || bestProvince || bestPostalCode);
           if (shouldSyncPersonal) {
@@ -540,18 +596,8 @@ export function useSyncOnOnline() {
             console.log(`✅ Synced medical info`);
           }
 
-          // Mark all local duplicates as synced (best-effort)
-          for (const pr of profiles) {
-            try {
-              await database.write(async () => {
-                await pr.update((p: any) => { 
-                  p.onboardingCompleted = false; // Reset so we don't sync again
-                });
-              });
-            } catch (localErr) {
-              console.warn('⚠️ Local profile update (onboardingCompleted) failed but server sync succeeded:', localErr);
-            }
-          }
+          // Sync completed successfully - no local state changes needed
+          // The server is now the source of truth and will be hydrated on next load
 
           // Clear offline sync flag once we've attempted server sync
           if (authUserId) {
@@ -602,11 +648,42 @@ export function useSyncOnOnline() {
         
         // Only sync if we have current user data
         if (currentUser?._id) {
-          // Sync both in parallel for faster completion
-          await Promise.all([
-            syncHealthEntries(),
-            syncPersonalInfo()
-          ]);
+          const uid = String(currentUser._id);
+          
+          // Sync health entries from WatermelonDB (still works)
+          await syncHealthEntries();
+          
+          // Sync profile from AsyncStorage (WatermelonDB sync disabled due to schema errors)
+          try {
+            const needsSync = await AsyncStorage.getItem(`${uid}:profile_needs_sync`);
+            if (needsSync === '1') {
+              console.log('📤 [Sync] Syncing profile from AsyncStorage cache...');
+              const cacheRaw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+              if (cacheRaw) {
+                const cached = JSON.parse(cacheRaw);
+                // Call server mutation to update profile
+                if (updatePersonalInfo) {
+                  await updatePersonalInfo({
+                    age: cached.age || '',
+                    address1: cached.address1 || '',
+                    address2: cached.address2 || '',
+                    city: cached.city || '',
+                    province: cached.province || '',
+                    postalCode: cached.postalCode || '',
+                    location: cached.location || '',
+                  });
+                  console.log('✅ [Sync] Synced profile from AsyncStorage to server');
+                  // Clear sync flag
+                  await AsyncStorage.removeItem(`${uid}:profile_needs_sync`);
+                }
+              }
+            } else {
+              console.log('⏭️ [Sync] No profile changes to sync');
+            }
+          } catch (syncErr) {
+            console.error('❌ [Sync] Failed to sync profile from AsyncStorage:', syncErr);
+          }
+          
           hasSyncedProfilesRef.current = true;
         } else {
           console.log('⏭️ Skipping sync - current user not loaded yet');
