@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
-import { ensureUserProfilesSchema } from '../../watermelon/database/selfHeal';
 import { useWatermelonDatabase } from '../../watermelon/hooks/useDatabase';
+import { getPhoneSecurely } from '../utils/securePhone';
 import { useNetworkStatus } from './useNetworkStatus';
 
 /**
@@ -24,6 +24,7 @@ export function useSyncOnOnline() {
   // Get mutations for syncing
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
+  const updatePhone = useMutation(api.users.updatePhone);
   // Use the correct Convex mutation path for updating personal info
   const updatePersonalInfo = useMutation(
     (api as any)["profile/personalInformation"].updatePersonalInfo
@@ -305,306 +306,98 @@ export function useSyncOnOnline() {
 
   const syncPersonalInfo = async () => {
     try {
-      const userProfilesCollection = database.get('user_profiles');
-      const usersCollection = database.get('users');
       const authUserId = currentUser?._id ? String(currentUser._id) : '';
-      // Proactively heal device schema before any profile writes
-      await ensureUserProfilesSchema(database);
       
-      // First, log ALL profiles in the database
-      const allProfiles = await userProfilesCollection.query().fetch();
-      console.log(`📋 Total profiles in WatermelonDB: ${allProfiles.length}`);
-      // Debug: Inspect actual SQLite columns to detect migration/schema drift
-      try {
-        const adapter: any = (database as any)?.adapter;
-        if (adapter?.unsafeSqlQuery) {
-          const pragma: any = await adapter.unsafeSqlQuery("PRAGMA table_info('user_profiles')");
-          const cols = Array.isArray(pragma)
-            ? pragma.map((c: any) => c.name)
-            : (pragma?.map ? pragma.map((c: any) => c.name) : pragma);
-          console.log('🧪 [WMDB] user_profiles actual columns:', cols);
-        }
-      } catch (e) {
-        console.warn('⚠️ [WMDB] Failed to read PRAGMA table_info(user_profiles):', e);
-      }
+      // WMDB profile sync is DISABLED due to stale data issues.
+      // All profile syncing now uses AsyncStorage as the source of truth.
+      console.log('📋 [Sync] Using AsyncStorage-only profile sync (WMDB disabled)');
       
-      if (allProfiles.length > 0) {
-        allProfiles.forEach((profile, index) => {
-          const p = profile as any;
-          const rawData = p._raw || {};
-          console.log(`📄 Profile ${index + 1}:`, {
-            id: profile.id,
-            userId: p.userId || rawData.userId,
-            age: p.age || rawData.age,
-            ageRange: p.ageRange || rawData.ageRange,
-            location: p.location || rawData.location,
-            onboardingCompleted: p.onboardingCompleted ?? rawData.onboardingCompleted,
-          });
-        });
-      } else {
-        console.log('⚠️ No profiles found in WatermelonDB at all!');
-      }
-      
-      // Backfill users table camelCase from legacy snake_case (v6) - do not skip on errors
-      try {
-        const allUsers = await usersCollection.query().fetch();
-        for (const user of allUsers as any[]) {
-          const raw = user._raw || {};
-          let changed = false;
-          await database.write(async () => {
-            const safeUpdate = async (setter: (u: any) => void) => { try { await user.update(setter); } catch {} };
-            if (!(user as any).convexUserId && raw.convex_user_id) { await safeUpdate((u: any) => { u.convexUserId = raw.convex_user_id; }); changed = true; }
-            if (!(user as any).firstName && raw.first_name) { await safeUpdate((u: any) => { u.firstName = raw.first_name; }); changed = true; }
-            if (!(user as any).lastName && raw.last_name) { await safeUpdate((u: any) => { u.lastName = raw.last_name; }); changed = true; }
-            // Promote to true if remote/local legacy flag is true; never downgrade true->false
-            if (((user as any).hasCompletedOnboarding !== true) && raw.has_completed_onboarding === true) {
-              await safeUpdate((u: any) => { u.hasCompletedOnboarding = true; }); changed = true;
-            }
-            if ((user as any).emailVerificationTime === undefined && raw.email_verification_time !== undefined) { await safeUpdate((u: any) => { u.emailVerificationTime = raw.email_verification_time; }); changed = true; }
-            if ((user as any).phoneVerificationTime === undefined && raw.phone_verification_time !== undefined) { await safeUpdate((u: any) => { u.phoneVerificationTime = raw.phone_verification_time; }); changed = true; }
-            if ((user as any).isAnonymous === undefined && raw.is_anonymous !== undefined) { await safeUpdate((u: any) => { u.isAnonymous = raw.is_anonymous; }); changed = true; }
-          });
-          if (changed) {
-            console.log(`🔁 Backfilled legacy user fields for id=${user.id}`);
-          }
-        }
-      } catch (uErr) {
-        console.warn('⚠️ User backfill encountered errors but continued:', uErr);
-      }
-
-    // Load all profiles (we'll scope and decide below)
-    const allProfilesForSync = await userProfilesCollection.query().fetch();
-
-      // Backfill legacy snake_case fields into new camelCase fields if needed (no skipping)
-      for (const profile of allProfilesForSync as any[]) {
-        const raw = profile._raw || {};
-        let changed = false;
-        await database.write(async () => {
-          const safeUpdate = async (setter: (p: any) => void) => { try { await profile.update(setter); } catch {} };
-          if (!(profile as any).userId && raw.user_id) { await safeUpdate((p: any) => { p.userId = raw.user_id; }); changed = true; }
-          if (!(profile as any).ageRange && raw.age_range) { await safeUpdate((p: any) => { p.ageRange = raw.age_range; }); changed = true; }
-          if (!(profile as any).age && raw.age) { await safeUpdate((p: any) => { p.age = raw.age; }); changed = true; }
-          if (!(profile as any).location && raw.location) { await safeUpdate((p: any) => { p.location = raw.location; }); changed = true; }
-          // Promote to true if legacy flag indicates completion; never downgrade true->false
-          if (((profile as any).onboardingCompleted !== true) && raw.onboarding_completed === true) { await safeUpdate((p: any) => { p.onboardingCompleted = true; }); changed = true; }
-          if (!(profile as any).emergencyContactName && raw.emergency_contact_name) { await safeUpdate((p: any) => { p.emergencyContactName = raw.emergency_contact_name; }); changed = true; }
-          if (!(profile as any).emergencyContactPhone && raw.emergency_contact_phone) { await safeUpdate((p: any) => { p.emergencyContactPhone = raw.emergency_contact_phone; }); changed = true; }
-          if (!(profile as any).medicalConditions && raw.medical_conditions) { await safeUpdate((p: any) => { p.medicalConditions = raw.medical_conditions; }); changed = true; }
-          if (!(profile as any).currentMedications && raw.current_medications) { await safeUpdate((p: any) => { p.currentMedications = raw.current_medications; }); changed = true; }
-          if ((profile as any).locationServicesEnabled === undefined && raw.location_services_enabled !== undefined) { await safeUpdate((p: any) => { p.locationServicesEnabled = raw.location_services_enabled; }); changed = true; }
-          if (!(profile as any).postalCode && raw.postal_code) { await safeUpdate((p: any) => { p.postalCode = raw.postal_code; }); changed = true; }
-          if (!(profile as any).province && raw.province) { await safeUpdate((p: any) => { p.province = raw.province; }); changed = true; }
-          if (!(profile as any).address1 && raw.address1) { await safeUpdate((p: any) => { p.address1 = raw.address1; }); changed = true; }
-          if (!(profile as any).address2 && raw.address2) { await safeUpdate((p: any) => { p.address2 = raw.address2; }); changed = true; }
-          if (!(profile as any).city && raw.city) { await safeUpdate((p: any) => { p.city = raw.city; }); changed = true; }
-        });
-        if (changed) {
-          console.log(`🔁 Backfilled legacy profile fields for id=${profile.id}`);
-        }
-      }
-      // Decide if we should attempt a sync
-      // 1) Prefer explicit offline marker set by editors
+      // Check for explicit offline markers set by editors
       const needsSyncFlag = authUserId ? await AsyncStorage.getItem(`${authUserId}:profile_needs_sync`) : null;
-      // 2) Also consider any present profile rows as candidates to merge
-      const candidates = allProfilesForSync as any[];
-
-      // Scope to the currently logged-in user only (and assign unknowns to them)
-      const scopedProfiles = (candidates as any[]).filter((p) => {
-        if (!authUserId) return true; // if we somehow don't have auth user yet, fall back to all
-        const r = p._raw || {};
-        const uid = p.userId || r.userId || r.user_id || '';
-        return uid === authUserId || !uid;
-      });
-
-      // Group by userId and merge the best fields to avoid partial duplicate updates
-      const groups = new Map<string, any[]>();
-      for (const p of scopedProfiles as any[]) {
-        const raw = p._raw || {};
-        // If userId is missing and we know the auth user, group under auth user id
-        const computedUid = (p.userId || raw.userId || raw.user_id || (authUserId || '')) as string;
-        const key = computedUid || `unknown-${p.id}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(p);
+      const needsEmergencyFlag = authUserId ? await AsyncStorage.getItem(`${authUserId}:profile_emergency_needs_sync`) : null;
+      const needsMedicalFlag = authUserId ? await AsyncStorage.getItem(`${authUserId}:profile_medical_needs_sync`) : null;
+      const needsPhoneFlag = authUserId ? await AsyncStorage.getItem(`${authUserId}:phone_needs_sync`) : null;
+      
+      // Only sync if we have flags indicating pending offline changes
+      if (!needsSyncFlag && !needsEmergencyFlag && !needsMedicalFlag && !needsPhoneFlag) {
+        console.log('⏭️ [Sync] No pending profile changes to sync from AsyncStorage');
+        return;
       }
-      // If we have auth user id, keep only that group
+      
+      // Read cached profile data
+      let cached: any = {};
       if (authUserId) {
-        for (const k of Array.from(groups.keys())) {
-          if (k !== authUserId) groups.delete(k);
-        }
-      }
-  console.log(`👤 Found ${scopedProfiles.length} profile row(s) scoped to ${authUserId ? authUserId : 'all users'} across ${groups.size} group(s)`);
-
-      for (const [userKey, profiles] of groups) {
         try {
-          // Ensure each profile has userId set where we can
-          for (const pr of profiles) {
-            if ((!pr.userId || pr.userId === '') && userKey && userKey.startsWith('k')) { // looks like a Convex id
-              try {
-                await database.write(async () => {
-                  await pr.update((p: any) => { p.userId = userKey; });
-                });
-                console.log(`🔁 Backfilled profile.userId for profile ${pr.id}`);
-              } catch (e) {
-                console.warn(`⚠️ Failed to backfill userId for profile ${pr.id}:`, e);
-              }
-            }
+          const rawCache = await AsyncStorage.getItem(`${authUserId}:profile_cache_v1`);
+          if (rawCache) {
+            cached = JSON.parse(rawCache) || {};
           }
-
-          // Merge best values across duplicates
-          let bestAge = '';
-          let bestAgeRange = '';
-          let bestLocation = '';
-          let bestAddress1 = '';
-          let bestAddress2 = '';
-          let bestCity = '';
-          let bestProvince = '';
-          let bestPostalCode = '';
-          let bestEmergencyName = '';
-          let bestEmergencyPhone = '';
-          let bestAllergies = '';
-          let bestMedications = '';
-          let bestConditions = '';
-          
-          for (const pr of profiles) {
-            const r = pr._raw || {};
-            const a = pr.age || r.age || '';
-            const ar = pr.ageRange || r.ageRange || r.age_range || '';
-            const loc = pr.location || r.location || '';
-            const addr1 = pr.address1 || r.address1 || '';
-            const addr2 = pr.address2 || r.address2 || '';
-            const ct = pr.city || r.city || '';
-            const prov = pr.province || r.province || '';
-            const postal = pr.postalCode || r.postalCode || r.postal_code || '';
-            const emergName = pr.emergencyContactName || r.emergencyContactName || r.emergency_contact_name || '';
-            const emergPhone = pr.emergencyContactPhone || r.emergencyContactPhone || r.emergency_contact_phone || '';
-            const allerg = pr.allergies || r.allergies || '';
-            const meds = pr.currentMedications || r.currentMedications || r.current_medications || '';
-            const conds = pr.medicalConditions || r.medicalConditions || r.medical_conditions || '';
-            
-            if (!bestAge && a) bestAge = a;
-            if (!bestAgeRange && ar) bestAgeRange = ar;
-            if (!bestLocation || (loc && loc.length > bestLocation.length)) bestLocation = loc;
-            if (!bestAddress1 && addr1) bestAddress1 = addr1;
-            if (!bestAddress2 && addr2) bestAddress2 = addr2;
-            if (!bestCity && ct) bestCity = ct;
-            if (!bestProvince && prov) bestProvince = prov;
-            if (!bestPostalCode && postal) bestPostalCode = postal;
-            if (!bestEmergencyName && emergName) bestEmergencyName = emergName;
-            if (!bestEmergencyPhone && emergPhone) bestEmergencyPhone = emergPhone;
-            if (!bestAllergies && allerg) bestAllergies = allerg;
-            if (!bestMedications && meds) bestMedications = meds;
-            if (!bestConditions && conds) bestConditions = conds;
-          }
-
-          // Merge in AsyncStorage cache (set by offline editors) when present
-          if (authUserId) {
-            try {
-              const rawCache = await AsyncStorage.getItem(`${authUserId}:profile_cache_v1`);
-              if (rawCache) {
-                const cached = JSON.parse(rawCache) || {};
-                if (!bestAge && cached.age) bestAge = String(cached.age);
-                if (!bestAddress1 && cached.address1) bestAddress1 = String(cached.address1);
-                if (!bestAddress2 && cached.address2) bestAddress2 = String(cached.address2);
-                if (!bestCity && cached.city) bestCity = String(cached.city);
-                if (!bestProvince && cached.province) bestProvince = String(cached.province);
-                if (!bestPostalCode && cached.postalCode) bestPostalCode = String(cached.postalCode);
-                if (!bestLocation && cached.location) bestLocation = String(cached.location);
-                if (!bestEmergencyName && cached.emergencyContactName) bestEmergencyName = String(cached.emergencyContactName);
-                if (!bestEmergencyPhone && cached.emergencyContactPhone) bestEmergencyPhone = String(cached.emergencyContactPhone);
-                if (!bestAllergies && cached.allergies) bestAllergies = String(cached.allergies);
-                if (!bestMedications && cached.currentMedications) bestMedications = String(cached.currentMedications);
-                if (!bestConditions && cached.medicalConditions) bestConditions = String(cached.medicalConditions);
-              }
-            } catch {}
-          }
-
-          const finalAge = bestAge || bestAgeRange || '';
-          const location = bestLocation;
-
-          // If server/user indicates onboarding completed, ensure local profile flag is set to true
-          const serverOnboardingTrue = !!((currentUser as any)?.hasCompletedOnboarding || (currentUser as any)?.has_completed_onboarding);
-          if (serverOnboardingTrue) {
-            for (const pr of profiles) {
-              if ((pr as any).onboardingCompleted !== true) {
-                try {
-                  await database.write(async () => {
-                    await pr.update((p: any) => { p.onboardingCompleted = true; });
-                  });
-                  console.log(`✅ Promoted onboardingCompleted=true locally for profile ${pr.id} based on server state`);
-                } catch (e) {
-                  console.warn(`⚠️ Failed to promote onboardingCompleted for profile ${pr.id}:`, e);
-                  // Fallback: ensure Users table reflects completion so UI logic has a reliable flag
-                  try {
-                    const usersCol = database.get('users');
-                    const allUsers = await usersCol.query().fetch();
-                    await database.write(async () => {
-                      for (const u of allUsers as any[]) {
-                        const raw = u._raw || {};
-                        const uid = (u as any).convexUserId || raw.convex_user_id || '';
-                        if (!authUserId || uid === authUserId) {
-                          try {
-                            await u.update((uu: any) => { uu.hasCompletedOnboarding = true; });
-                          } catch {}
-                        }
-                      }
-                    });
-                    console.log('✅ Fallback: marked users.hasCompletedOnboarding=true');
-                  } catch (e2) {
-                    console.warn('⚠️ Fallback failed to update users.hasCompletedOnboarding:', e2);
-                  }
-                }
-              }
-            }
-          }
-
-          // Sync personal info if any fields present
-          const shouldSyncPersonal = !!(needsSyncFlag || finalAge || location || bestAddress1 || bestCity || bestProvince || bestPostalCode);
-          if (shouldSyncPersonal) {
-            console.log(`📤 Syncing personal info for user ${userKey || authUserId}`);
-            await updatePersonalInfo({
-              age: finalAge,
-              address1: bestAddress1,
-              address2: bestAddress2,
-              city: bestCity,
-              province: bestProvince,
-              postalCode: bestPostalCode,
-              location,
-            });
-            console.log(`✅ Synced personal info`);
-          }
-
-          // Sync emergency contact if fields present
-          const shouldSyncEmergency = !!(needsSyncFlag || bestEmergencyName || bestEmergencyPhone);
-          if (shouldSyncEmergency) {
-            console.log(`📤 Syncing emergency contact for user ${userKey || authUserId}`);
-            await updateEmergencyContact({
-              emergencyContactName: bestEmergencyName,
-              emergencyContactPhone: bestEmergencyPhone,
-            });
-            console.log(`✅ Synced emergency contact`);
-          }
-
-          // Sync medical info if fields present
-          const shouldSyncMedical = !!(needsSyncFlag || bestAllergies || bestMedications || bestConditions);
-          if (shouldSyncMedical) {
-            console.log(`📤 Syncing medical info for user ${userKey || authUserId}`);
-            await updateMedicalHistory({
-              allergies: bestAllergies,
-              currentMedications: bestMedications,
-              medicalConditions: bestConditions,
-            });
-            console.log(`✅ Synced medical info`);
-          }
-
-          // Sync completed successfully - no local state changes needed
-          // The server is now the source of truth and will be hydrated on next load
-
-          // Clear offline sync flag once we've attempted server sync
+        } catch {}
+      }
+      
+      // Sync personal info if flagged
+      if (needsSyncFlag === '1') {
+        const payload = {
+          age: String(cached.age ?? ''),
+          address1: String(cached.address1 ?? ''),
+          address2: String(cached.address2 ?? ''),
+          city: String(cached.city ?? ''),
+          province: String(cached.province ?? ''),
+          postalCode: String(cached.postalCode ?? ''),
+          location: String(cached.location ?? ''),
+        };
+        if (!payload.age || !payload.city || !payload.province || !payload.location) {
+          console.warn('⏭️ [Sync] Skipping personal info sync - missing required fields in cache');
+        } else {
+          console.log(`📤 [Sync] Syncing personal info from AsyncStorage for user ${authUserId}`);
+          await updatePersonalInfo(payload);
+          console.log(`✅ [Sync] Synced personal info from AsyncStorage`);
           if (authUserId) {
             try { await AsyncStorage.removeItem(`${authUserId}:profile_needs_sync`); } catch {}
           }
-        } catch (error) {
-          console.error(`Failed to sync profile:`, error);
+        }
+      }
+
+      // Sync emergency contact if flagged
+      if (needsEmergencyFlag === '1') {
+        console.log(`📤 [Sync] Syncing emergency contact from AsyncStorage for user ${authUserId}`);
+        await updateEmergencyContact({
+          emergencyContactName: cached.emergencyContactName || '',
+          emergencyContactPhone: cached.emergencyContactPhone || '',
+        });
+        console.log(`✅ [Sync] Synced emergency contact from AsyncStorage`);
+        if (authUserId) {
+          try { await AsyncStorage.removeItem(`${authUserId}:profile_emergency_needs_sync`); } catch {}
+        }
+      }
+
+      // Sync medical info if flagged
+      if (needsMedicalFlag === '1') {
+        console.log(`📤 [Sync] Syncing medical info from AsyncStorage for user ${authUserId}`);
+        await updateMedicalHistory({
+          allergies: cached.allergies || '',
+          currentMedications: cached.currentMedications || '',
+          medicalConditions: cached.medicalConditions || '',
+        });
+        console.log(`✅ [Sync] Synced medical info from AsyncStorage`);
+        if (authUserId) {
+          try { await AsyncStorage.removeItem(`${authUserId}:profile_medical_needs_sync`); } catch {}
+        }
+      }
+
+      // Independently sync phone if needed, even if no profile rows found
+      if (authUserId && needsPhoneFlag === '1') {
+        try {
+          const phone = await getPhoneSecurely(authUserId);
+          if (phone) {
+            await updatePhone({ phone });
+            console.log('✅ Synced phone number from SecureStore to server');
+            await AsyncStorage.removeItem(`${authUserId}:phone_needs_sync`);
+          } else {
+            console.warn('⏭️ No phone in SecureStore; skipping phone sync');
+          }
+        } catch (e) {
+          console.error('❌ Failed to sync phone number (post-login path):', e);
         }
       }
     } catch (error) {
@@ -656,29 +449,88 @@ export function useSyncOnOnline() {
           // Sync profile from AsyncStorage (WatermelonDB sync disabled due to schema errors)
           try {
             const needsSync = await AsyncStorage.getItem(`${uid}:profile_needs_sync`);
+            const needsEmergency = await AsyncStorage.getItem(`${uid}:profile_emergency_needs_sync`);
+            const needsMedical = await AsyncStorage.getItem(`${uid}:profile_medical_needs_sync`);
+            const needsPhone = await AsyncStorage.getItem(`${uid}:phone_needs_sync`);
+
+            // Personal info
             if (needsSync === '1') {
               console.log('📤 [Sync] Syncing profile from AsyncStorage cache...');
               const cacheRaw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
               if (cacheRaw) {
                 const cached = JSON.parse(cacheRaw);
-                // Call server mutation to update profile
-                if (updatePersonalInfo) {
-                  await updatePersonalInfo({
-                    age: cached.age || '',
-                    address1: cached.address1 || '',
-                    address2: cached.address2 || '',
-                    city: cached.city || '',
-                    province: cached.province || '',
-                    postalCode: cached.postalCode || '',
-                    location: cached.location || '',
-                  });
+                const payload = {
+                  age: String(cached.age ?? ''),
+                  address1: String(cached.address1 ?? ''),
+                  address2: String(cached.address2 ?? ''),
+                  city: String(cached.city ?? ''),
+                  province: String(cached.province ?? ''),
+                  postalCode: String(cached.postalCode ?? ''),
+                  location: String(cached.location ?? ''),
+                };
+                if (!payload.age || !payload.city || !payload.province || !payload.location) {
+                  console.warn('⏭️ [Sync] Skipping personal info sync - missing required fields in cache');
+                } else {
+                  await updatePersonalInfo(payload);
                   console.log('✅ [Sync] Synced profile from AsyncStorage to server');
-                  // Clear sync flag
                   await AsyncStorage.removeItem(`${uid}:profile_needs_sync`);
                 }
               }
             } else {
-              console.log('⏭️ [Sync] No profile changes to sync');
+              console.log('⏭️ [Sync] No personal info changes to sync');
+            }
+
+            // Emergency contact
+            if (needsEmergency === '1') {
+              console.log('📤 [Sync] Syncing emergency contact from AsyncStorage cache...');
+              const cacheRaw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+              if (cacheRaw) {
+                const cached = JSON.parse(cacheRaw);
+                await updateEmergencyContact({
+                  emergencyContactName: cached.emergencyContactName || '',
+                  emergencyContactPhone: cached.emergencyContactPhone || '',
+                });
+                console.log('✅ [Sync] Synced emergency contact from AsyncStorage to server');
+                await AsyncStorage.removeItem(`${uid}:profile_emergency_needs_sync`);
+              }
+            } else {
+              console.log('⏭️ [Sync] No emergency contact changes to sync');
+            }
+
+            // Medical info
+            if (needsMedical === '1') {
+              console.log('📤 [Sync] Syncing medical info from AsyncStorage cache...');
+              const cacheRaw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+              if (cacheRaw) {
+                const cached = JSON.parse(cacheRaw);
+                await updateMedicalHistory({
+                  allergies: cached.allergies || '',
+                  currentMedications: cached.currentMedications || '',
+                  medicalConditions: cached.medicalConditions || '',
+                });
+                console.log('✅ [Sync] Synced medical info from AsyncStorage to server');
+                await AsyncStorage.removeItem(`${uid}:profile_medical_needs_sync`);
+              }
+            } else {
+              console.log('⏭️ [Sync] No medical changes to sync');
+            }
+
+            // Phone number
+            if (needsPhone === '1') {
+              try {
+                const phone = await getPhoneSecurely(uid);
+                if (phone) {
+                  await updatePhone({ phone });
+                  console.log('✅ [Sync] Synced phone number from SecureStore to server');
+                  await AsyncStorage.removeItem(`${uid}:phone_needs_sync`);
+                } else {
+                  console.warn('⏭️ [Sync] No phone found in SecureStore; skipping phone sync');
+                }
+              } catch (e) {
+                console.error('❌ [Sync] Failed to sync phone number:', e);
+              }
+            } else {
+              console.log('⏭️ [Sync] No phone changes to sync');
             }
           } catch (syncErr) {
             console.error('❌ [Sync] Failed to sync profile from AsyncStorage:', syncErr);
