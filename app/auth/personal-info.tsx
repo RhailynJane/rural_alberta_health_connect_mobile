@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -15,7 +16,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
-import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -26,7 +26,6 @@ import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../uti
 
 export default function PersonalInfo() {
   const router = useRouter();
-  const database = useWatermelonDatabase();
   const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
@@ -303,111 +302,46 @@ export default function PersonalInfo() {
         console.log('⚠️ Personal Info - Could not sync phone immediately:', e);
       }
 
-      // Save to WatermelonDB first (offline)
-      await database.write(async () => {
-        const userProfilesCollection = database.get("user_profiles");
+      // Save to AsyncStorage for offline support (WMDB disabled due to schema errors)
+      try {
+        const uid = currentUser._id;
+        const fullAddress = [address1, address2, city, province, postalCode]
+          .filter(Boolean)
+          .join(', ');
+        
+        const profileData = {
+          userId: uid,
+          age: age || '',
+          address1: address1 || '',
+          address2: address2 || '',
+          city: city || '',
+          province: province || '',
+          postalCode: postalCode || '',
+          location: fullAddress || location || '',
+          phone: normalizedPhone || '',
+          onboardingCompleted: false,
+        };
 
-        // Check if profile already exists for this user
-        const existingProfiles = await userProfilesCollection.query().fetch();
-
-        const existingProfile = existingProfiles.find(
-          (p: any) => p.userId === currentUser._id
-        );
-
-        if (existingProfile) {
-          // Update existing profile - per-field to avoid schema mismatch errors
-          const fullAddress = [address1, address2, city, province, postalCode]
-            .filter(Boolean)
-            .join(', ');
-          
-          // (Removed unused helper 'safeUpdate' to satisfy linter)
-
-          // Update using prepareUpdate for better safety
-          await existingProfile.update((profile: any) => {
-            try {
-              console.log('🔍 [PersonalInfo] Starting batch update');
-              // Use bracket notation for safer property access
-              const updates = {
-                userId: currentUser._id,
-                age: age || '',
-                ageRange: age || '',
-                address1: address1 || '',
-                address2: address2 || '',
-                city: city || '',
-                province: province || '',
-                postalCode: postalCode || '',
-                location: fullAddress || location || ''
-              };
-
-              for (const [key, value] of Object.entries(updates)) {
-                try {
-                  console.log(`🔍 [PersonalInfo] Setting ${key} to:`, value);
-                  // Use bracket notation to avoid decorator issues
-                  (profile as any)[key] = value;
-                  console.log(`✅ [PersonalInfo] Successfully set ${key}`);
-                } catch (fieldError: any) {
-                  console.error(`❌ [PersonalInfo] Failed to set ${key}:`, fieldError);
-                  console.error(`❌ [PersonalInfo] Error details:`, fieldError?.message);
-                }
-              }
-              console.log('✅ [PersonalInfo] Batch update completed');
-            } catch (e: any) {
-              console.error('❌ [PersonalInfo] Batch update failed:', e);
-              console.error('❌ [PersonalInfo] Error stack:', e?.stack);
-            }
-          });
-          
-          console.log("✅ Personal Info - Updated existing local profile");
-        } else {
-          // Create new profile - create minimal record first, then update fields
-          const fullAddress = [address1, address2, city, province, postalCode]
-            .filter(Boolean)
-            .join(', ');
-          
-          const newProfile = await userProfilesCollection.create((profile: any) => {
-            // Only set required fields during creation
-            profile.userId = currentUser._id;
-            profile.onboardingCompleted = false;
-          });
-          
-          // Then update optional fields one by one
-          // (Removed unused helper 'safeUpdate' to satisfy linter)
-
-          // Update using batch update for better safety
-          await newProfile.update((profile: any) => {
-            try {
-              console.log('🔍 [PersonalInfo-Create] Starting batch update');
-              const updates = {
-                age: age || '',
-                ageRange: age || '',
-                address1: address1 || '',
-                address2: address2 || '',
-                city: city || '',
-                province: province || '',
-                postalCode: postalCode || '',
-                location: fullAddress || location || ''
-              };
-
-              for (const [key, value] of Object.entries(updates)) {
-                try {
-                  console.log(`🔍 [PersonalInfo-Create] Setting ${key} to:`, value);
-                  (profile as any)[key] = value;
-                  console.log(`✅ [PersonalInfo-Create] Successfully set ${key}`);
-                } catch (fieldError: any) {
-                  console.error(`❌ [PersonalInfo-Create] Failed to set ${key}:`, fieldError);
-                }
-              }
-              console.log('✅ [PersonalInfo-Create] Batch update completed');
-            } catch (e: any) {
-              console.error('❌ [PersonalInfo-Create] Batch update failed:', e);
-            }
-          });
-          
-          console.log("✅ Personal Info - Created new local profile");
+        // Save to user-specific cache
+        await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(profileData));
+        
+        // Save phone to SecureStore
+        if (normalizedPhone) {
+          await savePhoneSecurely(uid, normalizedPhone);
         }
-      });
+        
+        // Mark as needing sync
+        await AsyncStorage.setItem(`${uid}:profile_needs_sync`, '1');
+        if (normalizedPhone) {
+          await AsyncStorage.setItem(`${uid}:phone_needs_sync`, '1');
+        }
 
-      console.log("✅ Personal Info - Saved to local database");
+        console.log("✅ Personal Info - Saved to AsyncStorage cache");
+      } catch (cacheError) {
+        console.warn("⚠️ Personal Info - Failed to save to cache:", cacheError);
+      }
+
+      console.log("✅ Personal Info - Saved to local storage");
 
       // Navigate immediately after local save - don't wait for Convex sync
       console.log("➡️ Navigating to emergency contact");

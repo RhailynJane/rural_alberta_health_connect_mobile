@@ -1,4 +1,4 @@
-import { useDatabase } from "@nozbe/watermelondb/hooks";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -25,7 +25,6 @@ const MAX_CHARS = 500;
 
 export default function MedicalHistory() {
   const router = useRouter();
-  const database = useDatabase();
   const currentUser = useQuery(api.users.getCurrentUser);
   const { refreshSession } = useSessionRefresh(); 
   
@@ -84,85 +83,28 @@ export default function MedicalHistory() {
     setIsSubmitting(true);
     
     try {
-      // Save to WatermelonDB first (offline-first), best-effort per field
-      await database.write(async () => {
-        const userProfilesCollection = database.get("user_profiles");
-        const existingProfiles = await userProfilesCollection.query().fetch();
-        const existingProfile = existingProfiles.find(
-          (p: any) => p.userId === currentUser._id
-        );
-
-        if (existingProfile) {
-          // Update using batch update for better safety
-          await existingProfile.update((p: any) => {
-            try {
-              console.log('🔍 [MedicalHistory] Starting batch update');
-              const updates = {
-                medicalConditions: medicalConditions || '',
-                currentMedications: currentMedications || '',
-                allergies: allergies || '',
-                onboardingCompleted: true
-              };
-
-              for (const [key, value] of Object.entries(updates)) {
-                try {
-                  console.log(`🔍 [MedicalHistory] Setting ${key} to:`, value);
-                  (p as any)[key] = value;
-                  console.log(`✅ [MedicalHistory] Successfully set ${key}`);
-                } catch (fieldError: any) {
-                  console.error(`❌ [MedicalHistory] Failed to set ${key}:`, fieldError);
-                  console.error(`❌ [MedicalHistory] Error details:`, fieldError?.message);
-                }
-              }
-              console.log('✅ [MedicalHistory] Batch update completed');
-            } catch (e: any) {
-              console.error('❌ [MedicalHistory] Batch update failed:', e);
-              console.error('❌ [MedicalHistory] Error stack:', e?.stack);
-            }
-          });
-          console.log("✅ Medical History - Updated existing local profile (best-effort)");
-        } else {
-          // Create minimal record first
-          let created: any = null;
-          try {
-            created = await userProfilesCollection.create((p: any) => {
-              p.userId = String(currentUser._id);
-            });
-          } catch (createErr) {
-            console.warn('⚠️ Could not create local profile record for medical history:', createErr);
-          }
-          if (created) {
-            // Update using batch update for better safety
-            await created.update((p: any) => {
-              try {
-                console.log('🔍 [MedicalHistory-Create] Starting batch update');
-                const updates = {
-                  medicalConditions: medicalConditions || '',
-                  currentMedications: currentMedications || '',
-                  allergies: allergies || '',
-                  onboardingCompleted: true
-                };
-
-                for (const [key, value] of Object.entries(updates)) {
-                  try {
-                    console.log(`🔍 [MedicalHistory-Create] Setting ${key} to:`, value);
-                    (p as any)[key] = value;
-                    console.log(`✅ [MedicalHistory-Create] Successfully set ${key}`);
-                  } catch (fieldError: any) {
-                    console.error(`❌ [MedicalHistory-Create] Failed to set ${key}:`, fieldError);
-                  }
-                }
-                console.log('✅ [MedicalHistory-Create] Batch update completed');
-              } catch (e: any) {
-                console.error('❌ [MedicalHistory-Create] Batch update failed:', e);
-              }
-            });
-            console.log("✅ Medical History - Created/updated new local profile (best-effort)");
-          }
+      // Save to AsyncStorage for offline support (WMDB disabled due to schema errors)
+      try {
+        const uid = currentUser?._id;
+        if (uid) {
+          const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+          const cached = raw ? JSON.parse(raw) : {};
+          const merged = {
+            ...cached,
+            medicalConditions: medicalConditions || '',
+            currentMedications: currentMedications || '',
+            allergies: allergies || '',
+            onboardingCompleted: true,
+          };
+          await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(merged));
+          await AsyncStorage.setItem(`${uid}:profile_medical_needs_sync`, '1');
+          console.log("✅ Medical History - Saved to AsyncStorage cache");
         }
-      });
+      } catch (cacheError) {
+        console.warn("⚠️ Medical History - Failed to save to cache:", cacheError);
+      }
 
-      console.log("✅ Medical History - Saved to local database");
+      console.log("✅ Medical History - Saved to local storage");
 
       // Then sync with Convex (online)
       try {

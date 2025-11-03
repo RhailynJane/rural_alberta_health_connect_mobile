@@ -1,4 +1,4 @@
-import { useDatabase } from "@nozbe/watermelondb/hooks";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -22,7 +22,6 @@ import { FONTS } from "../constants/constants";
 
 export default function EmergencyContact() {
   const router = useRouter();
-  const database = useDatabase();
   const currentUser = useQuery(api.users.getCurrentUser);
   
   const [contactName, setContactName] = useState('');
@@ -155,82 +154,26 @@ export default function EmergencyContact() {
     setIsSubmitting(true);
 
     try {
-      // Save to WatermelonDB first (offline-first)
-      await database.write(async () => {
-        const userProfilesCollection = database.get("user_profiles");
-        const existingProfiles = await userProfilesCollection.query().fetch();
-        const existingProfile = existingProfiles.find(
-          (p: any) => p.userId === currentUser._id
-        );
-
-        if (existingProfile) {
-          // Update using batch update for better safety
-          await existingProfile.update((profile: any) => {
-            try {
-              console.log('🔍 [EmergencyContact] Starting batch update');
-              const updates = {
-                emergencyContactName: contactName || '',
-                emergencyContactPhone: contactPhone || ''
-              };
-
-              for (const [key, value] of Object.entries(updates)) {
-                try {
-                  console.log(`🔍 [EmergencyContact] Setting ${key} to:`, value);
-                  (profile as any)[key] = value;
-                  console.log(`✅ [EmergencyContact] Successfully set ${key}`);
-                } catch (fieldError: any) {
-                  console.error(`❌ [EmergencyContact] Failed to set ${key}:`, fieldError);
-                  console.error(`❌ [EmergencyContact] Error details:`, fieldError?.message);
-                }
-              }
-              console.log('✅ [EmergencyContact] Batch update completed');
-            } catch (e: any) {
-              console.error('❌ [EmergencyContact] Batch update failed:', e);
-              console.error('❌ [EmergencyContact] Error stack:', e?.stack);
-            }
-          });
-          console.log("✅ Emergency Contact - Updated existing local profile (best-effort)");
-        } else {
-          // Create minimal row first, then set optional fields individually
-          let created: any = null;
-          try {
-            created = await userProfilesCollection.create((profile: any) => {
-              profile.userId = String(currentUser._id);
-              profile.onboardingCompleted = false;
-            });
-          } catch (createErr) {
-            console.warn('⚠️ Could not create local profile record:', createErr);
-          }
-          if (created) {
-            // Update using batch update for better safety
-            await created.update((p: any) => {
-              try {
-                console.log('🔍 [EmergencyContact-Create] Starting batch update');
-                const updates = {
-                  emergencyContactName: contactName || '',
-                  emergencyContactPhone: contactPhone || ''
-                };
-
-                for (const [key, value] of Object.entries(updates)) {
-                  try {
-                    console.log(`🔍 [EmergencyContact-Create] Setting ${key} to:`, value);
-                    (p as any)[key] = value;
-                    console.log(`✅ [EmergencyContact-Create] Successfully set ${key}`);
-                  } catch (fieldError: any) {
-                    console.error(`❌ [EmergencyContact-Create] Failed to set ${key}:`, fieldError);
-                  }
-                }
-                console.log('✅ [EmergencyContact-Create] Batch update completed');
-              } catch (e: any) {
-                console.error('❌ [EmergencyContact-Create] Batch update failed:', e);
-              }
-            });
-            console.log("✅ Emergency Contact - Created/updated new local profile (best-effort)");
-          }
+      // Save to AsyncStorage for offline support (WMDB disabled due to schema errors)
+      try {
+        const uid = currentUser?._id;
+        if (uid) {
+          const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+          const cached = raw ? JSON.parse(raw) : {};
+          const merged = {
+            ...cached,
+            emergencyContactName: contactName || '',
+            emergencyContactPhone: contactPhone || '',
+          };
+          await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(merged));
+          await AsyncStorage.setItem(`${uid}:profile_emergency_needs_sync`, '1');
+          console.log("✅ Emergency Contact - Saved to AsyncStorage cache");
         }
-      });
+      } catch (cacheError) {
+        console.warn("⚠️ Emergency Contact - Failed to save to cache:", cacheError);
+      }
 
-      console.log("✅ Emergency Contact - Saved to local database");
+      console.log("✅ Emergency Contact - Saved to local storage");
 
       // Then sync with Convex (online)
       try {
