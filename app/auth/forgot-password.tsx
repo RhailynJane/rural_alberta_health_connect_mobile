@@ -193,6 +193,9 @@ export default function ForgotPassword() {
                           keyboardType="email-address"
                           autoCapitalize="none"
                           autoCorrect={false}
+                          textContentType="emailAddress"
+                          autoComplete="email"
+                          importantForAutofill="yes"
                         />
                         {errors.email && touched.email && (
                           <Text style={styles.errorText}>{errors.email}</Text>
@@ -215,6 +218,9 @@ export default function ForgotPassword() {
                           onChangeText={handleChange('code')}
                           onBlur={handleBlur('code')}
                           keyboardType="numeric"
+                          textContentType="oneTimeCode"
+                          autoComplete="one-time-code"
+                          importantForAutofill="yes"
                         />
                         {errors.code && touched.code && (
                           <Text style={styles.errorText}>{errors.code}</Text>
@@ -236,6 +242,9 @@ export default function ForgotPassword() {
                             onChangeText={handleChange('newPassword')}
                             onBlur={handleBlur('newPassword')}
                             secureTextEntry={!showPassword}
+                            textContentType="newPassword"
+                            autoComplete="new-password"
+                            importantForAutofill="yes"
                           />
                           <TouchableOpacity
                             style={styles.eyeIcon}

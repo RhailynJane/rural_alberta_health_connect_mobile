@@ -284,6 +284,10 @@ export default function SignUp() {
                         onBlur={handleBlur("email")}
                         keyboardType="email-address"
                         autoCapitalize="none"
+                        textContentType="emailAddress"
+                        autoComplete="email"
+                        autoCorrect={false}
+                        importantForAutofill="yes"
                       />
                       {errors.email && touched.email && (
                         <Text style={styles.errorText}>{errors.email}</Text>
@@ -318,6 +322,9 @@ export default function SignUp() {
                           }
                           onBlur={handleBlur("password")}
                           secureTextEntry={!showPassword}
+                          textContentType="newPassword"
+                          autoComplete="new-password"
+                          importantForAutofill="yes"
                         />
                         <TouchableOpacity
                           style={styles.eyeIcon}
@@ -362,6 +369,9 @@ export default function SignUp() {
                           }
                           onBlur={handleBlur("confirmPassword")}
                           secureTextEntry={!showConfirmPassword}
+                          textContentType="newPassword"
+                          autoComplete="new-password"
+                          importantForAutofill="yes"
                         />
                         <TouchableOpacity
                           style={styles.eyeIcon}

@@ -4,14 +4,14 @@ import { useRouter } from "expo-router";
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from 'yup';
@@ -124,6 +124,10 @@ export default function SignIn() {
                       onBlur={handleBlur('email')}
                       keyboardType="email-address"
                       autoCapitalize="none"
+                      autoCorrect={false}
+                      textContentType="emailAddress"
+                      autoComplete="email"
+                      importantForAutofill="yes"
                     />
                     {errors.email && touched.email && (
                       <Text style={styles.errorText}>{errors.email}</Text>
@@ -145,6 +149,9 @@ export default function SignIn() {
                         onChangeText={handleChange('password')}
                         onBlur={handleBlur('password')}
                         secureTextEntry={!showPassword}
+                        textContentType="password"
+                        autoComplete="password"
+                        importantForAutofill="yes"
                       />
                       <TouchableOpacity 
                         style={styles.eyeIcon}

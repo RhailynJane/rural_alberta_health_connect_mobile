@@ -298,11 +298,29 @@
   - Email format validation is not necessary for the app to function correctly
   - If email verification becomes a requirement in the future, validation can be added at that time
 
-### iOS password autofill not working
+### ✅ iOS password autofill not working
 - **Reporter:** Joy Wong
 - **Test Case:** TC-004
 - **Description:** iOS autofill inactive, requires manual credential entry
-- **Status:** ⏳ Open
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - **Root Cause:** TextInput components were missing iOS-specific autofill attributes required for password manager integration
+  - **Solution:** Added proper `textContentType` and `autoComplete` props to all authentication form fields
+  - **Affected Screens:**
+    - `app/auth/signin.tsx`: Email and password fields
+    - `app/auth/signup.tsx`: Email, password, and confirm password fields
+    - `app/auth/forgot-password.tsx`: Email and new password fields
+  - **iOS Autofill Attributes Added:**
+    - Email fields: `textContentType="emailAddress"` + `autoComplete="email"`
+    - Existing password fields (sign-in): `textContentType="password"` + `autoComplete="password"`
+    - New password fields (sign-up, reset): `textContentType="newPassword"` + `autoComplete="password-new"`
+  - These attributes tell iOS Keychain and password managers (iCloud Keychain, 1Password, LastPass, etc.) which fields contain credentials
+- **User Experience:**
+  - iOS users can now tap the AutoFill suggestion above the keyboard to populate credentials
+  - Password managers will correctly detect and offer to save/fill passwords
+  - Sign-in: Autofills saved username and password
+  - Sign-up: Offers to generate strong password and save new credentials
+  - Password reset: Offers to generate strong password and update saved credentials
 
 ### Keyboard dismissal issue
 - **Reporter:** Sean Bauzon
@@ -354,8 +372,8 @@
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
-- **Additional Issues:** 4 closed (1 fixed, 2 working as designed, 1 added to FAQ), 6 open
-- **Fixed This Sprint:** 12
+- **Additional Issues:** 5 closed (2 fixed, 2 working as designed, 1 added to FAQ), 5 open
+- **Fixed This Sprint:** 13
 - **Closed as Expected Behavior:** 2
 - **Enhancements Completed:** 1
 
