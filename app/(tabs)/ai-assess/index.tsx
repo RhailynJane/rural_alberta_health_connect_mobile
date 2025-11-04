@@ -6,14 +6,16 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Image,
+  Keyboard,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -417,11 +419,14 @@ export default function SymptomAssessment() {
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.contentSection}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.contentSection}>
               <Text
                 style={[
                   styles.sectionTitle,
@@ -637,6 +642,9 @@ export default function SymptomAssessment() {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
 
               <View style={styles.photoSection}>
@@ -801,8 +809,9 @@ export default function SymptomAssessment() {
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
+              </View>
+            </ScrollView>
+          </Pressable>
         </View>
 
         {/* Error Modal */}

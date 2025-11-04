@@ -116,6 +116,8 @@ export default function SymptomSeverity() {
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
               <Text

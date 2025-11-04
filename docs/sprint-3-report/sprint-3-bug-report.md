@@ -322,11 +322,26 @@
   - Sign-up: Offers to generate strong password and save new credentials
   - Password reset: Offers to generate strong password and update saved credentials
 
-### Keyboard dismissal issue
+### ✅ Keyboard dismissal issue
 - **Reporter:** Sean Bauzon
 - **Test Case:** TC-011
 - **Description:** Cannot dismiss keyboard after typing in AI Assessment
-- **Status:** ⏳ Open
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - **Root Cause:** AI Assessment screens used a ScrollView without keyboard dismissal handling; taps outside the TextInput didn’t dismiss the keyboard
+  - **Solution:**
+    - Wrapped content with a `Pressable` that calls `Keyboard.dismiss()` on outside taps (AI Assessment index)
+    - Added `keyboardDismissMode="on-drag"` and `keyboardShouldPersistTaps="handled"` to ScrollViews across AI Assessment screens
+    - Configured the description TextInput with `returnKeyType="done"`, `blurOnSubmit`, and `onSubmitEditing={Keyboard.dismiss}` to close the keyboard from the keyboard’s Done button
+  - **Affected Screens:**
+    - `app/(tabs)/ai-assess/index.tsx`
+    - `app/(tabs)/ai-assess/symptom-severity.tsx`
+    - `app/(tabs)/ai-assess/symptom-duration.tsx`
+    - `app/(tabs)/ai-assess/assessment-results.tsx`
+- **User Experience:**
+  - Tapping outside the input now dismisses the keyboard
+  - Dragging/scrolling the content dismisses the keyboard (iOS)
+  - Pressing the Done/Enter key dismisses the keyboard on the description field
 
 ### iOS performance slower than Android
 - **Reporter:** Joy Wong
@@ -372,8 +387,8 @@
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
-- **Additional Issues:** 5 closed (2 fixed, 2 working as designed, 1 added to FAQ), 5 open
-- **Fixed This Sprint:** 13
+- **Additional Issues:** 6 closed (3 fixed, 2 working as designed, 1 added to FAQ), 4 open
+- **Fixed This Sprint:** 14
 - **Closed as Expected Behavior:** 2
 - **Enhancements Completed:** 1
 
