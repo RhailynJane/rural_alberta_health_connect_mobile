@@ -25,6 +25,7 @@ export function useSyncOnOnline() {
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   const updatePhone = useMutation(api.users.updatePhone);
+  const toggleLocationServices = useMutation(api.locationServices.toggleLocationServices);
   // Use the correct Convex mutation path for updating personal info
   const updatePersonalInfo = useMutation(
     (api as any)["profile/personalInformation"].updatePersonalInfo
@@ -531,6 +532,23 @@ export function useSyncOnOnline() {
               }
             } else {
               console.log('⏭️ [Sync] No phone changes to sync');
+            }
+
+            // Location services setting
+            try {
+              const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
+              const cachedLocationStatus = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
+              
+              if (cachedLocationStatus !== null) {
+                const enabled = cachedLocationStatus === "1";
+                console.log(`📤 [Sync] Syncing location services setting from cache (enabled: ${enabled})`);
+                await toggleLocationServices({ enabled });
+                console.log('✅ [Sync] Synced location services setting to server');
+              } else {
+                console.log('⏭️ [Sync] No cached location services setting to sync');
+              }
+            } catch (e) {
+              console.error('❌ [Sync] Failed to sync location services setting:', e);
             }
           } catch (syncErr) {
             console.error('❌ [Sync] Failed to sync profile from AsyncStorage:', syncErr);

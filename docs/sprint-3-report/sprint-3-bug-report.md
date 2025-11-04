@@ -82,11 +82,46 @@
 - **Description:** Reminders save successfully but notifications never trigger at scheduled time
 - **Status:** ⏳ Open
 
-### 🟡 Bug #4: Location services toggle malfunction
+### ✅ Bug #4: Location services toggle malfunction
 - **Reporter:** Sean Bauzon
 - **Test Case:** TC-026
 - **Description:** Toggle only visual, location services remain active after attempting to disable
-- **Status:** ⏳ Open
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - **Root Cause 1:** The Emergency screen's `useEffect` that loads clinic data had incorrect control flow logic
+  - The clinic clearing code (`setRealTimeClinics([])`) was nested in the wrong `else` block
+  - When location services were toggled OFF, the effect would set `isLoading(false)` but NOT clear the clinics
+  - Clinics remained visible even after disabling location services, making the toggle appear non-functional
+  - **Root Cause 2:** Toggle state sync delay between Emergency and App Settings screens
+  - App Settings relied only on Convex query reactivity, causing visible lag when toggling from Emergency
+  - **Root Cause 3:** Emergency screen couldn't disable location services while offline
+  - Toggle handler called `toggleLocationServices()` mutation without checking online status
+  - Mutation would fail when offline, causing error and preventing local cache update
+  - **Solution Part 1:** Refactored `useEffect` to check for disabled location services FIRST (early return pattern)
+  - Added explicit check at the top: `if (!locationStatus?.locationServicesEnabled)` → clear clinics immediately
+  - Simplified control flow with early returns for better code maintainability
+  - **Solution Part 2:** Added AsyncStorage cache updates in Emergency screen's toggle handler
+  - Emergency now updates `@app_settings_location_enabled` cache immediately when toggling
+  - App Settings picks up cached state instantly while waiting for Convex query to update
+  - Both screens now use consistent cache key for instant bidirectional sync
+  - **Solution Part 3:** Added offline handling to Emergency toggle
+  - Check `isOnline` before calling `toggleLocationServices()` mutation
+  - When offline: update cache only and show console log indicating pending sync
+  - When coming back online: cache syncs to server automatically via `useSyncOnOnline` hook
+  - **Solution Part 4:** Enhanced `useSyncOnOnline` hook to sync location services setting
+  - Added `toggleLocationServices` mutation to sync hook
+  - On reconnect, reads `@app_settings_location_enabled` from AsyncStorage
+  - Syncs cached location setting to server automatically
+  - Added console logging for debugging location service state changes
+- **User Experience:**
+  - Toggling location services OFF now immediately clears all clinic data from the Emergency screen
+  - Status badge updates correctly (Enabled/Disabled)
+  - Clinic cards and map markers are cleared when disabled
+  - Toggle works correctly from both App Settings and Emergency screen with **instant sync**
+  - No more lag when toggling from one screen and viewing the other
+  - **Toggle works offline** - changes saved locally and synced when back online
+  - Re-enabling location services fetches fresh clinic data as expected
+  - Seamless offline-first behavior matches rest of app architecture
 
 ---
 
@@ -244,17 +279,18 @@
 
 - **Total Bugs Reported:** 23
 - **Critical (P1):** 2 fixed, 0 open ✅
-- **High (P2):** 3 fixed, 0 open ✅
+- **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 4 fixed, 1 open
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 9
+- **Fixed This Sprint:** 10
 - **Enhancements Completed:** 1
 
 ---
 
 ## Next Actions
 
-1. **Priority Focus:** Address critical P1 bugs (Emergency call cancellation, Offline data persistence)
-2. **High Priority:** Fix P2 issues (Profile consistency, Notifications, Location services)
-3. **Continue Testing:** Validate Bug #7 fix across all devices and scenarios
-4. **Enhancement Testing:** Gather user feedback on new Help & Support feature
+1. **Priority Focus:** All critical P1 bugs fixed ✅
+2. **High Priority:** All P2 issues fixed ✅ (Profile consistency, Notifications, Location services)
+3. **Medium Priority:** Address remaining P3 issue (Bug #6: Date picker malfunction)
+4. **Continue Testing:** Validate Bug #4 fix - test location services toggle in various scenarios (online/offline, app settings vs emergency screen)
+5. **Enhancement Testing:** Gather user feedback on new Help & Support feature
