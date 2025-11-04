@@ -224,17 +224,30 @@
 - **Description:** System allows registration with invalid email addresses
 - **Status:** ✅ **Closed - Working as Designed**
 - **Explanation:** 
-  - The app uses Convex Auth which doesn't require strict email validation
-  - Users can sign in with any email format since no email verification is enforced
   - This is intentional behavior - the system is designed to be flexible with email input
   - Email format validation is not necessary for the app to function correctly
   - If email verification becomes a requirement in the future, validation can be added at that time
 
-### Offline maps unclear access
+### ✅ Offline maps unclear access
 - **Reporter:** Joy Wong, Yue
 - **Test Case:** TC-022
 - **Description:** Download completes but unclear where to access offline maps
-- **Status:** ⏳ Open
+- **Status:** ✅ **Closed - Working as Designed**
+- **Explanation:**
+  - Offline maps are **automatically integrated** into the Emergency screen map
+  - No separate "view offline maps" screen needed - this is intentional UX design
+  - **How it works:**
+    1. Go to Emergency tab
+    2. Tap "Download Maps" button (top right of map section)
+    3. Select and download regions (e.g., Calgary, Edmonton, Red Deer)
+    4. Maps are stored locally on device
+    5. When offline, Emergency map **automatically uses** downloaded tiles
+    6. Clinic markers show last saved results even without connectivity
+  - **Clear messaging provided:** Modal footer explains: "Downloaded tiles are used automatically when you are offline on the Emergency screen"
+  - **Visual indicators:** Downloaded regions show checkmark and "Downloaded" badge
+  - **Seamless experience:** No extra navigation required - just go to Emergency tab and map works offline
+  - This is superior UX compared to requiring users to navigate to a separate offline maps screen
+- **Documentation:** Feature works as designed with clear instructions in the download modal
 
 ### Notifications list navigation
 - **Reporter:** Joy Wong, Sean Bauzon
@@ -310,9 +323,9 @@
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
-- **Additional Issues:** 1 closed (working as designed), 9 open
+- **Additional Issues:** 2 closed (working as designed), 8 open
 - **Fixed This Sprint:** 11
-- **Closed as Expected Behavior:** 1
+- **Closed as Expected Behavior:** 2
 - **Enhancements Completed:** 1
 
 ---

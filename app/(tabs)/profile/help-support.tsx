@@ -8,12 +8,12 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text, TextInput, TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text, TextInput, TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
@@ -117,7 +117,13 @@ export default function HelpSupport() {
     {
       id: 6,
       question: "How do I download offline maps?",
-      answer: "Go to Profile → App Settings → Offline Maps OR Emergency → Offline Maps. Select your region and tap Download. Note: This requires WiFi and may be a large file size.",
+      answer: "Go to the Emergency tab and tap ‘Download Maps’. Choose a region and tap Download. Use Wi‑Fi — regions are typically 10–50 MB.",
+      category: "Emergency"
+    },
+    {
+      id: 11,
+      question: "Where do I access offline maps after downloading?",
+      answer: "Open the Emergency tab — the map automatically uses your downloaded map tiles when you’re offline. ‘Tiles’ are the small pieces of the map saved for the regions you downloaded, so the background map still shows without internet. Clinic markers come from your last saved results (from your last online search). Directions may still need internet unless your maps app cached a route.\n\nExample: Before a trip, go to Emergency → Download Maps and download ‘Calgary & Area’ and ‘Highway 2 Corridor’. While driving with no signal, open the Emergency tab — the map loads from your downloaded tiles and you can still see clinics from your last refresh. Opening turn‑by‑turn directions may require connectivity.",
       category: "Emergency"
     },
     {

@@ -170,6 +170,9 @@ The current GPS-based system is more suitable for emergency scenarios where user
 ### Q: How often should I update?
 **A:** Redownload regions every 3-6 months for road updates.
 
+### Q: Where do I access offline maps after I download them?
+**A:** Open the Emergency tab. The map automatically uses your downloaded tiles when you're offline. Clinic markers show your last saved results. Directions may still need internet.
+
 ### Q: What about Saskatchewan or BC border areas?
 **A:** The "All Alberta" region includes border areas. For cross-province coverage, we can add more regions.
 
