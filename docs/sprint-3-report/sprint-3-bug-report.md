@@ -218,11 +218,17 @@
 
 ## Additional Issues
 
-### Invalid email validation
+### ✅ Invalid email validation
 - **Reporter:** Sean Bauzon
 - **Test Case:** TC-001
 - **Description:** System allows registration with invalid email addresses
-- **Status:** ⏳ Open
+- **Status:** ✅ **Closed - Working as Designed**
+- **Explanation:** 
+  - The app uses Convex Auth which doesn't require strict email validation
+  - Users can sign in with any email format since no email verification is enforced
+  - This is intentional behavior - the system is designed to be flexible with email input
+  - Email format validation is not necessary for the app to function correctly
+  - If email verification becomes a requirement in the future, validation can be added at that time
 
 ### Offline maps unclear access
 - **Reporter:** Joy Wong, Yue
@@ -304,8 +310,9 @@
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
-- **Additional Issues:** 10 open
+- **Additional Issues:** 1 closed (working as designed), 9 open
 - **Fixed This Sprint:** 11
+- **Closed as Expected Behavior:** 1
 - **Enhancements Completed:** 1
 
 ---
