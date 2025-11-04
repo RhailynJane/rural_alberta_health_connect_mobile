@@ -23,8 +23,11 @@ import { FONTS } from "../constants/constants";
 // Validation schema
 const SignInSchema = Yup.object().shape({
   email: Yup.string()
-    .email('Invalid email address')
-    .required('Email is required'),
+    .required('Email is required')
+    .matches(
+      /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+      'Please enter a valid email address (e.g., user@example.com)'
+    ),
   password: Yup.string()
     .min(6, 'Password must be at least 6 characters')
     .required('Password is required'),

@@ -127,6 +127,12 @@ export default function HelpSupport() {
       category: "Emergency"
     },
     {
+      id: 12,
+      question: "How do I add or generate notifications?",
+      answer: "Notifications are created by your reminders and important app updates — you don’t add them directly on the Notifications tab. To create them, set up reminders: Go to Profile → App Settings → Symptom Assessment Reminder. Toggle ‘Enable Reminder’, then tap ‘Add Reminder’ to choose the time (and day if weekly). You’ll receive a notification at those times, and it will appear in the Notifications bell.\n\nTips: Make sure notification permissions are allowed for RAHC in your device settings, and that Do Not Disturb is off during your reminder time. If you still don’t see notifications, see ‘Why are my notifications not working?’ below.",
+      category: "Notifications"
+    },
+    {
       id: 7,
       question: "Is my health data secure?",
       answer: "Yes! Your personal information is encrypted and stored locally on your device. No data is shared without your explicit consent. We follow Canadian privacy laws and best practices for health data security.",
