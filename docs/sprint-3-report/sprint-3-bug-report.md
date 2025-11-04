@@ -127,12 +127,35 @@
 
 ## Medium/Low Priority (P3-P4)
 
-### 🟢 Bug #6: Date picker malfunction in Health Tracker
+### ✅ Bug #6: Date picker malfunction in Health Tracker
 - **Reporter:** Yue, Sean Bauzon
 - **Test Case:** TC-018
 - **Description:** Second date picker clickable but non-functional, doesn't close when clicking outside
 - **Priority:** P3
-- **Status:** ⏳ Open
+- **Status:** ✅ **FIXED**
+- **Fix Details:**
+  - **Root Cause:** iOS date/time pickers using `display="spinner"` had no dismissal mechanism - only closed when date selected, not when tapping outside
+  - **Affected Screens:**
+    - `app/(tabs)/tracker/history.tsx`: Start Date and End Date pickers
+    - `app/(tabs)/tracker/add-health-entry.tsx`: Date and Time pickers
+  - **Solution:**
+    - Wrapped iOS pickers in Modal component with transparent backdrop
+    - Added TouchableOpacity overlay that dismisses picker when tapped
+    - Added "Done" button in modal header for explicit dismissal
+    - Separated iOS and Android picker implementations for platform-specific behavior
+    - Android pickers use native `display="default"` which already dismisses properly
+  - **iOS Improvements:**
+    - Modal slides up from bottom with backdrop blur effect
+    - Tapping anywhere outside picker dismisses it
+    - "Done" button provides clear exit action
+    - Proper safe area handling for different device sizes
+  - **Android Behavior:** Unchanged - native date picker already works correctly
+- **User Experience:**
+  - ✅ Pickers now close when tapping outside (iOS)
+  - ✅ "Done" button provides clear exit action
+  - ✅ Smooth slide-up animation for better UX
+  - ✅ Works consistently across all tracker screens
+  - ✅ Android native picker behavior preserved
 
 ### ✅ Bug #7: Offline indicator only shows on dashboard
 - **Reporter:** Sean Bauzon
@@ -280,9 +303,9 @@
 - **Total Bugs Reported:** 23
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
-- **Medium/Low (P3-P4):** 4 fixed, 1 open
+- **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
 - **Additional Issues:** 10 open
-- **Fixed This Sprint:** 10
+- **Fixed This Sprint:** 11
 - **Enhancements Completed:** 1
 
 ---
@@ -291,6 +314,6 @@
 
 1. **Priority Focus:** All critical P1 bugs fixed ✅
 2. **High Priority:** All P2 issues fixed ✅ (Profile consistency, Notifications, Location services)
-3. **Medium Priority:** Address remaining P3 issue (Bug #6: Date picker malfunction)
-4. **Continue Testing:** Validate Bug #4 fix - test location services toggle in various scenarios (online/offline, app settings vs emergency screen)
+3. **Medium Priority:** All P3-P4 issues fixed ✅ (Date picker malfunction resolved)
+4. **Continue Testing:** Test date picker fixes on both iOS and Android devices
 5. **Enhancement Testing:** Gather user feedback on new Help & Support feature

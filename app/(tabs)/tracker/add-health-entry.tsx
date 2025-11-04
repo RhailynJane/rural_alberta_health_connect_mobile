@@ -6,17 +6,17 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -464,11 +464,43 @@ export default function AddHealthEntry() {
                       {formatDate(selectedDate)}
                     </Text>
                   </TouchableOpacity>
-                  {showDatePicker && (
+                  {/* Date Picker - iOS Modal with backdrop dismissal */}
+                  {showDatePicker && Platform.OS === "ios" && (
+                    <Modal
+                      visible={showDatePicker}
+                      transparent={true}
+                      animationType="slide"
+                      onRequestClose={() => setShowDatePicker(false)}
+                    >
+                      <TouchableOpacity
+                        style={styles.datePickerModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowDatePicker(false)}
+                      >
+                        <View style={styles.datePickerContainer}>
+                          <View style={styles.datePickerHeader}>
+                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                              <Text style={styles.datePickerDoneButton}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <DateTimePicker
+                            value={selectedDate}
+                            mode="date"
+                            display="spinner"
+                            onChange={handleDateChange}
+                            maximumDate={new Date()}
+                            themeVariant="light"
+                            style={styles.dateTimePicker}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  )}
+                  {showDatePicker && Platform.OS === "android" && (
                     <DateTimePicker
                       value={selectedDate}
                       mode="date"
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      display="default"
                       onChange={handleDateChange}
                       maximumDate={new Date()}
                     />
@@ -498,11 +530,42 @@ export default function AddHealthEntry() {
                       {formatTime(selectedTime)}
                     </Text>
                   </TouchableOpacity>
-                  {showTimePicker && (
+                  {/* Time Picker - iOS Modal with backdrop dismissal */}
+                  {showTimePicker && Platform.OS === "ios" && (
+                    <Modal
+                      visible={showTimePicker}
+                      transparent={true}
+                      animationType="slide"
+                      onRequestClose={() => setShowTimePicker(false)}
+                    >
+                      <TouchableOpacity
+                        style={styles.datePickerModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowTimePicker(false)}
+                      >
+                        <View style={styles.datePickerContainer}>
+                          <View style={styles.datePickerHeader}>
+                            <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                              <Text style={styles.datePickerDoneButton}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <DateTimePicker
+                            value={selectedTime}
+                            mode="time"
+                            display="spinner"
+                            onChange={handleTimeChange}
+                            themeVariant="light"
+                            style={styles.dateTimePicker}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  )}
+                  {showTimePicker && Platform.OS === "android" && (
                     <DateTimePicker
                       value={selectedTime}
                       mode="time"
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      display="default"
                       onChange={handleTimeChange}
                     />
                   )}
@@ -1278,5 +1341,34 @@ const styles = StyleSheet.create({
   },
   alertSecondaryButtonText: {
     color: COLORS.primary,
+  },
+  // Date Picker Modal Styles
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerContainer: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  datePickerDoneButton: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primary,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  dateTimePicker: {
+    backgroundColor: "white",
+    height: 200,
   },
 });

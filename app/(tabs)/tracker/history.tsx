@@ -5,14 +5,14 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -682,22 +682,87 @@ export default function History() {
           </ScrollView>
         </View>
 
-        {/* Date Pickers */}
-        {showStartDatePicker && (
+        {/* Date Pickers - iOS Modal with backdrop dismissal */}
+        {showStartDatePicker && Platform.OS === "ios" && (
+          <Modal
+            visible={showStartDatePicker}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowStartDatePicker(false)}
+          >
+            <TouchableOpacity
+              style={styles.datePickerModalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowStartDatePicker(false)}
+            >
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <TouchableOpacity onPress={() => setShowStartDatePicker(false)}>
+                    <Text style={styles.datePickerDoneButton}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={onStartDateChange}
+                  maximumDate={endDate}
+                  themeVariant="light"
+                  style={styles.dateTimePicker}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
+
+        {showStartDatePicker && Platform.OS === "android" && (
           <DateTimePicker
             value={startDate}
             mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            display="default"
             onChange={onStartDateChange}
             maximumDate={endDate}
           />
         )}
 
-        {showEndDatePicker && (
+        {showEndDatePicker && Platform.OS === "ios" && (
+          <Modal
+            visible={showEndDatePicker}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowEndDatePicker(false)}
+          >
+            <TouchableOpacity
+              style={styles.datePickerModalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowEndDatePicker(false)}
+            >
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <TouchableOpacity onPress={() => setShowEndDatePicker(false)}>
+                    <Text style={styles.datePickerDoneButton}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={endDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={onEndDateChange}
+                  minimumDate={startDate}
+                  maximumDate={new Date()}
+                  themeVariant="light"
+                  style={styles.dateTimePicker}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
+
+        {showEndDatePicker && Platform.OS === "android" && (
           <DateTimePicker
             value={endDate}
             mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            display="default"
             onChange={onEndDateChange}
             minimumDate={startDate}
             maximumDate={new Date()}
@@ -1066,5 +1131,34 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: COLORS.primary,
+  },
+  // Date Picker Modal Styles
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerContainer: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  datePickerDoneButton: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primary,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  dateTimePicker: {
+    backgroundColor: "white",
+    height: 200,
   },
 });
