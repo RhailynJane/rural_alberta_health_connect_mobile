@@ -347,7 +347,7 @@
 - **Reporter:** Joy Wong
 - **Test Case:** TC-019
 - **Description:** Loading clinic data 3-4 seconds slower on iOS
-- **Status:** ⏳ Open
+- **Status:** ⏳ Open (For Testing)
 
 ### Clinic list not sorted by proximity
 - **Reporter:** Joy Wong
@@ -359,7 +359,7 @@
 - **Reporter:** Sean Bauzon
 - **Test Case:** TC-026
 - **Description:** Allows saving invalid data without error messages
-- **Status:** ⏳ Open
+- **Status:** ⏳ Open 
 
 ---
 
@@ -379,6 +379,8 @@
   - Better user engagement and feedback collection
   - Enhanced user experience with in-app documentation
 
+  ### Edit and Delete feature for Manual Entry (Yue)
+
 ---
 
 ## Summary Statistics
@@ -387,7 +389,7 @@
 - **Critical (P1):** 2 fixed, 0 open ✅
 - **High (P2):** 4 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
-- **Additional Issues:** 6 closed (3 fixed, 2 working as designed, 1 added to FAQ), 4 open
+- **Additional Issues:** 6 closed (4 fixed, 2 working as designed, 1 added to FAQ), 3 open
 - **Fixed This Sprint:** 14
 - **Closed as Expected Behavior:** 2
 - **Enhancements Completed:** 1
