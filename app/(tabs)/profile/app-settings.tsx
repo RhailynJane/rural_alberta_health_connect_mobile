@@ -1,8 +1,8 @@
 import { api } from "@/convex/_generated/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -88,6 +88,9 @@ export default function AppSettings() {
   const [reminderToDelete, setReminderToDelete] = useState<number | null>(null);
   const [successModalVisible, setSuccessModalVisible] = useState(false);
 
+    // Track previous online state to detect transitions
+    const prevIsOnlineRef = useRef<boolean | null>(null);
+
   // Load cached location status immediately for offline UX
   useEffect(() => {
     (async () => {
@@ -95,22 +98,52 @@ export default function AppSettings() {
         const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
         if (v !== null) {
           setLocationServicesEnabled(v === "1");
+          console.log(`📍 [AppSettings] Loaded cached location status on mount: ${v === "1" ? "enabled" : "disabled"}`);
         }
       } catch {}
     })();
   }, []);
 
+  // Reload cache when screen comes into focus (navigating back to this screen)
+  useFocusEffect(
+    useCallback(() => {
+      console.log(`📍 [AppSettings] Screen focused - reloading cache...`);
+      (async () => {
+        try {
+          const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
+          console.log(`📍 [AppSettings] Cache value read: "${v}"`);
+          if (v !== null) {
+            const newValue = v === "1";
+            setLocationServicesEnabled(newValue);
+            console.log(`📍 [AppSettings] Set local state to: ${newValue ? "enabled" : "disabled"}`);
+          } else {
+            console.log(`📍 [AppSettings] No cached value found`);
+          }
+        } catch (err) {
+          console.error("Failed to reload cached location status:", err);
+        }
+      })();
+    }, [])
+  );
+
   // Apply server location status when available and persist cache
-  // Only sync FROM server, not back to it, to avoid toggle loops
+    // ONLY sync from server when we TRANSITION to online (not on every query update)
+    // This prevents stale query from racing with focus effect and overwriting offline changes
   useEffect(() => {
-    if (locationStatus !== undefined && !isOnline) {
-      // When offline, prefer cached local state
-      return;
-    }
-    if (locationStatus !== undefined) {
+      const wasOffline = prevIsOnlineRef.current === false;
+      const isNowOnline = isOnline === true;
+    
+      // Update ref for next render
+      prevIsOnlineRef.current = isOnline;
+    
+      // ONLY sync when we transition FROM offline TO online
+      if (wasOffline && isNowOnline && locationStatus !== undefined) {
       const val = !!locationStatus.locationServicesEnabled;
+        console.log(`📍 [AppSettings] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
       setLocationServicesEnabled(val);
       AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, val ? "1" : "0").catch(() => {});
+      } else {
+        console.log(`📍 [AppSettings] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
     }
   }, [locationStatus, isOnline]);
 
@@ -334,7 +367,7 @@ export default function AppSettings() {
   } : null;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground>
         <CurvedHeader
           title="App Settings"

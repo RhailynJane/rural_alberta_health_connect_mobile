@@ -2,19 +2,22 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { ConvexReactClient } from "convex/react";
 import * as Notifications from "expo-notifications";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
+import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { database } from '../watermelon/database';
 import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { NotificationProvider } from "./components/NotificationContext";
+import { OfflineBanner } from "./components/OfflineBanner";
 import { SyncProvider } from "./components/SyncProvider";
+import { useNetworkStatus } from "./hooks/useNetworkStatus";
 import {
-  configureForegroundNotifications,
-  setupNotificationListeners,
+    configureForegroundNotifications,
+    setupNotificationListeners,
 } from "./utils/pushNotifications";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
@@ -67,6 +70,9 @@ export default function RootLayout() {
     title: string;
     body: string;
   } | null>(null);
+  const { isOnline } = useNetworkStatus();
+  const pathname = usePathname();
+  const suppressGlobalOfflineOnPersonalInfo = pathname === "/auth/personal-info";
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
@@ -128,16 +134,20 @@ export default function RootLayout() {
                       }}
                     />
                   )}
-                  <Stack screenOptions={{ headerShown: false }}>
-                    <Stack.Screen name="index" />
-                    <Stack.Screen name="onboarding" />
-                    <Stack.Screen name="auth/signin" />
-                    <Stack.Screen name="auth/signup" />
-                    <Stack.Screen name="auth/personal-info" />
-                    <Stack.Screen name="auth/emergency-contact" />
-                    <Stack.Screen name="auth/medical-history" />
-                    <Stack.Screen name="(tabs)" />
-                  </Stack>
+                  <View style={{ flex: 1 }}>
+                    {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
+                    {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
+                    <Stack screenOptions={{ headerShown: false }}>
+                      <Stack.Screen name="index" />
+                      <Stack.Screen name="onboarding" />
+                      <Stack.Screen name="auth/signin" />
+                      <Stack.Screen name="auth/signup" />
+                      <Stack.Screen name="auth/personal-info" />
+                      <Stack.Screen name="auth/emergency-contact" />
+                      <Stack.Screen name="auth/medical-history" />
+                      <Stack.Screen name="(tabs)" />
+                    </Stack>
+                  </View>
                 </SafeAreaProvider>
               </SignUpFormProvider>
             </NotificationProvider>

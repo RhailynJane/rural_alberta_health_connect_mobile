@@ -725,7 +725,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
@@ -744,6 +744,8 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
               <Text

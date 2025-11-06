@@ -1,17 +1,19 @@
 import { api } from "@/convex/_generated/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
@@ -21,7 +23,6 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import MapboxOfflineMap from "../../components/MapboxOfflineMap";
-import { OfflineBanner } from "../../components/OfflineBanner";
 import OfflineMapDownloader from "../../components/OfflineMapDownloader";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
@@ -75,6 +76,12 @@ export default function Emergency() {
   );
   const [showOfflineDownloader, setShowOfflineDownloader] = useState(false);
   const [mapFocus, setMapFocus] = useState<{ latitude: number; longitude: number; zoom?: number } | null>(null);
+  
+  // Local state for location services toggle (for instant UI updates)
+  const [localLocationEnabled, setLocalLocationEnabled] = useState<boolean | null>(null);
+
+    // Track previous online state to detect transitions
+    const prevIsOnlineRef = useRef<boolean | null>(null);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -108,8 +115,80 @@ export default function Emergency() {
     api.locationServices.getRealTimeClinicData
   );
 
+  // Initialize local location enabled state from cache on mount
+  useEffect(() => {
+    const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
+        if (cached !== null) {
+          setLocalLocationEnabled(cached === "1");
+          console.log(`📍 [Emergency] Loaded cached location status on mount: ${cached === "1" ? "enabled" : "disabled"}`);
+        }
+      } catch (err) {
+        console.error("Failed to load cached location status:", err);
+      }
+    })();
+  }, []);
+
+  // Reload cache when screen comes into focus (navigating back to this screen)
+  useFocusEffect(
+    useCallback(() => {
+      const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
+      console.log(`📍 [Emergency] Screen focused - reloading cache...`);
+      (async () => {
+        try {
+          const cached = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
+          console.log(`📍 [Emergency] Cache value read: "${cached}"`);
+          if (cached !== null) {
+            const newValue = cached === "1";
+            setLocalLocationEnabled(newValue);
+            console.log(`📍 [Emergency] Set local state to: ${newValue ? "enabled" : "disabled"}`);
+          } else {
+            console.log(`📍 [Emergency] No cached value found`);
+          }
+        } catch (err) {
+          console.error("Failed to reload cached location status:", err);
+        }
+      })();
+    }, [])
+  );
+
+    // ONLY sync from server when we TRANSITION to online (not on every query update)
+    // This prevents stale query from racing with focus effect and overwriting offline changes
+  useEffect(() => {
+      const wasOffline = prevIsOnlineRef.current === false;
+      const isNowOnline = isOnline === true;
+    
+      // Update ref for next render
+      prevIsOnlineRef.current = isOnline;
+    
+      // ONLY sync when we transition FROM offline TO online
+      if (wasOffline && isNowOnline && locationStatus !== undefined) {
+        const val = !!locationStatus.locationServicesEnabled;
+        console.log(`📍 [Emergency] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
+      setLocalLocationEnabled(!!locationStatus.locationServicesEnabled);
+      } else {
+        console.log(`📍 [Emergency] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
+    }
+  }, [locationStatus, isOnline]);
+
+  // Compute the effective location enabled state (prefer local state for instant updates)
+  // When offline, default to false if cache hasn't loaded yet to prevent showing stale data
+  const effectiveLocationEnabled = localLocationEnabled !== null 
+    ? localLocationEnabled 
+    : (isOnline ? (locationStatus?.locationServicesEnabled ?? false) : false);
+
   useEffect(() => {
     const loadRealTimeData = async () => {
+      // CRITICAL: Clear clinics immediately if location services are disabled
+      if (!effectiveLocationEnabled) {
+        console.log("📍 Location services disabled - clearing clinics");
+        setRealTimeClinics([]);
+        setIsLoading(false);
+        return;
+      }
+
       // If offline, try to load cached data immediately
       if (!isOnline) {
         console.log("📴 Offline mode: loading cached clinic data");
@@ -133,7 +212,7 @@ export default function Emergency() {
       }
 
       // Only load data if location services are enabled AND we have a location AND we're online
-      if (locationStatus?.locationServicesEnabled && locationStatus?.location && isOnline) {
+      if (effectiveLocationEnabled && locationStatus?.location && isOnline) {
         try {
           setIsLoading(true);
           
@@ -223,19 +302,15 @@ export default function Emergency() {
           setIsLoading(false);
         }
       } else {
-        // If location services are disabled, ensure we're not loading
+        // If we reach here, location services are enabled but no location data yet
         setIsLoading(false);
-        // Clear clinics if location services are turned off
-        if (!locationStatus?.locationServicesEnabled) {
-          setRealTimeClinics([]);
-        }
       }
     };
 
     loadRealTimeData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    locationStatus?.locationServicesEnabled,
+    effectiveLocationEnabled,
     locationStatus?.location,
     // getRealTimeClinicData removed - it's a Convex action and causes infinite loops
     isOnline,
@@ -244,6 +319,64 @@ export default function Emergency() {
   // Function to handle emergency calls
   const handleEmergencyCall = (number: string) => {
     const cleanNumber = number.replace(/[^0-9+]/g, "");
+    
+    // For 911, show immediate confirmation with clear cancel option
+    if (cleanNumber === "911") {
+      setModalTitle("⚠️ Call 911 Emergency?");
+      setModalMessage("You are about to call emergency services (911). This should only be used for life-threatening emergencies.\n\nCall 911 if:\n• Someone's life is in danger\n• Medical emergency requiring immediate attention\n• Fire or serious accident\n\nFor non-emergencies, use Health Link 811 instead.");
+      setModalButtons([
+        { 
+          label: "Cancel", 
+          onPress: () => setModalVisible(false), 
+          variant: 'secondary' 
+        },
+        { 
+          label: "Call 911 Now", 
+          onPress: () => {
+            setModalVisible(false);
+            Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
+              setModalTitle("Error");
+              setModalMessage("Could not make the call. Please check your device.");
+              setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+              setModalVisible(true);
+            });
+          }, 
+          variant: 'destructive' 
+        },
+      ]);
+      setModalVisible(true);
+      return;
+    }
+    
+    // For 811, show confirmation with health advice context
+    if (cleanNumber === "811") {
+      setModalTitle("📞 Call Health Link 811?");
+      setModalMessage("You are about to call Health Link Alberta (811) for 24/7 health advice from registered nurses.\n\nUse 811 for:\n• Health questions and concerns\n• Advice on medications\n• Help deciding if you need to see a doctor\n• Finding health services in your area\n\nThis is a free service available 24 hours a day.");
+      setModalButtons([
+        { 
+          label: "Cancel", 
+          onPress: () => setModalVisible(false), 
+          variant: 'secondary' 
+        },
+        { 
+          label: "Call 811", 
+          onPress: () => {
+            setModalVisible(false);
+            Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
+              setModalTitle("Error");
+              setModalMessage("Could not make the call. Please check your device.");
+              setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+              setModalVisible(true);
+            });
+          }, 
+          variant: 'primary' 
+        },
+      ]);
+      setModalVisible(true);
+      return;
+    }
+    
+    // For other numbers (clinics), proceed directly
     Linking.openURL(`tel:${cleanNumber}`).catch((err) => {
       setModalTitle("Error");
       setModalMessage("Could not make the call. Please check your device.");
@@ -295,7 +428,8 @@ export default function Emergency() {
   const handleToggleLocationServices = async () => {
     if (locationStatus) {
       try {
-        const newEnabledState = !locationStatus.locationServicesEnabled;
+        const newEnabledState = !effectiveLocationEnabled;
+        const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
         
         // If enabling, show permission modal
         if (newEnabledState) {
@@ -312,9 +446,23 @@ export default function Emergency() {
               onPress: async () => {
                 setModalVisible(false);
                 try {
+                  // Update local state immediately for instant UI feedback
+                  setLocalLocationEnabled(true);
+                  // Update cache immediately for instant UI sync with App Settings
+                  await AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, "1");
+                  
+                  // Only update server if online
+                  if (!isOnline) {
+                    console.log("📴 Offline: location setting saved locally, will sync when online");
+                    return;
+                  }
+                  
                   await toggleLocationServices({ enabled: true });
                   console.log("📍 Location services enabled");
-                } catch {
+                } catch (err) {
+                  console.error("Failed to enable location services:", err);
+                  // Revert local state on error
+                  setLocalLocationEnabled(false);
                   setModalTitle("Error");
                   setModalMessage("Failed to enable location services");
                   setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
@@ -326,10 +474,23 @@ export default function Emergency() {
           ]);
           setModalVisible(true);
         } else {
-          await toggleLocationServices({ enabled: false });
-          console.log("📍 Location services disabled");
+          // Update local state immediately for instant UI feedback
+          setLocalLocationEnabled(false);
+          // Update cache immediately for instant UI sync with App Settings
+          await AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, "0");
+          console.log("📍 Location services disabled (cache updated)");
+          
           // Clear real-time clinics when disabled
           setRealTimeClinics([]);
+          
+          // Only update server if online
+          if (!isOnline) {
+            console.log("� Offline: location setting saved locally, will sync when online");
+            return;
+          }
+          
+          await toggleLocationServices({ enabled: false });
+          console.log("📍 Location services disabled (server updated)");
         }
       } catch (error) {
         console.error("Failed to update location services:", error);
@@ -345,12 +506,10 @@ export default function Emergency() {
   const nearestClinic = realTimeClinics[0]; // Get the closest clinic
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
-        {/* Offline Banner */}
-        <OfflineBanner />
         
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
@@ -452,7 +611,7 @@ export default function Emergency() {
                   Finding nearest clinic...
                 </Text>
               </View>
-            ) : locationStatus?.locationServicesEnabled && nearestClinic ? (
+            ) : effectiveLocationEnabled && nearestClinic ? (
               <>
                 <Text style={styles.clinicName}>{nearestClinic.name}</Text>
                 <Text style={styles.clinicAddress}>
@@ -491,7 +650,7 @@ export default function Emergency() {
                   </TouchableOpacity>
                 </View>
               </>
-            ) : locationStatus?.locationServicesEnabled && locationData ? (
+            ) : effectiveLocationEnabled && locationData ? (
               // Fallback to original data if real-time data fails
               <>
                 <Text style={styles.cardDescription}>
@@ -534,13 +693,13 @@ export default function Emergency() {
                 <View
                   style={[
                     styles.statusBadge,
-                    locationStatus?.locationServicesEnabled
+                    effectiveLocationEnabled
                       ? styles.statusEnabled
                       : styles.statusDisabled,
                   ]}
                 >
                   <Text style={styles.statusText}>
-                    {locationStatus?.locationServicesEnabled
+                    {effectiveLocationEnabled
                       ? "Enabled"
                       : "Disabled"}
                   </Text>
@@ -549,13 +708,13 @@ export default function Emergency() {
             </View>
 
             <Text style={styles.locationDescription}>
-              {locationStatus?.locationServicesEnabled
+              {effectiveLocationEnabled
                 ? "Location services are enabled. Emergency services can locate you faster."
                 : "Enable location services for better emergency assistance and local clinic information."}
             </Text>
 
             {/* Show location details only when enabled */}
-            {!isLoading && locationStatus?.locationServicesEnabled && (
+            {!isLoading && effectiveLocationEnabled && (
               <View style={styles.locationDetails}>
                 <View style={styles.detailItem}>
                   <Text style={styles.detailLabel}>
@@ -591,7 +750,7 @@ export default function Emergency() {
             )}
 
             {/* Enable button when disabled */}
-            {!isLoading && !locationStatus?.locationServicesEnabled && (
+            {!isLoading && !effectiveLocationEnabled && (
               <TouchableOpacity
                 style={styles.enableButton}
                 onPress={handleToggleLocationServices}
@@ -609,7 +768,7 @@ export default function Emergency() {
         <>
           <View style={styles.mapHeaderContainer}>
             <Text style={styles.sectionTitle}>
-              {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0 
+              {effectiveLocationEnabled && realTimeClinics.length > 0 
                 ? "Clinic Locations Map" 
                 : "Offline Maps"}
             </Text>
@@ -624,12 +783,12 @@ export default function Emergency() {
           <View style={styles.card}>
             <View style={styles.cardContent}>
               <Text style={styles.mapDescription}>
-                {locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
+                {effectiveLocationEnabled && realTimeClinics.length > 0
                   ? "Interactive map showing nearby clinics. Download maps for offline use. When offline, the map tiles load from your downloads and clinic markers use your last saved results. Opening directions may require connectivity."
                   : "Download offline maps for areas with poor connectivity. When offline, the Emergency map will use your downloaded tiles automatically. Clinic markers use your last saved results; directions may require connectivity. Enable location services to see nearby clinics."}
               </Text>
               <MapboxOfflineMap
-                clinics={locationStatus?.locationServicesEnabled && realTimeClinics.length > 0
+                clinics={effectiveLocationEnabled && realTimeClinics.length > 0
                   ? realTimeClinics.map((clinic) => ({
                       id: clinic.id,
                       name: clinic.name,
@@ -642,7 +801,7 @@ export default function Emergency() {
                     }))
                   : []}
                 focusCenter={mapFocus}
-                userLocation={locationStatus?.locationServicesEnabled ? (() => {
+                userLocation={effectiveLocationEnabled ? (() => {
                   try {
                     const loc = locationStatus?.location;
                     if (!loc || typeof loc !== 'string') return null;

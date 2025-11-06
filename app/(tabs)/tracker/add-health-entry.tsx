@@ -6,17 +6,17 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -97,8 +97,8 @@ export default function AddHealthEntry() {
   // Handle image picker
   const pickImage = async () => {
     try {
-      // Check photo limit
-      if (photos.length >= 3) {
+      // Check photo limit (combine both online and offline photos)
+      if (photos.length + localPhotoUris.length >= 3) {
         setErrorModalMessage("You can only add up to 3 photos per health entry.");
         setErrorModalVisible(true);
         return;
@@ -134,8 +134,8 @@ export default function AddHealthEntry() {
   // Take photo with camera
   const takePhoto = async () => {
     try {
-      // Check photo limit
-      if (photos.length >= 3) {
+      // Check photo limit (combine both online and offline photos)
+      if (photos.length + localPhotoUris.length >= 3) {
         setErrorModalMessage("You can only add up to 3 photos per health entry.");
         setErrorModalVisible(true);
         return;
@@ -416,7 +416,7 @@ export default function AddHealthEntry() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
@@ -430,17 +430,17 @@ export default function AddHealthEntry() {
         <DueReminderBanner topOffset={120} />
 
         {/* Scrollable content under header */}
-        <View style={styles.contentArea}>
-          <KeyboardAvoidingView
-            style={styles.keyboardAvoidingView}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <KeyboardAvoidingView
+          style={styles.contentArea}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            <ScrollView
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.contentSection}>
+            <View style={styles.contentSection}>
                 {/* Date selection */}
                 <View style={styles.inputGroup}>
                   <Text
@@ -464,11 +464,43 @@ export default function AddHealthEntry() {
                       {formatDate(selectedDate)}
                     </Text>
                   </TouchableOpacity>
-                  {showDatePicker && (
+                  {/* Date Picker - iOS Modal with backdrop dismissal */}
+                  {showDatePicker && Platform.OS === "ios" && (
+                    <Modal
+                      visible={showDatePicker}
+                      transparent={true}
+                      animationType="slide"
+                      onRequestClose={() => setShowDatePicker(false)}
+                    >
+                      <TouchableOpacity
+                        style={styles.datePickerModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowDatePicker(false)}
+                      >
+                        <View style={styles.datePickerContainer}>
+                          <View style={styles.datePickerHeader}>
+                            <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                              <Text style={styles.datePickerDoneButton}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <DateTimePicker
+                            value={selectedDate}
+                            mode="date"
+                            display="spinner"
+                            onChange={handleDateChange}
+                            maximumDate={new Date()}
+                            themeVariant="light"
+                            style={styles.dateTimePicker}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  )}
+                  {showDatePicker && Platform.OS === "android" && (
                     <DateTimePicker
                       value={selectedDate}
                       mode="date"
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      display="default"
                       onChange={handleDateChange}
                       maximumDate={new Date()}
                     />
@@ -498,17 +530,48 @@ export default function AddHealthEntry() {
                       {formatTime(selectedTime)}
                     </Text>
                   </TouchableOpacity>
-                  {showTimePicker && (
+                  {/* Time Picker - iOS Modal with backdrop dismissal */}
+                  {showTimePicker && Platform.OS === "ios" && (
+                    <Modal
+                      visible={showTimePicker}
+                      transparent={true}
+                      animationType="slide"
+                      onRequestClose={() => setShowTimePicker(false)}
+                    >
+                      <TouchableOpacity
+                        style={styles.datePickerModalOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowTimePicker(false)}
+                      >
+                        <View style={styles.datePickerContainer}>
+                          <View style={styles.datePickerHeader}>
+                            <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                              <Text style={styles.datePickerDoneButton}>Done</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <DateTimePicker
+                            value={selectedTime}
+                            mode="time"
+                            display="spinner"
+                            onChange={handleTimeChange}
+                            themeVariant="light"
+                            style={styles.dateTimePicker}
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    </Modal>
+                  )}
+                  {showTimePicker && Platform.OS === "android" && (
                     <DateTimePicker
                       value={selectedTime}
                       mode="time"
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      display="default"
                       onChange={handleTimeChange}
                     />
                   )}
                 </View>
 
-                {/* Photo Upload Section */}
+                  {/* Photo Upload Section */}
                 <View style={styles.inputGroup}>
                   <Text
                     style={[
@@ -516,7 +579,7 @@ export default function AddHealthEntry() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Add Photos ({photos.length}/3)
+                    Add Photos ({photos.length + localPhotoUris.length}/3)
                   </Text>
 
                   {/* Photo Upload Buttons */}
@@ -524,20 +587,20 @@ export default function AddHealthEntry() {
                     <TouchableOpacity
                       style={[
                         styles.photoButton,
-                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                        (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonDisabled,
                       ]}
                       onPress={pickImage}
-                      disabled={uploading || photos.length >= 3}
+                      disabled={uploading || photos.length + localPhotoUris.length >= 3}
                     >
                       <Ionicons
                         name="image-outline"
                         size={20}
-                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
+                        color={uploading || photos.length + localPhotoUris.length >= 3 ? "#999" : "#2A7DE1"}
                       />
                       <Text 
                         style={[
                           styles.photoButtonText,
-                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                          (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonTextDisabled,
                         ]}
                       >
                         Choose from Library
@@ -547,20 +610,20 @@ export default function AddHealthEntry() {
                     <TouchableOpacity
                       style={[
                         styles.photoButton,
-                        (uploading || photos.length >= 3) && styles.photoButtonDisabled,
+                        (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonDisabled,
                       ]}
                       onPress={takePhoto}
-                      disabled={uploading || photos.length >= 3}
+                      disabled={uploading || photos.length + localPhotoUris.length >= 3}
                     >
                       <Ionicons
                         name="camera-outline"
                         size={20}
-                        color={uploading || photos.length >= 3 ? "#999" : "#2A7DE1"}
+                        color={uploading || photos.length + localPhotoUris.length >= 3 ? "#999" : "#2A7DE1"}
                       />
                       <Text 
                         style={[
                           styles.photoButtonText,
-                          (uploading || photos.length >= 3) && styles.photoButtonTextDisabled,
+                          (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonTextDisabled,
                         ]}
                       >
                         Take Photo
@@ -577,17 +640,20 @@ export default function AddHealthEntry() {
                     </View>
                   )}
 
-                  {/* Selected Photos Preview */}
-                  {photos.length > 0 && (
+                  {/* Selected Photos Preview - Show both online and offline photos */}
+                  {(photos.length > 0 || localPhotoUris.length > 0) && (
                     <View style={styles.photosContainer}>
-                      <Text style={styles.photosLabel}>Selected Photos:</Text>
+                      <Text style={styles.photosLabel}>
+                        Selected Photos: {photos.length + localPhotoUris.length}
+                      </Text>
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
                       >
                         <View style={styles.photosList}>
+                          {/* Online photos */}
                           {photos.map((photo, index) => (
-                            <View key={index} style={styles.photoItem}>
+                            <View key={`online-${index}`} style={styles.photoItem}>
                               <Image
                                 source={{ uri: photo }}
                                 style={styles.photoPreview}
@@ -602,6 +668,31 @@ export default function AddHealthEntry() {
                                   color="#DC3545"
                                 />
                               </TouchableOpacity>
+                            </View>
+                          ))}
+                          {/* Offline photos (local URIs) */}
+                          {localPhotoUris.map((photoUri, index) => (
+                            <View key={`offline-${index}`} style={styles.photoItem}>
+                              <Image
+                                source={{ uri: photoUri }}
+                                style={styles.photoPreview}
+                              />
+                              <TouchableOpacity
+                                style={styles.removePhotoButton}
+                                onPress={() => {
+                                  setLocalPhotoUris((prev) => prev.filter((_, i) => i !== index));
+                                }}
+                              >
+                                <Ionicons
+                                  name="close-circle"
+                                  size={20}
+                                  color="#DC3545"
+                                />
+                              </TouchableOpacity>
+                              {/* Offline indicator badge */}
+                              <View style={styles.offlineBadge}>
+                                <Ionicons name="cloud-offline" size={12} color="white" />
+                              </View>
                             </View>
                           ))}
                         </View>
@@ -763,7 +854,6 @@ export default function AddHealthEntry() {
               </View>
             </ScrollView>
           </KeyboardAvoidingView>
-        </View>
 
         {/* Success Modal */}
         <Modal
@@ -898,12 +988,9 @@ const styles = StyleSheet.create({
   contentArea: {
     flex: 1,
   },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
   contentContainer: {
     flexGrow: 1,
-    paddingBottom: 200,
+    paddingBottom: 140, // Extra padding to ensure buttons are always visible above bottom nav
   },
   contentSection: {
     padding: 24,
@@ -1021,6 +1108,17 @@ const styles = StyleSheet.create({
     right: -8,
     backgroundColor: "white",
     borderRadius: 10,
+  },
+  offlineBadge: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
   },
   modalOverlay: {
     flex: 1,
@@ -1243,5 +1341,34 @@ const styles = StyleSheet.create({
   },
   alertSecondaryButtonText: {
     color: COLORS.primary,
+  },
+  // Date Picker Modal Styles
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerContainer: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  datePickerDoneButton: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primary,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  dateTimePicker: {
+    backgroundColor: "white",
+    height: 200,
   },
 });

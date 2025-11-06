@@ -129,5 +129,28 @@ export default schemaMigrations({
         },
       ],
     },
+    // v8: Add only the truly new columns to user_profiles (avoid duplicates)
+    // Original v4 already added most camelCase columns. The ones introduced later are:
+    // - allergies (string)
+    // - location (string)
+    {
+      toVersion: 8,
+      steps: [
+        {
+          type: 'add_columns',
+          table: 'user_profiles',
+          columns: [
+            { name: 'allergies', type: 'string', isOptional: true },
+            { name: 'location', type: 'string', isOptional: true },
+          ],
+        },
+      ],
+    },
+    // v9: No-op safety bump. We keep this version to ensure devices that already marked v8
+    // as applied can move forward without duplicate-column errors.
+    {
+      toVersion: 9,
+      steps: [],
+    },
   ],
 });

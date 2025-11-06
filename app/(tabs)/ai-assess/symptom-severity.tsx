@@ -14,10 +14,12 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 export default function SymptomSeverity() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { isOnline } = useNetworkStatus();
   const [severityLevel, setSeverityLevel] = useState(5);
 
   const handleContinue = () => {
@@ -95,7 +97,7 @@ export default function SymptomSeverity() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
@@ -114,6 +116,8 @@ export default function SymptomSeverity() {
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
               <Text

@@ -1,31 +1,31 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
-import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../_config/mapbox.config";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import { getPhoneSecurely, normalizeNanpToE164, savePhoneSecurely } from "../utils/securePhone";
 
 export default function PersonalInfo() {
   const router = useRouter();
-  const database = useWatermelonDatabase();
   const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const currentUser = useQuery(
@@ -302,77 +302,46 @@ export default function PersonalInfo() {
         console.log('⚠️ Personal Info - Could not sync phone immediately:', e);
       }
 
-      // Save to WatermelonDB first (offline)
-      await database.write(async () => {
-        const userProfilesCollection = database.get("user_profiles");
+      // Save to AsyncStorage for offline support (WMDB disabled due to schema errors)
+      try {
+        const uid = currentUser._id;
+        const fullAddress = [address1, address2, city, province, postalCode]
+          .filter(Boolean)
+          .join(', ');
+        
+        const profileData = {
+          userId: uid,
+          age: age || '',
+          address1: address1 || '',
+          address2: address2 || '',
+          city: city || '',
+          province: province || '',
+          postalCode: postalCode || '',
+          location: fullAddress || location || '',
+          phone: normalizedPhone || '',
+          onboardingCompleted: false,
+        };
 
-        // Check if profile already exists for this user
-        const existingProfiles = await userProfilesCollection.query().fetch();
-
-        const existingProfile = existingProfiles.find(
-          (p: any) => p.userId === currentUser._id
-        );
-
-        if (existingProfile) {
-          // Update existing profile - per-field to avoid schema mismatch errors
-          const fullAddress = [address1, address2, city, province, postalCode]
-            .filter(Boolean)
-            .join(', ');
-          
-          const safeUpdate = async (setter: (p: any) => void) => {
-            try {
-              await existingProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to update profile field:', e);
-            }
-          };
-
-          await safeUpdate((profile: any) => { profile.userId = currentUser._id; });
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
-          
-          console.log("✅ Personal Info - Updated existing local profile");
-        } else {
-          // Create new profile - create minimal record first, then update fields
-          const fullAddress = [address1, address2, city, province, postalCode]
-            .filter(Boolean)
-            .join(', ');
-          
-          const newProfile = await userProfilesCollection.create((profile: any) => {
-            // Only set required fields during creation
-            profile.userId = currentUser._id;
-            profile.onboardingCompleted = false;
-          });
-          
-          // Then update optional fields one by one
-          const safeUpdate = async (setter: (p: any) => void) => {
-            try {
-              await newProfile.update(setter);
-            } catch (e) {
-              console.warn('⚠️ Failed to set profile field:', e);
-            }
-          };
-
-          await safeUpdate((profile: any) => { profile.age = age; });
-          await safeUpdate((profile: any) => { profile.ageRange = age; });
-          await safeUpdate((profile: any) => { profile.address1 = address1; });
-          await safeUpdate((profile: any) => { profile.address2 = address2; });
-          await safeUpdate((profile: any) => { profile.city = city; });
-          await safeUpdate((profile: any) => { profile.province = province; });
-          await safeUpdate((profile: any) => { profile.postalCode = postalCode; });
-          await safeUpdate((profile: any) => { profile.location = fullAddress || location; });
-          
-          console.log("✅ Personal Info - Created new local profile");
+        // Save to user-specific cache
+        await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(profileData));
+        
+        // Save phone to SecureStore
+        if (normalizedPhone) {
+          await savePhoneSecurely(uid, normalizedPhone);
         }
-      });
+        
+        // Mark as needing sync
+        await AsyncStorage.setItem(`${uid}:profile_needs_sync`, '1');
+        if (normalizedPhone) {
+          await AsyncStorage.setItem(`${uid}:phone_needs_sync`, '1');
+        }
 
-      console.log("✅ Personal Info - Saved to local database");
+        console.log("✅ Personal Info - Saved to AsyncStorage cache");
+      } catch (cacheError) {
+        console.warn("⚠️ Personal Info - Failed to save to cache:", cacheError);
+      }
+
+      console.log("✅ Personal Info - Saved to local storage");
 
       // Navigate immediately after local save - don't wait for Convex sync
       console.log("➡️ Navigating to emergency contact");
@@ -423,6 +392,9 @@ export default function PersonalInfo() {
               height={150}
               showLogo={true}
             />
+
+            {/* Inline offline banner for onboarding screen */}
+            <OfflineBanner variant="inline" />
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
@@ -704,7 +676,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
+    paddingTop: 16,
   },
   progressContainer: {
     paddingHorizontal: 24,

@@ -7,7 +7,9 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Image,
+  Keyboard,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +24,7 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // AI Context Types
 type SymptomCategory =
@@ -77,6 +80,7 @@ async function convertImageToBase64(uri: string): Promise<string> {
 export default function SymptomAssessment() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   const [selectedCategory, setSelectedCategory] =
     useState<SymptomCategory | null>(null);
   const [symptomDescription, setSymptomDescription] = useState("");
@@ -397,7 +401,7 @@ export default function SymptomAssessment() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
@@ -415,11 +419,14 @@ export default function SymptomAssessment() {
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.contentSection}>
+          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.contentSection}>
               <Text
                 style={[
                   styles.sectionTitle,
@@ -635,6 +642,9 @@ export default function SymptomAssessment() {
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
 
               <View style={styles.photoSection}>
@@ -799,8 +809,9 @@ export default function SymptomAssessment() {
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
+              </View>
+            </ScrollView>
+          </Pressable>
         </View>
 
         {/* Error Modal */}
