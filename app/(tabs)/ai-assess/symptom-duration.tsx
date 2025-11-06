@@ -2,11 +2,11 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -14,10 +14,12 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 export default function SymptomDuration() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { isOnline } = useNetworkStatus();
   const [selectedDuration, setSelectedDuration] = useState<string | null>(null);
 
   const durationOptions = [
@@ -72,7 +74,7 @@ export default function SymptomDuration() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
@@ -91,6 +93,8 @@ export default function SymptomDuration() {
           <ScrollView
             contentContainerStyle={styles.contentContainer}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
               <Text

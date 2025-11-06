@@ -132,7 +132,7 @@ export default function NotificationsScreen() {
 
   return (
     <CurvedBackground>
-      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+      <SafeAreaView style={{ flex: 1 }} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedHeader
           title="Notifications"
           height={150}

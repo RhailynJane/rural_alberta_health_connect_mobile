@@ -58,9 +58,14 @@ export default function History() {
     return newDate;
   };
 
-  const [startDate, setStartDate] = useState(
-    getDateWithoutTime(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
-  );
+  // Initialize with last 7 days (6 days ago + today = 7 days total, matching Dashboard)
+  const getInitialStartDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6); // 6 days back + today = 7 days
+    return getDateWithoutTime(date);
+  };
+
+  const [startDate, setStartDate] = useState(getInitialStartDate());
   const [endDate, setEndDate] = useState(getEndOfDay(new Date()));
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
@@ -76,8 +81,10 @@ export default function History() {
   useEffect(() => {
     const fetchOfflineEntries = async () => {
       try {
-        if (isOnline) return;
-        // Determine user id offline
+        // ALWAYS load from WatermelonDB first for instant display
+        // Then online data will replace it when loaded
+        
+        // Determine user id
         let uid: string | undefined = currentUser?._id as any;
         if (!uid) {
           try {
@@ -101,7 +108,7 @@ export default function History() {
           } catch {}
         }
         if (!uid) {
-          console.log('⚠️ [OFFLINE HISTORY] No user id available offline');
+          console.log('⚠️ [OFFLINE HISTORY] No user id available');
           setOfflineEntries([]);
           return;
         }
@@ -114,11 +121,10 @@ export default function History() {
           )
           .fetch();
 
-        console.log(`🔍 [OFFLINE HISTORY] Fetched ${entries.length} total entries for user ${uid}`);
+        console.log(`🔍 [LOCAL HISTORY] Fetched ${entries.length} entries from WatermelonDB for user ${uid}`);
         
         // Map WatermelonDB entries to match Convex format
         const mapped = entries.map((entry: any) => {
-          console.log(`📝 [OFFLINE ENTRY] id: ${entry.id}, type: ${entry.type}, date: ${entry.date}`);
           return {
             _id: entry.id,
             symptoms: entry.symptoms || "",
@@ -128,22 +134,26 @@ export default function History() {
             timestamp: entry.timestamp || Date.now(),
             createdBy: entry.createdBy || "User",
             type: entry.type || "manual_entry",
+            convexId: entry.convexId, // For de-duplication
           };
         });
         
-        console.log(`✅ [OFFLINE HISTORY] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
+        console.log(`✅ [LOCAL HISTORY] Loaded ${mapped.length} entries instantly from local cache`);
         setOfflineEntries(mapped);
       } catch (error) {
         console.error("Error fetching offline entries:", error);
         setOfflineEntries([]);
       }
     };
+    // Fetch immediately on mount for instant display
     fetchOfflineEntries();
-  }, [isOnline, database, currentUser?._id]);
+  }, [database, currentUser?._id]); // Removed isOnline dependency - always load local cache
 
   // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
   const allEntries = useMemo(() => {
-    const base = isOnline ? allEntriesOnline : offlineEntries;
+    // If online and have server data, use that (it's fresher)
+    // Otherwise use local cache
+    const base = (isOnline && allEntriesOnline) ? allEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
     const seen = new Set<string>();
     const out: any[] = [];
@@ -206,19 +216,17 @@ export default function History() {
         setEndDate(getEndOfDay(today));
         break;
       case "7d":
-        setStartDate(
-          getDateWithoutTime(
-            new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-          )
-        );
+        // Last 7 days: 6 days ago + today = 7 days (matching Dashboard)
+        const sevenDaysStart = new Date(today);
+        sevenDaysStart.setDate(today.getDate() - 6);
+        setStartDate(getDateWithoutTime(sevenDaysStart));
         setEndDate(getEndOfDay(today));
         break;
       case "30d":
-        setStartDate(
-          getDateWithoutTime(
-            new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
-          )
-        );
+        // Last 30 days: 29 days ago + today = 30 days
+        const thirtyDaysStart = new Date(today);
+        thirtyDaysStart.setDate(today.getDate() - 29);
+        setStartDate(getDateWithoutTime(thirtyDaysStart));
         setEndDate(getEndOfDay(today));
         break;
       case "custom":
@@ -314,7 +322,7 @@ export default function History() {
   });
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         <DueReminderBanner topOffset={120} />
         {/* Fixed Header (not scrollable) */}
@@ -674,22 +682,87 @@ export default function History() {
           </ScrollView>
         </View>
 
-        {/* Date Pickers */}
-        {showStartDatePicker && (
+        {/* Date Pickers - iOS Modal with backdrop dismissal */}
+        {showStartDatePicker && Platform.OS === "ios" && (
+          <Modal
+            visible={showStartDatePicker}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowStartDatePicker(false)}
+          >
+            <TouchableOpacity
+              style={styles.datePickerModalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowStartDatePicker(false)}
+            >
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <TouchableOpacity onPress={() => setShowStartDatePicker(false)}>
+                    <Text style={styles.datePickerDoneButton}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={onStartDateChange}
+                  maximumDate={endDate}
+                  themeVariant="light"
+                  style={styles.dateTimePicker}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
+
+        {showStartDatePicker && Platform.OS === "android" && (
           <DateTimePicker
             value={startDate}
             mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            display="default"
             onChange={onStartDateChange}
             maximumDate={endDate}
           />
         )}
 
-        {showEndDatePicker && (
+        {showEndDatePicker && Platform.OS === "ios" && (
+          <Modal
+            visible={showEndDatePicker}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowEndDatePicker(false)}
+          >
+            <TouchableOpacity
+              style={styles.datePickerModalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowEndDatePicker(false)}
+            >
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <TouchableOpacity onPress={() => setShowEndDatePicker(false)}>
+                    <Text style={styles.datePickerDoneButton}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={endDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={onEndDateChange}
+                  minimumDate={startDate}
+                  maximumDate={new Date()}
+                  themeVariant="light"
+                  style={styles.dateTimePicker}
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
+
+        {showEndDatePicker && Platform.OS === "android" && (
           <DateTimePicker
             value={endDate}
             mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            display="default"
             onChange={onEndDateChange}
             minimumDate={startDate}
             maximumDate={new Date()}
@@ -1058,5 +1131,34 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: COLORS.primary,
+  },
+  // Date Picker Modal Styles
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerContainer: {
+    backgroundColor: "white",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === "ios" ? 40 : 20,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  datePickerDoneButton: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primary,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  dateTimePicker: {
+    backgroundColor: "white",
+    height: 200,
   },
 });

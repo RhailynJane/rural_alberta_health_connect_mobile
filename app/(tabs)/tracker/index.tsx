@@ -1,11 +1,11 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -14,9 +14,11 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 export default function Tracker() {
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isOnline } = useNetworkStatus();
   
   // Get reminder settings
   const reminderSettings = useQuery(
@@ -36,7 +38,7 @@ export default function Tracker() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground>
         {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />

@@ -1,4 +1,4 @@
-import { useDatabase } from "@nozbe/watermelondb/hooks";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -22,7 +22,6 @@ import { FONTS } from "../constants/constants";
 
 export default function EmergencyContact() {
   const router = useRouter();
-  const database = useDatabase();
   const currentUser = useQuery(api.users.getCurrentUser);
   
   const [contactName, setContactName] = useState('');
@@ -155,59 +154,26 @@ export default function EmergencyContact() {
     setIsSubmitting(true);
 
     try {
-      // Save to WatermelonDB first (offline-first)
-      await database.write(async () => {
-        const userProfilesCollection = database.get("user_profiles");
-        const existingProfiles = await userProfilesCollection.query().fetch();
-        const existingProfile = existingProfiles.find(
-          (p: any) => p.userId === currentUser._id
-        );
-
-        if (existingProfile) {
-          // Update fields individually to avoid aborting if a column is missing on this device
-          try {
-            await existingProfile.update((profile: any) => {
-              profile.emergencyContactName = contactName;
-            });
-          } catch (e) {
-            console.warn('⚠️ Could not set emergencyContactName locally:', e);
-          }
-          try {
-            await existingProfile.update((profile: any) => {
-              profile.emergencyContactPhone = contactPhone;
-            });
-          } catch (e) {
-            console.warn('⚠️ Could not set emergencyContactPhone locally:', e);
-          }
-          console.log("✅ Emergency Contact - Updated existing local profile (best-effort)");
-        } else {
-          // Create minimal row first, then set optional fields individually
-          let created: any = null;
-          try {
-            created = await userProfilesCollection.create((profile: any) => {
-              profile.userId = String(currentUser._id);
-              profile.onboardingCompleted = false;
-            });
-          } catch (createErr) {
-            console.warn('⚠️ Could not create local profile record:', createErr);
-          }
-          if (created) {
-            try {
-              await created.update((p: any) => { p.emergencyContactName = contactName; });
-            } catch (e) {
-              console.warn('⚠️ Could not set emergencyContactName on new record:', e);
-            }
-            try {
-              await created.update((p: any) => { p.emergencyContactPhone = contactPhone; });
-            } catch (e) {
-              console.warn('⚠️ Could not set emergencyContactPhone on new record:', e);
-            }
-            console.log("✅ Emergency Contact - Created/updated new local profile (best-effort)");
-          }
+      // Save to AsyncStorage for offline support (WMDB disabled due to schema errors)
+      try {
+        const uid = currentUser?._id;
+        if (uid) {
+          const raw = await AsyncStorage.getItem(`${uid}:profile_cache_v1`);
+          const cached = raw ? JSON.parse(raw) : {};
+          const merged = {
+            ...cached,
+            emergencyContactName: contactName || '',
+            emergencyContactPhone: contactPhone || '',
+          };
+          await AsyncStorage.setItem(`${uid}:profile_cache_v1`, JSON.stringify(merged));
+          await AsyncStorage.setItem(`${uid}:profile_emergency_needs_sync`, '1');
+          console.log("✅ Emergency Contact - Saved to AsyncStorage cache");
         }
-      });
+      } catch (cacheError) {
+        console.warn("⚠️ Emergency Contact - Failed to save to cache:", cacheError);
+      }
 
-      console.log("✅ Emergency Contact - Saved to local database");
+      console.log("✅ Emergency Contact - Saved to local storage");
 
       // Then sync with Convex (online)
       try {

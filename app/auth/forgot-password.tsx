@@ -24,15 +24,21 @@ import { FONTS } from '../constants/constants';
 const EmailSchema = Yup.object().shape({
   email: Yup.string()
     .trim()
-    .email('Please enter a valid email address')
-    .required('Email is required'),
+    .required('Email is required')
+    .matches(
+      /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+      'Please enter a valid email address (e.g., user@example.com)'
+    ),
 });
 
 const ResetSchema = Yup.object().shape({
   email: Yup.string()
     .trim()
-    .email('Please enter a valid email address')
-    .required('Email is required'),
+    .required('Email is required')
+    .matches(
+      /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+      'Please enter a valid email address (e.g., user@example.com)'
+    ),
   code: Yup.string()
     .trim()
     .required('Verification code is required'),
@@ -187,6 +193,9 @@ export default function ForgotPassword() {
                           keyboardType="email-address"
                           autoCapitalize="none"
                           autoCorrect={false}
+                          textContentType="emailAddress"
+                          autoComplete="email"
+                          importantForAutofill="yes"
                         />
                         {errors.email && touched.email && (
                           <Text style={styles.errorText}>{errors.email}</Text>
@@ -209,6 +218,9 @@ export default function ForgotPassword() {
                           onChangeText={handleChange('code')}
                           onBlur={handleBlur('code')}
                           keyboardType="numeric"
+                          textContentType="oneTimeCode"
+                          autoComplete="one-time-code"
+                          importantForAutofill="yes"
                         />
                         {errors.code && touched.code && (
                           <Text style={styles.errorText}>{errors.code}</Text>
@@ -230,6 +242,9 @@ export default function ForgotPassword() {
                             onChangeText={handleChange('newPassword')}
                             onBlur={handleBlur('newPassword')}
                             secureTextEntry={!showPassword}
+                            textContentType="newPassword"
+                            autoComplete="new-password"
+                            importantForAutofill="yes"
                           />
                           <TouchableOpacity
                             style={styles.eyeIcon}
