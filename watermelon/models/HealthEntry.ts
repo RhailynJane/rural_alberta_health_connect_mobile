@@ -36,7 +36,12 @@ export default class HealthEntry extends Model {
   @field('type') type?: string;
   @field('isSynced') isSynced!: boolean;
   @field('syncError') syncError?: string;
-  
+
+  // Soft delete and edit tracking (added in v10)
+  @field('isDeleted') isDeleted?: boolean;
+  @field('lastEditedAt') lastEditedAt?: number;
+  @field('editCount') editCount?: number;
+
   @readonly @date('createdAt') createdAt!: number;
   @readonly @date('updatedAt') updatedAt!: number;
 }

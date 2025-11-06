@@ -377,7 +377,7 @@ Currently no automated testing framework configured. Future considerations:
 
 - AI assessment requires internet (Gemini API) - falls back to rule-based when offline
 - Large images (>800KB) may cause Gemini API payload issues - compression implemented
-- WatermelonDB schema v7 - migrations must be handled carefully
+- WatermelonDB schema v9 - migrations must be handled carefully
 - TypeScript strict mode disabled - type safety not enforced
 - No automated testing infrastructure
 - Speech recognition (@react-native-voice/voice) requires device support
@@ -385,7 +385,7 @@ Currently no automated testing framework configured. Future considerations:
 ## Important Implementation Details
 
 ### WatermelonDB Schema Migrations
-- Current version: 7
+- Current version: 9
 - Schema uses both snake_case (legacy) and camelCase (Convex alignment)
 - Migration files in watermelon/database/migrations.ts
 - **Critical**: Always add new migration when changing schema, never modify existing ones
