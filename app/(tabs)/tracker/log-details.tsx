@@ -352,8 +352,14 @@ export default function LogDetails() {
                     <TouchableOpacity
                       style={styles.editButton}
                       onPress={() => {
-                        console.log('Edit entry:', entry._id);
-                        // TODO: Navigate to edit screen
+                        router.push({
+                          pathname: '/(tabs)/tracker/add-health-entry',
+                          params: {
+                            mode: 'edit',
+                            entryId: isOnline ? entryId : offlineEntry?._id,
+                            convexId: entry._id,
+                          }
+                        });
                       }}
                     >
                       <Ionicons name="pencil" size={18} color="#2A7DE1" />

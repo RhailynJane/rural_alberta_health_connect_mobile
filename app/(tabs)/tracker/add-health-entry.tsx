@@ -3,8 +3,8 @@ import { useDatabase } from "@nozbe/watermelondb/hooks";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useState, useEffect } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -33,8 +33,15 @@ export default function AddHealthEntry() {
   const { isAuthenticated } = useConvexAuth();
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const logManualEntry = useMutation(api.healthEntries.logManualEntry);
+  const updateHealthEntry = useMutation(api.healthEntries.updateHealthEntry);
   const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
+
+  // Detect edit mode from route params
+  const params = useLocalSearchParams();
+  const mode = (params.mode as 'add' | 'edit') || 'add';
+  const editEntryId = params.entryId as string | undefined;
+  const editConvexId = params.convexId as string | undefined;
 
   // State for form fields
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -68,6 +75,10 @@ export default function AddHealthEntry() {
   const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Edit mode state - preserve original timestamp (Option A)
+  const [originalTimestamp, setOriginalTimestamp] = useState<number | null>(null);
+  const [loadingEntry, setLoadingEntry] = useState(false);
+
   // Severity options (1-10)
   const severityOptions = Array.from({ length: 10 }, (_, i) =>
     (i + 1).toString()
@@ -92,6 +103,65 @@ export default function AddHealthEntry() {
     hours = hours ? hours : 12;
 
     return `${hours}:${minutes} ${ampm}`;
+  };
+
+  // Load entry data for edit mode
+  useEffect(() => {
+    if (mode === 'edit' && editEntryId) {
+      loadEntryForEdit(editEntryId);
+    }
+  }, [mode, editEntryId]);
+
+  const loadEntryForEdit = async (id: string) => {
+    setLoadingEntry(true);
+    try {
+      const healthCollection = database.get('health_entries');
+      const entry = await healthCollection.find(id) as any;
+
+      // Pre-populate form fields
+      setSymptoms(entry.symptoms || '');
+      setSeverity(entry.severity?.toString() || '');
+      setNotes(entry.notes || '');
+
+      // Handle photos (parse JSON if string)
+      try {
+        const photoArray = typeof entry.photos === 'string'
+          ? JSON.parse(entry.photos)
+          : (entry.photos || []);
+        setPhotos(photoArray);
+      } catch {
+        setPhotos([]);
+      }
+
+      // Preserve original timestamp (Option A)
+      setOriginalTimestamp(entry.timestamp);
+
+      // Set date/time from original timestamp for display
+      const date = new Date(entry.timestamp);
+      setSelectedDate(date);
+      setSelectedTime(date);
+
+      console.log('✅ Entry loaded for editing:', {
+        id: entry.id,
+        symptoms: entry.symptoms,
+        severity: entry.severity,
+        originalTimestamp: entry.timestamp,
+      });
+    } catch (error) {
+      console.error('❌ Failed to load entry for editing:', error);
+      setAlertModalTitle('Error');
+      setAlertModalMessage('Failed to load entry for editing. Please try again.');
+      setAlertModalButtons([
+        {
+          label: 'Go Back',
+          onPress: () => router.back(),
+          variant: 'primary',
+        },
+      ]);
+      setAlertModalVisible(true);
+    } finally {
+      setLoadingEntry(false);
+    }
   };
 
   // Handle image picker
@@ -301,16 +371,22 @@ export default function AddHealthEntry() {
     }
 
     try {
-      const timestamp = createTimestamp(selectedDate, selectedTime);
+      // For edit mode, use original timestamp (Option A: preserve original)
+      // For add mode, create new timestamp
+      const timestamp = mode === 'edit' && originalTimestamp
+        ? originalTimestamp
+        : createTimestamp(selectedDate, selectedTime);
       const dateString = formatDate(selectedDate);
       // Use actual userId if available, skip saving if offline without userId
       const saveUserId = userId;
 
       console.log("Saving entry:", {
-        mode: isOnline ? 'online' : 'offline',
+        mode: mode === 'edit' ? 'edit' : (isOnline ? 'online' : 'offline'),
+        editMode: mode === 'edit',
         hasUserId: !!saveUserId,
         date: dateString,
         timestamp,
+        originalTimestamp: mode === 'edit' ? originalTimestamp : null,
         symptoms,
         severity: parseInt(severity),
         notes,
@@ -318,6 +394,63 @@ export default function AddHealthEntry() {
         localPhotos: localPhotoUris.length,
       });
 
+      // EDIT MODE FLOW
+      if (mode === 'edit' && editEntryId) {
+        if (isOnline && userId && editConvexId) {
+          // ONLINE EDIT: Update both Convex and WatermelonDB
+          try {
+            await updateHealthEntry({
+              entryId: editConvexId as any,
+              userId: userId as any,
+              symptoms,
+              severity: parseInt(severity),
+              notes,
+              photos: [...photos, ...localPhotoUris],
+            });
+            console.log("✅ Entry updated online");
+
+            // Update WatermelonDB too
+            const healthCollection = database.get('health_entries');
+            const entry = await healthCollection.find(editEntryId);
+            await database.write(async () => {
+              await (entry as any).update((e: any) => {
+                e.symptoms = symptoms;
+                e.severity = parseInt(severity);
+                e.notes = notes || '';
+                e.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                // Preserve original timestamp (Option A)
+                // Don't update e.timestamp
+              });
+            });
+            console.log("✅ Entry also updated in WatermelonDB");
+          } catch (error) {
+            console.error("❌ Failed to update online:", error);
+            throw error;
+          }
+        } else {
+          // OFFLINE EDIT: Update WatermelonDB only
+          const healthCollection = database.get('health_entries');
+          const entry = await healthCollection.find(editEntryId);
+          await database.write(async () => {
+            await (entry as any).update((e: any) => {
+              e.symptoms = symptoms;
+              e.severity = parseInt(severity);
+              e.notes = notes || '';
+              e.photos = JSON.stringify([...photos, ...localPhotoUris]);
+              e.isSynced = false; // Mark for re-sync
+              // Preserve original timestamp (Option A)
+              // Don't update e.timestamp
+            });
+          });
+          console.log("📴 Entry updated offline, will sync when online");
+        }
+
+        // Navigate back to detail screen
+        router.back();
+        return;
+      }
+
+      // ADD MODE FLOW (existing logic)
       if (isOnline && userId) {
         // ONLINE: Save to both Convex AND WatermelonDB
         try {
@@ -420,7 +553,7 @@ export default function AddHealthEntry() {
       <CurvedBackground style={{ flex: 1 }}>
         {/* Fixed Header (not scrollable) */}
         <CurvedHeader
-          title="Tracker - Add Entry"
+          title={mode === 'edit' ? "Tracker - Edit Entry" : "Tracker - Add Entry"}
           height={150}
           showLogo={true}
           screenType="signin"
@@ -847,7 +980,7 @@ export default function AddHealthEntry() {
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      {uploading ? "Uploading..." : "Save Entry"}
+                      {uploading ? "Uploading..." : (mode === 'edit' ? "Update Entry" : "Save Entry")}
                     </Text>
                   </TouchableOpacity>
                 </View>
