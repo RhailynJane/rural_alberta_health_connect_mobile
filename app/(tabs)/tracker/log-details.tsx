@@ -345,6 +345,33 @@ export default function LogDetails() {
                     {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
                   </Text>
                 </View>
+
+                {/* Edit/Delete Actions - Only for Manual Entries */}
+                {entry.type !== "ai_assessment" && (
+                  <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => {
+                        console.log('Edit entry:', entry._id);
+                        // TODO: Navigate to edit screen
+                      }}
+                    >
+                      <Ionicons name="pencil" size={18} color="#2A7DE1" />
+                      <Text style={styles.editButtonText}>Edit Entry</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => {
+                        console.log('Delete entry:', entry._id);
+                        // TODO: Show confirmation modal
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#DC3545" />
+                      <Text style={styles.deleteButtonText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Symptoms */}
@@ -544,6 +571,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginLeft: 6,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E9ECEF",
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    color: "#2A7DE1",
+    fontWeight: "600",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DC3545",
+    gap: 8,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    color: "#DC3545",
+    fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
   detailCard: {
