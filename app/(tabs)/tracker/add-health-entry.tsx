@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Q } from "@nozbe/watermelondb";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
@@ -78,6 +79,7 @@ export default function AddHealthEntry() {
   // Edit mode state - preserve original timestamp (Option A)
   const [originalTimestamp, setOriginalTimestamp] = useState<number | null>(null);
   const [loadingEntry, setLoadingEntry] = useState(false);
+  const [watermelonRecordId, setWatermelonRecordId] = useState<string | null>(null);
 
   // Severity options (1-10)
   const severityOptions = Array.from({ length: 10 }, (_, i) =>
@@ -116,7 +118,34 @@ export default function AddHealthEntry() {
     setLoadingEntry(true);
     try {
       const healthCollection = database.get('health_entries');
-      const entry = await healthCollection.find(id) as any;
+      let entry: any = null;
+
+      // Detect if this is a Convex ID (starts with 'k' or 'j', longer than 20 chars)
+      // Same logic as log-details.tsx
+      const isConvexId = id && id.length > 20 && /^[kj]/.test(id);
+
+      if (isConvexId) {
+        // Query by convexId field (Convex ID is stored as a field, not primary key)
+        console.log('🔍 Querying WatermelonDB by convexId field:', id);
+        const results = await healthCollection.query(
+          Q.where('convexId', id)
+        ).fetch();
+
+        if (results.length > 0) {
+          entry = results[0];
+          console.log('✅ Found entry by convexId:', entry.id);
+        } else {
+          throw new Error(`No entry found with convexId: ${id}`);
+        }
+      } else {
+        // Direct find by WatermelonDB ID
+        console.log('🔍 Finding entry by WatermelonDB ID:', id);
+        entry = await healthCollection.find(id);
+      }
+
+      if (!entry) {
+        throw new Error('Entry not found');
+      }
 
       // Pre-populate form fields
       setSymptoms(entry.symptoms || '');
@@ -136,13 +165,18 @@ export default function AddHealthEntry() {
       // Preserve original timestamp (Option A)
       setOriginalTimestamp(entry.timestamp);
 
+      // Store WatermelonDB record ID for later update
+      setWatermelonRecordId(entry.id);
+      console.log('💾 Stored watermelonRecordId for later update:', entry.id);
+
       // Set date/time from original timestamp for display
       const date = new Date(entry.timestamp);
       setSelectedDate(date);
       setSelectedTime(date);
 
       console.log('✅ Entry loaded for editing:', {
-        id: entry.id,
+        watermelonId: entry.id,
+        convexId: entry.convexId,
         symptoms: entry.symptoms,
         severity: entry.severity,
         originalTimestamp: entry.timestamp,
@@ -396,6 +430,14 @@ export default function AddHealthEntry() {
 
       // EDIT MODE FLOW
       if (mode === 'edit' && editEntryId) {
+        console.log('📝 EDIT MODE - IDs:', {
+          editEntryId,
+          editConvexId,
+          watermelonRecordId,
+          isOnline,
+          hasUserId: !!userId,
+        });
+
         if (isOnline && userId && editConvexId) {
           // ONLINE EDIT: Update both Convex and WatermelonDB
           try {
@@ -407,32 +449,79 @@ export default function AddHealthEntry() {
               notes,
               photos: [...photos, ...localPhotoUris],
             });
-            console.log("✅ Entry updated online");
+            console.log("✅ Entry updated online (Convex)");
 
-            // Update WatermelonDB too
-            const healthCollection = database.get('health_entries');
-            const entry = await healthCollection.find(editEntryId);
-            await database.write(async () => {
+            // Update WatermelonDB too (use stored WatermelonDB ID, not Convex ID)
+            console.log('🔄 About to update WatermelonDB, watermelonRecordId:', watermelonRecordId);
+            if (watermelonRecordId) {
+              const healthCollection = database.get('health_entries');
+
+              console.log('🔍 Finding entry with ID:', watermelonRecordId);
+              const entry = await healthCollection.find(watermelonRecordId);
+
+              console.log('🔍 Entry after find():', entry);
+              console.log('🔍 Entry is null?', entry === null);
+              console.log('🔍 Entry is undefined?', entry === undefined);
+              console.log('🔍 Entry type:', typeof entry);
+
+              if (!entry) {
+                console.error('❌ Entry not found after find()! ID:', watermelonRecordId);
+                throw new Error(`WatermelonDB record ${watermelonRecordId} not found`);
+              }
+
+              console.log('🔍 Photos array:', photos);
+              console.log('🔍 LocalPhotoUris array:', localPhotoUris);
+              console.log('🔍 Combined photos:', [...photos, ...localPhotoUris]);
+              console.log('🔍 Stringified photos:', JSON.stringify([...photos, ...localPhotoUris]));
+              console.log('🔍 Severity value:', severity, 'parsed:', parseInt(severity));
+              console.log('🔍 Notes value:', notes, 'coalesced:', notes || '');
+
+              // .update() creates its own write transaction - don't nest!
+              console.log('🔄 About to call update() (it handles its own transaction)');
               await (entry as any).update((e: any) => {
+                console.log('🔄 Inside update callback, e:', e);
+                console.log('🔄 e.type:', (e as any).type);
                 e.symptoms = symptoms;
                 e.severity = parseInt(severity);
                 e.notes = notes || '';
                 e.photos = JSON.stringify([...photos, ...localPhotoUris]);
                 // Preserve original timestamp (Option A)
                 // Don't update e.timestamp
+                console.log('✅ Fields updated successfully');
               });
-            });
-            console.log("✅ Entry also updated in WatermelonDB");
+              console.log("✅ Entry also updated in WatermelonDB");
+            } else {
+              console.warn("⚠️ watermelonRecordId is null - WatermelonDB NOT updated!");
+            }
           } catch (error) {
             console.error("❌ Failed to update online:", error);
             throw error;
           }
         } else {
-          // OFFLINE EDIT: Update WatermelonDB only
-          const healthCollection = database.get('health_entries');
-          const entry = await healthCollection.find(editEntryId);
-          await database.write(async () => {
+          // OFFLINE EDIT: Update WatermelonDB only (use stored WatermelonDB ID)
+          console.log('📴 OFFLINE EDIT MODE - watermelonRecordId:', watermelonRecordId);
+          if (watermelonRecordId) {
+            const healthCollection = database.get('health_entries');
+
+            console.log('🔍 [OFFLINE] Finding entry with ID:', watermelonRecordId);
+            const entry = await healthCollection.find(watermelonRecordId);
+
+            console.log('🔍 [OFFLINE] Entry after find():', entry);
+            console.log('🔍 [OFFLINE] Entry is null?', entry === null);
+            console.log('🔍 [OFFLINE] Entry is undefined?', entry === undefined);
+
+            if (!entry) {
+              console.error('❌ [OFFLINE] Entry not found! ID:', watermelonRecordId);
+              throw new Error(`WatermelonDB record ${watermelonRecordId} not found (offline mode)`);
+            }
+
+            console.log('🔍 [OFFLINE] Photos array:', photos);
+            console.log('🔍 [OFFLINE] LocalPhotoUris array:', localPhotoUris);
+
+            // .update() creates its own write transaction - don't nest!
+            console.log('🔄 [OFFLINE] About to call update() (it handles its own transaction)');
             await (entry as any).update((e: any) => {
+              console.log('🔄 [OFFLINE] Inside update callback');
               e.symptoms = symptoms;
               e.severity = parseInt(severity);
               e.notes = notes || '';
@@ -440,9 +529,13 @@ export default function AddHealthEntry() {
               e.isSynced = false; // Mark for re-sync
               // Preserve original timestamp (Option A)
               // Don't update e.timestamp
+              console.log('✅ [OFFLINE] Fields updated successfully');
             });
-          });
-          console.log("📴 Entry updated offline, will sync when online");
+            console.log("📴 Entry updated offline, will sync when online");
+          } else {
+            console.error("❌ watermelonRecordId is null - cannot update offline!");
+            throw new Error("Cannot update: WatermelonDB record ID not found");
+          }
         }
 
         // Navigate back to detail screen
