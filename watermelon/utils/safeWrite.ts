@@ -1,6 +1,4 @@
 import { Database } from "@nozbe/watermelondb";
-
-
 /**
  * Usage:
   import { safeWrite } from '@/watermelon/utils/safeWrite';
