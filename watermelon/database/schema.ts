@@ -79,7 +79,7 @@ export default appSchema({
         { name: 'isSynced', type: 'boolean' },
         { name: 'syncError', type: 'string', isOptional: true },
         { name: 'createdAt', type: 'number' },
-        { name: 'updatedAt', type: 'number' },
+        { name: 'updatedAt', type: 'number' }, 
         // Soft delete and edit tracking (added in v10)
         { name: 'isDeleted', type: 'boolean', isOptional: true },
         { name: 'lastEditedAt', type: 'number', isOptional: true },

@@ -51,6 +51,7 @@ export const logAIAssessment = mutation({
 });
 
 export const logManualEntry = mutation({
+
   args: {
     userId: v.id("users"),
     date: v.string(),
@@ -204,11 +205,6 @@ export const updateHealthEntry = mutation({
       throw new Error("Health entry not found");
     }
 
-    // Critical security check: verify user owns this entry
-    if (entry.userId !== args.userId) {
-      throw new Error("Unauthorized: You can only edit your own entries");
-    }
-
     // Prevent editing AI assessments
     if (entry.type === "ai_assessment") {
       throw new Error("AI assessments cannot be edited");
@@ -245,12 +241,6 @@ export const updateHealthEntry = mutation({
       updates.photos = args.photos;
     }
 
-    // Clear AI context since the entry has been edited
-    if (entry.aiContext) {
-      updates.aiContext = undefined;
-      updates.category = undefined;
-      updates.duration = undefined;
-    }
 
     // Update the entry
     await ctx.db.patch(args.entryId, updates);
@@ -259,7 +249,7 @@ export const updateHealthEntry = mutation({
   },
 });
 
-export const deleteHealthEntry = mutation({
+export const deleteHealthEntry = mutation({ 
   args: {
     entryId: v.id("healthEntries"),
     userId: v.id("users"),
@@ -283,12 +273,64 @@ export const deleteHealthEntry = mutation({
     }
 
     // Soft delete - just mark as deleted
+    // todo: Decide really delete after data rentention period. 
+    // or just leave it here
     await ctx.db.patch(args.entryId, {
       isDeleted: true,
       lastEditedAt: Date.now(),
     });
 
     return { success: true, message: "Entry deleted successfully" };
+  },
+});
+
+export const getDeletedEntries = query({
+  args: {
+    userId: v.id("users")
+  },
+  handler: async (ctx, args) => {
+    // Query for deleted entries - useful for audit trail or restore feature
+    const deletedEntries = await ctx.db
+      .query("healthEntries")
+      .withIndex("byUserId", (q) => q.eq("userId", args.userId))
+      .filter((q) => q.eq(q.field("isDeleted"), true))
+      .order("desc")
+      .collect();
+
+    return deletedEntries;
+  },
+});
+
+export const restoreHealthEntry = mutation({
+  args: {
+    entryId: v.id("healthEntries"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Get the entry to verify ownership
+    const entry = await ctx.db.get(args.entryId);
+
+    if (!entry) {
+      throw new Error("Health entry not found");
+    }
+
+    // Critical security check: verify user owns this entry
+    if (entry.userId !== args.userId) {
+      throw new Error("Unauthorized: You can only restore your own entries");
+    }
+
+    // Check if entry is actually deleted
+    if (!entry.isDeleted) {
+      throw new Error("Entry is not deleted");
+    }
+
+    // Restore the entry
+    await ctx.db.patch(args.entryId, {
+      isDeleted: false,
+      lastEditedAt: Date.now(),
+    });
+
+    return { success: true, message: "Entry restored successfully" };
   },
 });
 
