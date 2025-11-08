@@ -199,7 +199,14 @@ export default function AddHealthEntry() {
   // Load entry data for edit mode when component mounts
   useEffect(() => {
     if (mode === 'edit' && editEntryId) {
-      loadEntryForEdit(editEntryId);
+      // IIFE (Immediately Invoked Function Expression) to handle async/await in useEffect
+      (async () => {
+        try {
+          await loadEntryForEdit(editEntryId);
+        } catch (error) {
+          console.error('Failed to load entry in effect:', error);
+        }
+      })();
     }
   }, [mode, editEntryId, loadEntryForEdit]);
 

@@ -323,25 +323,81 @@ const { refreshSession, isRefreshing } = useSessionRefresh();
 
 ### WatermelonDB Patterns
 
+**IMPORTANT**: All database modifications (create, update, delete) MUST be done within a writer context using `database.write()` or the `safeWrite` wrapper.
+
+#### Using safeWrite Wrapper (Recommended)
+
+The `safeWrite` utility (learned from Papillon project) provides timeout protection for all WatermelonDB write operations:
+
+```typescript
+import { safeWrite } from "@/watermelon/utils/safeWrite";
+import { database } from "@/watermelon/database";
+
+// Creating records with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    await database.collections.get("health_entries").create((entry) => {
+      entry.userId = userId;
+      entry.symptoms = "Headache";
+    });
+  },
+  10000,  // 10 second timeout
+  'createHealthEntry'  // Operation name for debugging
+);
+
+// Updating records with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    const entry = await healthCollection.find(entryId);
+    await entry.update((e) => {
+      e.symptoms = "Updated symptoms";
+      e.severity = 7;
+    });
+  },
+  10000,
+  'updateHealthEntry'
+);
+
+// Batch operations with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    const entry1 = await collection.create((e) => { /* ... */ });
+    const entry2 = await collection.create((e) => { /* ... */ });
+  },
+  10000,
+  'batchCreateEntries'
+);
+```
+
+#### Query Patterns (No Writer Needed)
+
 ```typescript
 import { database } from "@/watermelon/database";
 import { Q } from "@nozbe/watermelondb";
 
-// Query local data
+// Query local data (read-only, no writer needed)
 const healthEntries = await database.collections
   .get("health_entries")
   .query(Q.where("user_id", userId))
   .fetch();
 
-// Create with offline support
-await database.write(async () => {
-  await database.collections.get("health_entries").create((entry) => {
-    entry.userId = userId;
-    entry.symptoms = "Headache";
-    // Auto-syncs when online
-  });
-});
+// Find by ID (read-only, no writer needed)
+const entry = await database.collections
+  .get("health_entries")
+  .find(entryId);
 ```
+
+#### Why Use safeWrite?
+
+1. **Timeout Protection**: Prevents database operations from hanging indefinitely (10s default)
+2. **Error Handling**: Centralized error logging with operation names
+3. **Debugging**: Named operations make it easier to track which operation failed
+4. **Consistency**: Ensures all write operations follow the same pattern
+
+**Reference**: `watermelon/utils/safeWrite.ts` (pattern learned from Papillon project)
 
 ### Custom UI Components
 

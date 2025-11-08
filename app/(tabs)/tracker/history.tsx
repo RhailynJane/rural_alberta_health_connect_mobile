@@ -83,7 +83,7 @@ export default function History() {
       try {
         // ALWAYS load from WatermelonDB first for instant display
         // Then online data will replace it when loaded
-        
+
         // Determine user id
         let uid: string | undefined = currentUser?._id as any;
         if (!uid) {
@@ -93,7 +93,7 @@ export default function History() {
               const parsed = JSON.parse(raw);
               uid = parsed?._id || parsed?.id || uid;
             }
-          } catch {}
+          } catch { }
         }
         if (!uid) {
           // Try Watermelon users table
@@ -105,7 +105,7 @@ export default function History() {
               const r = (first as any)._raw || {};
               uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
             }
-          } catch {}
+          } catch { }
         }
         if (!uid) {
           console.log('⚠️ [OFFLINE HISTORY] No user id available');
@@ -122,7 +122,7 @@ export default function History() {
           .fetch();
 
         console.log(`🔍 [LOCAL HISTORY] Fetched ${entries.length} entries from WatermelonDB for user ${uid}`);
-        
+
         // Map WatermelonDB entries to match Convex format
         const mapped = entries.map((entry: any) => {
           return {
@@ -137,7 +137,7 @@ export default function History() {
             convexId: entry.convexId, // For de-duplication
           };
         });
-        
+
         console.log(`✅ [LOCAL HISTORY] Loaded ${mapped.length} entries instantly from local cache`);
         setOfflineEntries(mapped);
       } catch (error) {
@@ -304,11 +304,11 @@ export default function History() {
   const healthScore =
     searchFilteredEntries.length > 0
       ? (
-          searchFilteredEntries.reduce(
-            (sum, entry) => sum + (10 - entry.severity),
-            0
-          ) / searchFilteredEntries.length
-        ).toFixed(1)
+        searchFilteredEntries.reduce(
+          (sum, entry) => sum + (10 - entry.severity),
+          0
+        ) / searchFilteredEntries.length
+      ).toFixed(1)
       : "0.0";
 
   // Debug logging
@@ -420,7 +420,7 @@ export default function History() {
                     style={[
                       styles.quickSelectButton,
                       selectedRange === "today" &&
-                        styles.quickSelectButtonActive,
+                      styles.quickSelectButtonActive,
                     ]}
                     onPress={() => handleRangeSelection("today")}
                   >
@@ -428,7 +428,7 @@ export default function History() {
                       style={[
                         styles.quickSelectText,
                         selectedRange === "today" &&
-                          styles.quickSelectTextActive,
+                        styles.quickSelectTextActive,
                       ]}
                     >
                       Today
@@ -591,9 +591,9 @@ export default function History() {
                                 backgroundColor: "#E8F5E8",
                               },
                               entry.severity > 3 &&
-                                entry.severity <= 7 && {
-                                  backgroundColor: "#FFF3CD",
-                                },
+                              entry.severity <= 7 && {
+                                backgroundColor: "#FFF3CD",
+                              },
                               entry.severity > 7 && {
                                 backgroundColor: "#F8D7DA",
                               },
@@ -616,9 +616,9 @@ export default function History() {
                                 { fontFamily: FONTS.BarlowSemiCondensed },
                                 entry.severity <= 3 && { color: "#28A745" },
                                 entry.severity > 3 &&
-                                  entry.severity <= 7 && {
-                                    color: "#856404",
-                                  },
+                                entry.severity <= 7 && {
+                                  color: "#856404",
+                                },
                                 entry.severity > 7 && {
                                   color: "#721C24",
                                 },
@@ -671,8 +671,8 @@ export default function History() {
                   <View style={styles.noEntries}>
                     <Ionicons name="document" size={40} color="#CCC" />
                     <Text style={styles.noEntriesText}>
-                      {searchQuery.trim() 
-                        ? "No entries match your search" 
+                      {searchQuery.trim()
+                        ? "No entries match your search"
                         : "No entries found for selected date range"}
                     </Text>
                   </View>
