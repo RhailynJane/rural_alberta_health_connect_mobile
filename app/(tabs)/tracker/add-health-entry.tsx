@@ -5,7 +5,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -21,18 +21,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
+import { safeWrite } from "../../../watermelon/utils/safeWrite";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
-
-type Params = {
-  entryId?: string;
-  convexId?: string;
-  mode?: "add" | "edit"
-}
 
 export default function AddHealthEntry() {
   const database = useDatabase();
@@ -44,7 +39,7 @@ export default function AddHealthEntry() {
   const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
 
-  // Detect edit mode from route params
+  // Detect edit mode from route/search params
   const { entryId, convexId, mode } = useLocalSearchParams<{ entryId?: string; convexId?: string, mode: string }>();
   const editEntryId = entryId;
   const editConvexId = convexId;
@@ -112,14 +107,11 @@ export default function AddHealthEntry() {
     return `${hours}:${minutes} ${ampm}`;
   };
 
-  // Load entry data for edit mode
-  useEffect(() => {
-    if (mode === 'edit' && editEntryId) {
-      loadEntryForEdit(editEntryId);
-    }
-  }, [mode, editEntryId]);
-
-  const loadEntryForEdit = async (id: string) => {
+  /**
+   * Load entry data for edit mode - fetches from WatermelonDB to pre-populate form
+   * @param id - WatermelonDB ID or Convex ID of the entry to edit
+   */
+  const loadEntryForEdit = useCallback(async (id: string) => {
     setLoadingEntry(true);
     try {
       const healthCollection = database.get('health_entries');
@@ -202,7 +194,14 @@ export default function AddHealthEntry() {
     } finally {
       setLoadingEntry(false);
     }
-  };
+  }, [database]);
+
+  // Load entry data for edit mode when component mounts
+  useEffect(() => {
+    if (mode === 'edit' && editEntryId) {
+      loadEntryForEdit(editEntryId);
+    }
+  }, [mode, editEntryId, loadEntryForEdit]);
 
   // Handle image picker
   const pickImage = async () => {
@@ -380,6 +379,7 @@ export default function AddHealthEntry() {
 
   // Save health entry and navigate back
   const handleSaveEntry = async () => {
+    // getting conex internal Id may be underfine
     const userId = currentUser?._id;
 
     // Allow offline saves without authentication check
@@ -482,17 +482,25 @@ export default function AddHealthEntry() {
               console.log('🔍 Severity value:', severity, 'parsed:', parseInt(severity));
               console.log('🔍 Notes value:', notes, 'coalesced:', notes || '');
 
-              await (entry as any).update((e: any) => {
-                console.log('🔄 Inside update callback, e:', e);
-                console.log('🔄 e.type:', (e as any).type);
-                e.symptoms = symptoms;
-                e.severity = parseInt(severity);
-                e.notes = notes || '';
-                e.photos = JSON.stringify([...photos, ...localPhotoUris]);
-                // Preserve original timestamp (Option A)
-                // Don't update e.timestamp
-                console.log('✅ Fields updated successfully');
-              });
+              // Use safeWrite wrapper for proper timeout handling
+              await safeWrite(
+                database,
+                async () => {
+                  await (entry as any).update((e: any) => {
+                    console.log('🔄 Inside update callback, e:', e);
+                    console.log('🔄 e.type:', (e as any).type);
+                    e.symptoms = symptoms;
+                    e.severity = parseInt(severity);
+                    e.notes = notes || '';
+                    e.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                    // Preserve original timestamp (Option A)
+                    // Don't update e.timestamp
+                    console.log('✅ Fields updated successfully');
+                  });
+                },
+                10000,
+                'updateHealthEntryOnlineEdit'
+              );
               console.log("✅ Entry also updated in WatermelonDB");
             } else {
               console.warn("⚠️ watermelonRecordId is null - WatermelonDB NOT updated!");
@@ -522,19 +530,26 @@ export default function AddHealthEntry() {
             console.log('🔍 [OFFLINE] Photos array:', photos);
             console.log('🔍 [OFFLINE] LocalPhotoUris array:', localPhotoUris);
 
-            // .update() creates its own write transaction - don't nest!
-            console.log('🔄 [OFFLINE] About to call update() (it handles its own transaction)');
-            await (entry as any).update((e: any) => {
-              console.log('🔄 [OFFLINE] Inside update callback');
-              e.symptoms = symptoms;
-              e.severity = parseInt(severity);
-              e.notes = notes || '';
-              e.photos = JSON.stringify([...photos, ...localPhotoUris]);
-              e.isSynced = false; // Mark for re-sync
-              // Preserve original timestamp (Option A)
-              // Don't update e.timestamp
-              console.log('✅ [OFFLINE] Fields updated successfully');
-            });
+            // Use safeWrite wrapper for proper timeout handling
+            console.log('🔄 [OFFLINE] About to call safeWrite wrapper');
+            await safeWrite(
+              database,
+              async () => {
+                await (entry as any).update((e: any) => {
+                  console.log('🔄 [OFFLINE] Inside update callback');
+                  e.symptoms = symptoms;
+                  e.severity = parseInt(severity);
+                  e.notes = notes || '';
+                  e.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                  e.isSynced = false; // Mark for re-sync
+                  // Preserve original timestamp (Option A)
+                  // Don't update e.timestamp
+                  console.log('✅ [OFFLINE] Fields updated successfully');
+                });
+              },
+              10000,
+              'updateHealthEntryOfflineEdit'
+            );
             console.log("📴 Entry updated offline, will sync when online");
           } else {
             console.error("❌ watermelonRecordId is null - cannot update offline!");
@@ -564,22 +579,27 @@ export default function AddHealthEntry() {
 
           // Also save to WatermelonDB for offline access
           const healthEntriesCollection = database.collections.get('health_entries');
-          await database.write(async () => {
-            await healthEntriesCollection.create((entry: any) => {
-              entry.userId = userId;
-              entry.date = dateString;
-              entry.timestamp = timestamp;
-              entry.symptoms = symptoms;
-              entry.severity = parseInt(severity);
-              entry.notes = notes || '';
-              entry.photos = JSON.stringify(photos);
-              entry.type = 'manual_entry';
-              entry.isSynced = true; // Already synced
-              entry.createdBy = currentUser?.firstName || 'User';
-              // tie local to server to avoid future hydration duplicates
-              entry.convexId = newId;
-            });
-          });
+          await safeWrite(
+            database,
+            async () => {
+              await healthEntriesCollection.create((entry: any) => {
+                entry.userId = userId;
+                entry.date = dateString;
+                entry.timestamp = timestamp;
+                entry.symptoms = symptoms;
+                entry.severity = parseInt(severity);
+                entry.notes = notes || '';
+                entry.photos = JSON.stringify(photos);
+                entry.type = 'manual_entry';
+                entry.isSynced = true; // Already synced
+                entry.createdBy = currentUser?.firstName || 'User';
+                // tie local to server to avoid future hydration duplicates
+                entry.convexId = newId;
+              });
+            },
+            10000,
+            'createHealthEntryOnlineAdd'
+          );
           console.log("✅ Entry also saved to WatermelonDB for offline access");
         } catch (error) {
           console.error("❌ Failed to save online:", error);
@@ -589,20 +609,25 @@ export default function AddHealthEntry() {
         // OFFLINE with valid userId: Save to WatermelonDB for later sync
         const healthEntriesCollection = database.collections.get('health_entries');
 
-        await database.write(async () => {
-          await healthEntriesCollection.create((entry: any) => {
-            entry.userId = userId;
-            entry.date = dateString;
-            entry.timestamp = timestamp;
-            entry.symptoms = symptoms;
-            entry.severity = parseInt(severity);
-            entry.notes = notes || '';
-            entry.photos = JSON.stringify([...photos, ...localPhotoUris]);
-            entry.type = 'manual_entry';
-            entry.isSynced = false; // Mark for sync when online
-            entry.createdBy = currentUser?.firstName || 'User';
-          });
-        });
+        await safeWrite(
+          database,
+          async () => {
+            await healthEntriesCollection.create((entry: any) => {
+              entry.userId = userId;
+              entry.date = dateString;
+              entry.timestamp = timestamp;
+              entry.symptoms = symptoms;
+              entry.severity = parseInt(severity);
+              entry.notes = notes || '';
+              entry.photos = JSON.stringify([...photos, ...localPhotoUris]);
+              entry.type = 'manual_entry';
+              entry.isSynced = false; // Mark for sync when online
+              entry.createdBy = currentUser?.firstName || 'User';
+            });
+          },
+          10000,
+          'createHealthEntryOfflineAdd'
+        );
 
         console.log("📴 Entry saved offline, will sync when online");
       } else {
