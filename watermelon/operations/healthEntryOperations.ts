@@ -1,6 +1,7 @@
 import { Q } from "@nozbe/watermelondb";
 import { database } from "../database";
 import HealthEntry from "../models/HealthEntry";
+import { safeWrite } from "../utils/safeWrite";
 
 /**
  * Local operations for health entries
@@ -12,6 +13,63 @@ import HealthEntry from "../models/HealthEntry";
  * - lastEditedAt: Our custom field for tracking user edits (we control this)
  * - editCount: Our custom field for version tracking
  */
+
+/**
+ * Security helper: Find health entry or throw
+ */
+async function findHealthEntry(entryId: string): Promise<HealthEntry> {
+  return await database
+    .get<HealthEntry>("health_entries")
+    .find(entryId)
+    .catch(() => {
+      throw new Error("Health entry not found");
+    });
+}
+
+/**
+ * Security helper: Verify user owns the entry
+ */
+function verifyOwnership(entry: HealthEntry, userId: string): void {
+  if (entry.userId !== userId) {
+    throw new Error("Unauthorized: You can only access your own entries");
+  }
+}
+
+/**
+ * Security helper: Verify entry is not an AI assessment
+ */
+function verifyNotAIAssessment(entry: HealthEntry): void {
+  if (entry.type === "ai_assessment") {
+    throw new Error("AI assessments cannot be modified");
+  }
+}
+
+/**
+ * Security helper: Verify entry is not deleted
+ */
+function verifyNotDeleted(entry: HealthEntry): void {
+  if (entry.isDeleted) {
+    throw new Error("Cannot modify deleted entry");
+  }
+}
+
+/**
+ * Security helper: Verify entry is deleted
+ */
+function verifyIsDeleted(entry: HealthEntry): void {
+  if (!entry.isDeleted) {
+    throw new Error("Entry is not deleted");
+  }
+}
+
+/**
+ * Validation helper: Verify severity is in valid range
+ */
+function validateSeverity(severity: number): void {
+  if (severity < 0 || severity > 10) {
+    throw new Error("Severity must be between 0 and 10");
+  }
+}
 
 interface UpdateHealthEntryParams {
   entryId: string;
@@ -33,32 +91,18 @@ export async function updateHealthEntryLocal({
   userId,
   updates,
 }: UpdateHealthEntryParams): Promise<HealthEntry> {
-  return await database.write(async () => {
-    const entry = await database
-      .get<HealthEntry>("health_entries")
-      .find(entryId)
-      .catch(() => {
-        throw new Error("Healthe entry not found");
-      });
-
-    // Security checks
-    if (entry.userId !== userId) {
-      throw new Error("Unauthorized: You can only edit your own entries");
-    }
-
-    if (entry.type === "ai_assessment") {
-      throw new Error("AI assessments cannot be edited");
-    }
-
-    if (entry.isDeleted) {
-      throw new Error("Cannot edit deleted entry");
-    }
+  return await safeWrite(
+    database,
+    async () => {
+    // Find entry and run all security checks
+    const entry = await findHealthEntry(entryId);
+    verifyOwnership(entry, userId);
+    verifyNotAIAssessment(entry);
+    verifyNotDeleted(entry);
 
     // Validate severity if provided
     if (updates.severity !== undefined) {
-      if (updates.severity < 0 || updates.severity > 10) {
-        throw new Error("Severity must be between 0 and 10");
-      }
+      validateSeverity(updates.severity);
     }
 
     // Update the entry
@@ -99,7 +143,10 @@ export async function updateHealthEntryLocal({
     });
 
     return updated;
-  });
+    },
+    10000,
+    'updateHealthEntry'
+  );
 }
 
 /**
@@ -110,26 +157,14 @@ export async function deleteHealthEntryLocal(
   entryId: string,
   userId: string
 ): Promise<HealthEntry> {
-  return await database.write(async () => {
-    const entry = await database
-      .get<HealthEntry>("health_entries")
-      .find(entryId)
-      .catch(() => {
-        throw new Error("Healthe entry not found");
-      });
-
-    // Security checks
-    if (entry.userId !== userId) {
-      throw new Error("Unauthorized: You can only delete your own entries");
-    }
-
-    if (entry.type === "ai_assessment") {
-      throw new Error("AI assessments cannot be deleted");
-    }
-
-    if (entry.isDeleted) {
-      throw new Error("Entry is already deleted");
-    }
+  return await safeWrite(
+    database,
+    async () => {
+    // Find entry and run all security checks
+    const entry = await findHealthEntry(entryId);
+    verifyOwnership(entry, userId);
+    verifyNotAIAssessment(entry);
+    verifyNotDeleted(entry);
 
     // Soft delete - mark as deleted
     const deleted = await entry.update((record) => {
@@ -144,7 +179,10 @@ export async function deleteHealthEntryLocal(
     });
 
     return deleted;
-  });
+    },
+    10000,
+    'deleteHealthEntry'
+  );
 }
 
 /**
@@ -154,22 +192,13 @@ export async function restoreHealthEntryLocal(
   entryId: string,
   userId: string
 ): Promise<HealthEntry> {
-  return await database.write(async () => {
-    const entry = await database
-      .get<HealthEntry>("health_entries")
-      .find(entryId)
-      .catch(() => {
-        throw new Error("Healthe entry not found");
-      });
-
-    // Security check
-    if (entry.userId !== userId) {
-      throw new Error("Unauthorized: You can only restore your own entries");
-    }
-
-    if (!entry.isDeleted) {
-      throw new Error("Entry is not deleted");
-    }
+  return await safeWrite(
+    database,
+    async () => {
+    // Find entry and run all security checks
+    const entry = await findHealthEntry(entryId);
+    verifyOwnership(entry, userId);
+    verifyIsDeleted(entry);
 
     // Restore the entry
     const restored = await entry.update((record) => {
@@ -182,7 +211,10 @@ export async function restoreHealthEntryLocal(
     });
 
     return restored;
-  });
+    },
+    10000,
+    'restoreHealthEntry'
+  );
 }
 
 /**
@@ -275,13 +307,10 @@ export async function markHealthEntryAsSynced(
   entryId: string,
   convexId?: string
 ): Promise<void> {
-  await database.write(async () => {
-    const entry = await database
-      .get<HealthEntry>("health_entries")
-      .find(entryId)
-      .catch(() => {
-        throw new Error("Healthe entry not found");
-      });
+  await safeWrite(
+    database,
+    async () => {
+    const entry = await findHealthEntry(entryId);
 
     await entry.update((record) => {
       record.isSynced = true;
@@ -290,7 +319,10 @@ export async function markHealthEntryAsSynced(
         record.convexId = convexId;
       }
     });
-  });
+    },
+    10000,
+    'markHealthEntryAsSynced'
+  );
 }
 
 /**
@@ -300,17 +332,17 @@ export async function markHealthEntrySyncError(
   entryId: string,
   error: string
 ): Promise<void> {
-  await database.write(async () => {
-    const entry = await database
-      .get<HealthEntry>("health_entries")
-      .find(entryId)
-      .catch(() => {
-        throw new Error("Healthe entry not found");
-      });
+  await safeWrite(
+    database,
+    async () => {
+    const entry = await findHealthEntry(entryId);
 
     await entry.update((record) => {
       record.isSynced = false;
       record.syncError = error;
     });
-  });
+    },
+    10000,
+    'markHealthEntrySyncError'
+  );
 }

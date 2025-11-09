@@ -24,6 +24,7 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import HealthEntry from "@/watermelon/models/HealthEntry";
 
 export default function History() {
   const database = useWatermelonDatabase();
@@ -113,7 +114,7 @@ export default function History() {
           return;
         }
 
-        const collection = database.get("health_entries");
+        const collection = database.get<HealthEntry>("health_entries");
         const entries = await collection
           .query(
             Q.where('userId', uid),

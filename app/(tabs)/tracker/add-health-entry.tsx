@@ -29,6 +29,15 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
+function logErrorDetails(context: string, error: any, extra: Record<string, any> = {}) {
+  console.group(`❌ [${context}]`);
+  console.error('Message:', error?.message);
+  console.error('Name:', error?.name);
+  console.error('Stack:', error?.stack);
+  console.log('Extra context:', JSON.stringify(extra, null, 2));
+  console.groupEnd();
+}
+
 export default function AddHealthEntry() {
   const database = useDatabase();
   const { isOnline } = useNetworkStatus();
@@ -40,6 +49,7 @@ export default function AddHealthEntry() {
   const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
 
   // Detect edit mode from route/search params
+  // todo: here's two Id: entryId, convexId 
   const { entryId, convexId, mode } = useLocalSearchParams<{ entryId?: string; convexId?: string, mode: string }>();
   const editEntryId = entryId;
   const editConvexId = convexId;
@@ -78,7 +88,7 @@ export default function AddHealthEntry() {
 
   // Edit mode state - preserve original timestamp (Option A)
   const [originalTimestamp, setOriginalTimestamp] = useState<number | null>(null);
-  const [loadingEntry, setLoadingEntry] = useState(false);
+  const [isLoadingEntry, setLoadingEntry] = useState(false);
   const [watermelonRecordId, setWatermelonRecordId] = useState<string | null>(null);
 
   // Severity options (1-10)
@@ -467,6 +477,7 @@ export default function AddHealthEntry() {
             // Update WatermelonDB too (use stored WatermelonDB ID, not Convex ID)
             console.log('🔄 About to update WatermelonDB, watermelonRecordId:', watermelonRecordId);
             if (watermelonRecordId) {
+              // if using writer here.
               const healthCollection = database.get('health_entries');
 
               console.log('🔍 Finding entry with ID:', watermelonRecordId);
@@ -489,17 +500,27 @@ export default function AddHealthEntry() {
               console.log('🔍 Severity value:', severity, 'parsed:', parseInt(severity));
               console.log('🔍 Notes value:', notes, 'coalesced:', notes || '');
 
+              if (!entry) {
+                console.error("❌ updateHealthEntryOnlineEdit: entry is undefined before update!");
+                return;
+              }
+
               // Use safeWrite wrapper for proper timeout handling
               await safeWrite(
                 database,
                 async () => {
+
+                  console.log("🔍 Inside safeWrite wrapper, entry type:", typeof entry);
+                  console.log("🔍 Entry prototype:", Object.getPrototypeOf(entry)?.constructor?.name);
+                  console.log("🔍 Entry keys:", Object.keys(entry || {}));
+
                   await (entry as any).update((e: any) => {
                     console.log('🔄 Inside update callback, e:', e);
-                    console.log('🔄 e.type:', (e as any).type);
+                    console.log('🔄 e.type:', (e as any).type); // e undefined
                     e.symptoms = symptoms;
                     e.severity = parseInt(severity);
                     e.notes = notes || '';
-                    e.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                    // e.photos = JSON.stringify([...photos, ...localPhotoUris]); disable for testing
                     // Preserve original timestamp (Option A)
                     // Don't update e.timestamp
                     console.log('✅ Fields updated successfully');
@@ -655,7 +676,19 @@ export default function AddHealthEntry() {
 
       setShowSuccessModal(true);
     } catch (error) {
+      logErrorDetails("handleSaveEntry", error, {
+        mode,
+        isOnline,
+        userId,
+        editEntryId,
+        editConvexId,
+        watermelonRecordId,
+        symptoms,
+        severity
+      });
+
       console.error("❌ Failed to save manual entry:", error);
+
       setAlertModalTitle("Error");
       setAlertModalMessage(isOnline
         ? "Failed to save entry online. Please try again."
