@@ -1,18 +1,19 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { safeWrite } from "../../../watermelon/utils/safeWrite";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
-import { FONTS } from "../../constants/constants";
+import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text into separate cards (mirrors assessment-results)
@@ -157,15 +158,31 @@ export default function LogDetails() {
   const convexIdParam = (params.convexId as string) || undefined;
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
+  const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
-  
+
+  // Metadata state to track both IDs explicitly
+  const [entryMetadata, setEntryMetadata] = useState<{
+    watermelonId: string | null;
+    convexId: string | null;
+  }>({ watermelonId: null, convexId: null });
+
   // Convert string to Convex ID type - but only if it looks like a Convex ID
   // Convex IDs start with 'k' or 'j' and are longer than 20 chars
   const isConvexId = entryId && entryId.length > 20 && /^[kj]/.test(entryId);
   const convexEntryId = isConvexId ? (entryId as Id<"healthEntries">) : undefined;
-  
+
+  // Convex hooks - use "skip" to prevent network calls when offline
+  // This prevents errors when offline while still following React hook rules
+  const currentUser = useQuery(api.users.getCurrentUser,
+    isOnline && isAuthenticated ? {} : "skip"
+  );
+
+  // Delete mutation - safe to call, but only use when online
+  const deleteHealthEntry = useMutation(api.healthEntries.deleteHealthEntry);
+
   // Online query - only run if we have a valid Convex ID
-  const entryOnline = useQuery(api.healthEntries.getEntryById, 
+  const entryOnline = useQuery(api.healthEntries.getEntryById,
     convexEntryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
 
@@ -233,6 +250,15 @@ export default function LogDetails() {
             notes: entryData.notes || "",
             photos: photos,
             aiContext: entryData.aiContext || null,
+            convexId: entryData.convexId || null,  // Include the convexId field
+            createdBy: entryData.createdBy || "User",
+            date: entryData.date || "",
+          });
+
+          // Set metadata for tracking both IDs
+          setEntryMetadata({
+            watermelonId: localEntry.id,
+            convexId: entryData.convexId || null
           });
         } catch (error) {
           console.error("Failed to load offline entry:", error);
@@ -242,6 +268,37 @@ export default function LogDetails() {
       loadOfflineEntry();
     }
   }, [isOnline, entryId, database, isConvexId, convexIdParam]);
+
+  // Populate metadata when online entry is loaded
+  useEffect(() => {
+    if (entryOnline && isOnline && isConvexId) {
+      // Find the corresponding WatermelonDB record
+      const findWatermelonId = async () => {
+        try {
+          const healthCollection = database.get('health_entries');
+          const results = await healthCollection
+            .query(Q.where('convexId', entryOnline._id))
+            .fetch();
+
+          if (results.length > 0) {
+            setEntryMetadata({
+              watermelonId: results[0].id,
+              convexId: entryOnline._id
+            });
+          } else {
+            // Online-only entry, no local copy
+            setEntryMetadata({
+              watermelonId: null,
+              convexId: entryOnline._id
+            });
+          }
+        } catch (error) {
+          console.error("Failed to find WatermelonDB record:", error);
+        }
+      };
+      findWatermelonId();
+    }
+  }, [entryOnline, isOnline, isConvexId, database]);
 
   // Use online entry if available, otherwise offline entry
   const entry = isOnline ? entryOnline : offlineEntry;
@@ -267,6 +324,99 @@ export default function LogDetails() {
       time: date.toLocaleTimeString(),
       full: date.toLocaleString()
     };
+  };
+
+  // Handle delete with confirmation
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Entry",
+      "Are you sure you want to delete this health entry? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { watermelonId, convexId } = entryMetadata;
+
+              if (!isOnline) {
+                // OFFLINE MODE: Only work with WatermelonDB
+                const idToUse = watermelonId || entry._id;
+
+                if (!idToUse) {
+                  Alert.alert("Error", "Unable to identify entry for deletion");
+                  return;
+                }
+
+                await safeWrite(
+                  database,
+                  async () => {
+                    const healthCollection = database.get('health_entries');
+                    const localEntry = await healthCollection.find(idToUse);
+
+                    // Soft delete and mark as unsynced
+                    await localEntry.update((e: any) => {
+                      e.isDeleted = true;
+                      e.isSynced = false;
+                      e.lastEditedAt = Date.now();
+                    });
+                  },
+                  10000,
+                  'deleteHealthEntryOffline'
+                );
+
+                console.log("📴 Entry marked for deletion (will sync when online)");
+                router.back();
+              } else {
+                // ONLINE MODE: Delete from both if synced
+                if (convexId && currentUser) {
+                  // Delete from Convex first
+                  try {
+                    await deleteHealthEntry({
+                      entryId: convexId as Id<"healthEntries">,
+                      userId: currentUser._id
+                    });
+                    console.log("✅ Deleted from Convex:", convexId);
+                  } catch (error) {
+                    console.error("Failed to delete from Convex:", error);
+                    Alert.alert("Error", "Failed to delete entry from server. Please try again.");
+                    return;
+                  }
+                }
+
+                // Then delete from WatermelonDB if exists
+                if (watermelonId) {
+                  await safeWrite(
+                    database,
+                    async () => {
+                      const healthCollection = database.get('health_entries');
+                      const localEntry = await healthCollection.find(watermelonId);
+                      await localEntry.destroyPermanently();
+                    },
+                    10000,
+                    'deleteHealthEntryOnline'
+                  );
+                  console.log("✅ Deleted from WatermelonDB:", watermelonId);
+                }
+
+                router.back();
+              }
+            } catch (error) {
+              console.error("❌ Delete failed:", error);
+              Alert.alert(
+                "Error",
+                "An error occurred while deleting the entry. Please try again.",
+                [{ text: "OK" }]
+              );
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (!entry) {
@@ -368,10 +518,7 @@ export default function LogDetails() {
 
                     <TouchableOpacity
                       style={styles.deleteButton}
-                      onPress={() => {
-                        console.log('Delete entry:', entry._id);
-                        // TODO: Show confirmation modal
-                      }}
+                      onPress={handleDelete}
                     >
                       <Ionicons name="trash-outline" size={18} color="#DC3545" />
                       <Text style={styles.deleteButtonText}>Delete</Text>
@@ -439,7 +586,7 @@ export default function LogDetails() {
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.photosContainer}>
-                      {entry.photos.map((photo, index) => (
+                      {entry.photos.map((photo: string, index: number) => (
                         <View key={index} style={styles.photoItem}>
                           <Image source={{ uri: photo }} style={styles.photo} />
                           <Text style={styles.photoLabel}>Photo {index + 1}</Text>
