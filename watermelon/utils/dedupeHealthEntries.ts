@@ -21,13 +21,25 @@ interface GroupPickMeta {
   candidates: HealthEntryLike[];
 }
 
-// Score an entry. Higher score wins. Deleted entries get heavily penalized.
-function scoreEntry(e: HealthEntryLike): number {
-  if (e.isDeleted) return -1; // Always worse than any non-deleted
-  const lastEdit = typeof e.lastEditedAt === 'number' ? e.lastEditedAt : (e.timestamp || 0);
-  const editCount = typeof e.editCount === 'number' ? e.editCount : 0;
-  // Weight: prioritize recency, then editCount for tie-breaking.
-  return lastEdit + editCount * 1000; // 1000ms * editCount gives ~1s advantage per edit
+// Score an entry using multi-level priority (matches edit loader logic).
+// Returns array: [isDeleted, lastEditedAt, editCount, timestamp]
+// Higher values at each priority level win.
+function scoreEntry(e: HealthEntryLike): number[] {
+  return [
+    e.isDeleted ? 0 : 1,              // Level 0: non-deleted always wins
+    e.lastEditedAt || 0,              // Level 1: most recently edited
+    e.editCount || 0,                 // Level 2: most edits
+    e.timestamp || 0                  // Level 3: newest creation time
+  ];
+}
+
+// Compare two score arrays (multi-level priority)
+function betterScore(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i]) continue;
+    return a[i] > b[i] ? 1 : -1;
+  }
+  return 0; // Equal
 }
 
 function buildFallbackKey(e: HealthEntryLike): string {
@@ -53,14 +65,34 @@ export function dedupeHealthEntries(entries: HealthEntryLike[]): HealthEntryLike
       continue;
     }
     let best: HealthEntryLike | undefined;
-    let bestScore = -Infinity;
+    let bestScore: number[] | undefined;
+    // Debug: log scores for each candidate in groups with duplicates
+    const debugScores = group.map(e => ({
+      id: e._id,
+      symptoms: e.symptoms?.substring(0, 30),
+      score: scoreEntry(e),
+      isDeleted: e.isDeleted,
+      lastEditedAt: e.lastEditedAt,
+      editCount: e.editCount,
+      timestamp: e.timestamp
+    }));
+    console.log('🔍 [DEDUPE] Scoring group for key:', key);
+    debugScores.forEach(d => {
+      console.log('  ', d.id, '→', d.score, '| symptoms:', d.symptoms, '| meta:', {
+        isDeleted: d.isDeleted,
+        lastEditedAt: d.lastEditedAt,
+        editCount: d.editCount,
+        timestamp: d.timestamp
+      });
+    });
     for (const e of group) {
       const s = scoreEntry(e);
-      if (s > bestScore) {
+      if (!bestScore || betterScore(s, bestScore) > 0) {
         bestScore = s;
         best = e;
       }
     }
+    console.log('  ✅ Selected:', best?._id, 'with score:', bestScore);
     if (best) result.push(best);
   }
   return result;
@@ -76,8 +108,15 @@ export function analyzeDuplicates(entries: HealthEntryLike[]): GroupPickMeta[] {
     (groups[key] = groups[key] || []).push(e);
   }
   return Object.entries(groups).filter(([, arr]) => arr.length > 1).map(([k, arr]) => {
-    let best: HealthEntryLike | undefined; let bestScore = -Infinity;
-    for (const e of arr) { const s = scoreEntry(e); if (s > bestScore) { bestScore = s; best = e; } }
+    let best: HealthEntryLike | undefined;
+    let bestScore: number[] | undefined;
+    for (const e of arr) {
+      const s = scoreEntry(e);
+      if (!bestScore || betterScore(s, bestScore) > 0) {
+        bestScore = s;
+        best = e;
+      }
+    }
     return { pickedId: best?._id, candidates: arr };
   });
 }

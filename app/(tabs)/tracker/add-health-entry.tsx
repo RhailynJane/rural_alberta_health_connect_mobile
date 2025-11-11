@@ -155,9 +155,13 @@ export default function AddHealthEntry() {
             }
             return a;
           };
+          console.log('🔍 [EDIT LOADER] Scoring', results.length, 'duplicates:');
+          results.forEach((r: any) => {
+            console.log('  ', r.id, '→', score(r), '| symptoms:', r.symptoms?.substring(0, 30));
+          });
           entry = results.reduce((best, cur) => better(best, cur));
           const ids = results.map((r: any) => r.id);
-          console.log('✅ Found entries by convexId:', ids, '→ chosen:', entry.id);
+          console.log('✅ Found entries by convexId:', ids, '→ chosen:', entry.id, 'with symptoms:', entry.symptoms?.substring(0, 30));
         } else {
           throw new Error(`No entry found with convexId: ${id}`);
         }
@@ -710,11 +714,12 @@ export default function AddHealthEntry() {
                     console.warn('⚠️ [WMDB DEBUG] (offline) Minimal fallback also failed. Attempting duplicate-record rescue strategy (non-fatal).', fallbackErr);
                     try {
                       const healthCollection = database.get('health_entries');
+                      const now = Date.now();
                       const duplicate = await healthCollection.create((newRec: any) => {
                         newRec.userId = (entry as any).userId;
                         newRec.convexId = (entry as any).convexId; // maintain link
                         newRec.date = (entry as any).date;
-                        newRec.timestamp = (entry as any).timestamp; // preserve original timestamp
+                        newRec.timestamp = now; // NEW timestamp to win tiebreaker
                         newRec.symptoms = symptoms;
                         newRec.severity = parseInt(severity);
                         newRec.notes = notes || '';
@@ -722,7 +727,7 @@ export default function AddHealthEntry() {
                         newRec.type = (entry as any).type || 'manual_entry';
                         newRec.isSynced = false; // Offline edit means not synced
                         newRec.createdBy = (entry as any).createdBy;
-                        if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = Date.now();
+                        if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = now;
                         if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
                         if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
                       });

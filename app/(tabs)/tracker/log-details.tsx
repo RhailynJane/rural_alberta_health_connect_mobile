@@ -3,7 +3,7 @@ import { Q } from "@nozbe/watermelondb";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -13,7 +13,8 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
-import { COLORS, FONTS } from "../../constants/constants";
+import StatusModal from "../../components/StatusModal";
+import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text into separate cards (mirrors assessment-results)
@@ -326,97 +327,107 @@ export default function LogDetails() {
     };
   };
 
-  // Handle delete with confirmation
-  const handleDelete = () => {
-    Alert.alert(
-      "Delete Entry",
-      "Are you sure you want to delete this health entry? This action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
+  // Modal state for delete confirmation & status
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  const confirmDelete = () => {
+    setDeleteError(null);
+    setDeleteSuccess(false);
+    setDeleteModalVisible(true);
+  };
+
+  const performDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const { watermelonId, convexId } = entryMetadata;
+
+      if (!isOnline) {
+        // OFFLINE MODE: Mark for deletion using rescue duplicate strategy
+        const idToUse = watermelonId || entry._id;
+        if (!idToUse) {
+          throw new Error('Unable to identify entry for deletion');
+        }
+        await safeWrite(
+          database,
+          async () => {
+            const healthCollection = database.get('health_entries');
+            const localEntry = await healthCollection.find(idToUse);
             try {
-              const { watermelonId, convexId } = entryMetadata;
-
-              if (!isOnline) {
-                // OFFLINE MODE: Only work with WatermelonDB
-                const idToUse = watermelonId || entry._id;
-
-                if (!idToUse) {
-                  Alert.alert("Error", "Unable to identify entry for deletion");
-                  return;
-                }
-
-                await safeWrite(
-                  database,
-                  async () => {
-                    const healthCollection = database.get('health_entries');
-                    const localEntry = await healthCollection.find(idToUse);
-
-                    // Soft delete and mark as unsynced
-                    await localEntry.update((e: any) => {
-                      e.isDeleted = true;
-                      e.isSynced = false;
-                      e.lastEditedAt = Date.now();
-                    });
-                  },
-                  10000,
-                  'deleteHealthEntryOffline'
-                );
-
-                console.log("📴 Entry marked for deletion (will sync when online)");
-                router.back();
-              } else {
-                // ONLINE MODE: Delete from both if synced
-                if (convexId && currentUser) {
-                  // Delete from Convex first
-                  try {
-                    await deleteHealthEntry({
-                      entryId: convexId as Id<"healthEntries">,
-                      userId: currentUser._id
-                    });
-                    console.log("✅ Deleted from Convex:", convexId);
-                  } catch (error) {
-                    console.error("Failed to delete from Convex:", error);
-                    Alert.alert("Error", "Failed to delete entry from server. Please try again.");
-                    return;
-                  }
-                }
-
-                // Then delete from WatermelonDB if exists
-                if (watermelonId) {
-                  await safeWrite(
-                    database,
-                    async () => {
-                      const healthCollection = database.get('health_entries');
-                      const localEntry = await healthCollection.find(watermelonId);
-                      await localEntry.destroyPermanently();
-                    },
-                    10000,
-                    'deleteHealthEntryOnline'
-                  );
-                  console.log("✅ Deleted from WatermelonDB:", watermelonId);
-                }
-
-                router.back();
-              }
-            } catch (error) {
-              console.error("❌ Delete failed:", error);
-              Alert.alert(
-                "Error",
-                "An error occurred while deleting the entry. Please try again.",
-                [{ text: "OK" }]
-              );
+              await localEntry.update((e: any) => {
+                e.isDeleted = true;
+                e.isSynced = false;
+                e.lastEditedAt = Date.now();
+              });
+              console.log('📴 Entry soft-deleted offline');
+            } catch (primaryErr) {
+              console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
+              const now = Date.now();
+              const deletedDuplicate = await healthCollection.create((newRec: any) => {
+                newRec.userId = (localEntry as any).userId;
+                newRec.convexId = (localEntry as any).convexId;
+                newRec.date = (localEntry as any).date;
+                newRec.timestamp = now;
+                newRec.symptoms = (localEntry as any).symptoms;
+                newRec.severity = (localEntry as any).severity;
+                newRec.notes = (localEntry as any).notes || '';
+                newRec.photos = (localEntry as any).photos;
+                newRec.type = (localEntry as any).type || 'manual_entry';
+                newRec.isSynced = false;
+                newRec.createdBy = (localEntry as any).createdBy;
+                newRec.lastEditedAt = now;
+                newRec.editCount = ((localEntry as any).editCount || 0) + 1;
+                newRec.isDeleted = true;
+              });
+              console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
             }
+          },
+          10000,
+          'deleteHealthEntryOffline'
+        );
+        console.log('📴 Entry marked for deletion (will sync when online)');
+      } else {
+        // ONLINE MODE
+        if (convexId && currentUser) {
+          try {
+            await deleteHealthEntry({
+              entryId: convexId as Id<'healthEntries'>,
+              userId: currentUser._id,
+            });
+            console.log('✅ Deleted from Convex:', convexId);
+          } catch (error) {
+            throw new Error('Failed to delete entry from server. Please try again.');
           }
         }
-      ]
-    );
+        if (watermelonId) {
+          await safeWrite(
+            database,
+            async () => {
+              const healthCollection = database.get('health_entries');
+              const localEntry = await healthCollection.find(watermelonId);
+              await localEntry.destroyPermanently();
+            },
+            10000,
+            'deleteHealthEntryOnline'
+          );
+          console.log('✅ Deleted from WatermelonDB:', watermelonId);
+        }
+      }
+      setDeleteSuccess(true);
+      setTimeout(() => {
+        setDeleteModalVisible(false);
+        router.back();
+      }, 600);
+    } catch (err: any) {
+      console.error('❌ Delete failed:', err);
+      setDeleteError(err?.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (!entry) {
@@ -506,7 +517,8 @@ export default function LogDetails() {
                           pathname: '/(tabs)/tracker/add-health-entry',
                           params: {
                             mode: 'edit',
-                            entryId: isOnline ? entryId : offlineEntry?._id,
+                            // Always pass Convex ID - edit loader will query by convexId field and score duplicates
+                            entryId: entry._id,
                             convexId: entry._id,
                           }
                         });
@@ -518,10 +530,11 @@ export default function LogDetails() {
 
                     <TouchableOpacity
                       style={styles.deleteButton}
-                      onPress={handleDelete}
+                      onPress={confirmDelete}
+                      disabled={deleting}
                     >
                       <Ionicons name="trash-outline" size={18} color="#DC3545" />
-                      <Text style={styles.deleteButtonText}>Delete</Text>
+                      <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -627,6 +640,60 @@ export default function LogDetails() {
         </View>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Delete Confirmation Modal - replaces Alert.alert */}
+      <StatusModal
+        visible={deleteModalVisible}
+        type={deleteError ? 'error' : deleteSuccess ? 'success' : 'confirm'}
+        title={
+          deleteError
+            ? 'Delete Failed'
+            : deleteSuccess
+            ? 'Entry Deleted'
+            : 'Delete Entry'
+        }
+        message={
+          deleteError
+            ? deleteError
+            : deleteSuccess
+            ? 'The entry has been deleted.'
+            : 'Are you sure you want to delete this health entry? This action cannot be undone.'
+        }
+        onClose={() => setDeleteModalVisible(false)}
+        buttons={
+          deleteError
+            ? [
+                {
+                  label: 'Close',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'primary',
+                },
+              ]
+            : deleteSuccess
+            ? [
+                {
+                  label: 'Continue',
+                  onPress: () => {
+                    setDeleteModalVisible(false);
+                    router.back();
+                  },
+                  variant: 'primary',
+                },
+              ]
+            : [
+                {
+                  label: 'Cancel',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'secondary',
+                },
+                {
+                  label: deleting ? 'Deleting…' : 'Delete',
+                  onPress: performDelete,
+                  variant: 'destructive',
+                },
+              ]
+        }
+      />
     </SafeAreaView>
   );
 }

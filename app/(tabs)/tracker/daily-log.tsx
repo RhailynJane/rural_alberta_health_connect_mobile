@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -264,41 +265,17 @@ export default function DailyLog() {
   }, [todayLocalDate, database, currentUser?._id]);
 
   // Prefer online data when available, but show local cache first for instant display
-  // De-duplication by convexId if present, else timestamp+type
+    // Use centralized deduplication utility for consistency
   const todaysEntries = useMemo(() => {
     const base = (isOnline && todaysEntriesOnline) ? todaysEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
-    const byKey: Record<string, any> = {};
-    for (const raw of base as any[]) {
-      if (!raw) continue;
-      const e = raw as any;
-      const key = e.convexId || `${e.timestamp || '0'}_${e.type || ''}`;
-      const existing = byKey[key];
-      if (!existing) {
-        byKey[key] = e;
-        continue;
-      }
-      // Choose better candidate among duplicates sharing same convexId/timestamp+type
-      const score = (x: any) => [
-        x.isDeleted ? 0 : 1, // prefer non-deleted
-        x.lastEditedAt || 0, // prefer most recently edited
-        x.editCount || 0,    // prefer higher edit count
-        x.timestamp || 0     // fallback to newer timestamp
-      ];
-      const better = (a: any, b: any) => {
-        const sa = score(a);
-        const sb = score(b);
-        for (let i = 0; i < sa.length; i++) {
-          if (sa[i] === sb[i]) continue;
-          return sa[i] > sb[i] ? a : b;
-        }
-        return a; // stable keep first if identical
-      };
-      byKey[key] = better(existing, e);
-    }
-    const deduped = Object.values(byKey);
+    
+      // Apply deduplication using the centralized utility
+      const deduped = dedupeHealthEntries(base as any);
+    
     // Sort entries by timestamp desc (most recent first)
     deduped.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+    
     return deduped;
   }, [isOnline, todaysEntriesOnline, offlineEntries]);
 
