@@ -46,3 +46,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# temp
+temp*rhaila.md
+temp*
+rhaila.md
+.temp*

@@ -10,6 +10,7 @@ import MedicalFacility from '../models/MedicalFacility';
 import Reminder from '../models/Reminder';
 import User from '../models/User';
 import UserProfile from '../models/UserProfile';
+import { ensureHealthEntriesCoreColumns, ensureHealthEntriesType, ensureHealthEntriesV10Columns, ensureUserProfilesSchema } from './selfHeal';
 
 // Log migration info
 console.log(`🔧 [WMDB] Schema version: v${schema.version}`);
@@ -114,6 +115,29 @@ export const database = new Database({
           }
         }
       }
+    }
+
+    // Run lightweight self-heal routines for schema drift / missing data defaults
+    try {
+      await ensureUserProfilesSchema(database);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] ensureUserProfilesSchema failed (continuing):', (e as any)?.message);
+    }
+    // Make sure v10 columns exist even if migrations did not run previously
+    try {
+      await ensureHealthEntriesCoreColumns(database);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] ensureHealthEntriesCoreColumns failed (continuing):', (e as any)?.message);
+    }
+    try {
+      await ensureHealthEntriesV10Columns(database);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] ensureHealthEntriesV10Columns failed (continuing):', (e as any)?.message);
+    }
+    try {
+      await ensureHealthEntriesType(database);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] ensureHealthEntriesType failed (continuing):', (e as any)?.message);
     }
 
     // CRITERIA FOR RESET:

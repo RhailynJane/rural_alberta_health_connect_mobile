@@ -248,23 +248,7 @@ export default function SymptomAssessment() {
     return foundSymptoms;
   };
 
-  const requestCameraPermission = async (): Promise<boolean> => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      setAlertModalTitle("Permission Required");
-      setAlertModalMessage("Camera permissions are needed to take photos.");
-      setAlertModalButtons([
-        {
-          label: "OK",
-          onPress: () => setAlertModalVisible(false),
-          variant: "primary",
-        },
-      ]);
-      setAlertModalVisible(true);
-      return false;
-    }
-    return true;
-  };
+  // Camera capture removed: no camera permission requests are needed now.
 
   const requestGalleryPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -284,36 +268,7 @@ export default function SymptomAssessment() {
     return true;
   };
 
-  const handleTakePhoto = async () => {
-    try {
-      // Check photo limit
-      if (uploadedPhotos.length >= 3) {
-        setErrorModalMessage("You can only add up to 3 photos for AI assessment.");
-        setErrorModalVisible(true);
-        return;
-      }
-
-      const hasPermission = await requestCameraPermission();
-      if (!hasPermission) return;
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newPhoto = result.assets[0].uri;
-        setUploadedPhotos((prev) => [...prev, newPhoto]);
-        console.log("Photo captured:", newPhoto);
-      }
-    } catch (error) {
-      console.error("Error taking photo:", error);
-      setErrorModalMessage("Failed to take photo. Please try again.");
-      setErrorModalVisible(true);
-    }
-  };
+  // Camera capture removed: only gallery upload is supported.
 
   const handleUploadPhoto = async () => {
     try {
@@ -716,30 +671,6 @@ export default function SymptomAssessment() {
                 )}
 
                 <View style={styles.photoButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.photoButton,
-                      uploadedPhotos.length >= 3 && styles.photoButtonDisabled,
-                    ]}
-                    onPress={handleTakePhoto}
-                    disabled={uploadedPhotos.length >= 3}
-                  >
-                    <Ionicons 
-                      name="camera" 
-                      size={20} 
-                      color={uploadedPhotos.length >= 3 ? "#999" : "#2A7DE1"} 
-                    />
-                    <Text
-                      style={[
-                        styles.photoButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        uploadedPhotos.length >= 3 && styles.photoButtonTextDisabled,
-                      ]}
-                    >
-                      Take Photo
-                    </Text>
-                  </TouchableOpacity>
-
                   <TouchableOpacity
                     style={[
                       styles.photoButton,

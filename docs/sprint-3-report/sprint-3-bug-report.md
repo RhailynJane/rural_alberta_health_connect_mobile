@@ -379,27 +379,152 @@
   - Better user engagement and feedback collection
   - Enhanced user experience with in-app documentation
 
-  ### Edit and Delete feature for Manual Entry (Yue)
+### ✅ Bug #10: Edit and Delete feature for Manual Entry
+- **Reporter:** Developer Testing
+- **Test Case:** Manual Entry CRUD operations
+- **Description:** Edit and Delete operations for health tracker entries experiencing issues in both offline and online modes
+- **Priority:** P2
+- **Status:** ✅ **FIXED**
 
+#### Delete Bug (Offline and Online)
+- **Problem:** Offline deletions were not propagating to the server after reconnecting
+  - Entries deleted while offline would reappear after coming back online
+  - Tombstone registry (fallback deletion tracking) was never processed during sync
+  - Server entries remained active even though locally marked as deleted
+  - Missing local record handling could crash during offline delete attempts
+
+- **Root Cause Analysis:**
+  1. **Sync Hook Gap:** `useSyncOnOnline` filtered out tombstoned entries from sync but never executed server-side deletion
+  2. **Missing Tombstone Processing:** No mechanism to process accumulated tombstones when reconnecting
+  3. **Edge Case Vulnerability:** Offline delete failed when local WatermelonDB record was missing but convexId existed
+  4. **Incomplete Deletion Pipeline:** Offline delete → tombstone → [missing step] → server delete
+
+- **Solution Implemented:**
+  - **Enhanced Sync Pipeline (`app/hooks/useSyncOnOnline.ts`):**
+    - Added `processTombstones()` function that runs **before** syncing unsynced entries
+    - Classifies tombstoned IDs into convex-backed (server) vs local-only entries
+    - For convex IDs: calls `deleteHealthEntry` mutation to remove from server
+    - For convex IDs: mirrors deletion locally by marking all duplicates as `isDeleted=true, isSynced=true`
+    - For local-only IDs: purges records permanently from WatermelonDB
+    - Clears processed tombstones from AsyncStorage registry after successful deletion
+  
+  - **Hardened Offline Delete (`app/(tabs)/tracker/log-details.tsx`):**
+    - Added null-safe guard when local record missing during offline delete
+    - If `convexId` exists but local record absent: immediately tombstone the convexId
+    - Skips local mutation attempt to prevent errors
+    - Prevents duplicate deletion crashes when entry already removed
+  
+  - **Updated Documentation (`docs/offline-first/OFFLINE_IMPLEMENTATION_COMPLETE.md`):**
+    - Added "Tombstones (offline deletes) processing" section
+    - Documented complete deletion flow: offline soft delete → tombstone → reconnect → server delete → cleanup
+
+- **Technical Details:**
+  - Tombstone storage: `@health_entry_tombstones_v1` in AsyncStorage
+  - Tombstone format: Set of IDs (convexId preferred, fallback to local id)
+  - Server deletion: Uses existing `api.healthEntries.deleteHealthEntry` mutation
+  - Local mirror: Updates all duplicate entries with matching convexId
+  - Cleanup: `removeTombstones()` clears processed entries from registry
+
+#### Edit Bug Status
+- **Status:** ✅ **FIXED**
+- **Description:** Health entry edits made while offline now sync correctly to server when reconnecting
+
+- **Root Cause Analysis:**
+  1. **Missing Edit Detection:** Sync logic didn't differentiate between newly created entries and edited entries
+  2. **Duplicate Creation Risk:** Edited entries with `convexId` were creating duplicates on server instead of updating existing records
+  3. **Incomplete Sync Flow:** No mechanism to detect and sync offline edits (`isSynced=false` with existing `convexId`)
+
+- **Solution Implemented:**
+
+  **1. Smart Sync Logic (`app/hooks/useSyncOnOnline.ts`):**
+  - Enhanced sync to detect existing server entries via `convexId` field
+  - Branched sync path: entries WITH `convexId` → UPDATE operation, entries WITHOUT → INSERT operation
+  - Uses `updateHealthEntry` mutation for offline-edited entries (line ~302-315)
+  - Uses `logManualEntry` or `logAIAssessment` for new entries (line ~318-346)
+  - Prevents duplicate creation by checking `serverId` before choosing mutation
+
+  **2. Offline Edit Handling (`app/(tabs)/tracker/add-health-entry.tsx`):**
+  - Edit mode detects and loads existing entry by ID or `convexId` (line ~124-228)
+  - Offline edits update local WatermelonDB record with `isSynced=false` flag (line ~684, ~711, ~732)
+  - Preserves `convexId` link to server record during offline edits
+  - Multi-stage resilience: primary update → minimal fallback → duplicate rescue strategy
+  - Tracks edit metadata: `lastEditedAt` timestamp and `editCount` increment
+
+  **3. Edit Metadata Tracking:**
+  - `lastEditedAt`: Timestamp of most recent edit (used for conflict resolution)
+  - `editCount`: Number of edits made to entry (helps identify newest version)
+  - `isSynced`: Boolean flag marking entries needing server sync
+  - `convexId`: Server record ID preserved across edits
+
+- **Technical Flow:**
+  ```
+  User edits entry offline
+    ↓
+  Load entry from WatermelonDB by ID/convexId
+    ↓
+  Update local record with new data
+    ↓
+  Set isSynced=false, increment editCount, update lastEditedAt
+    ↓
+  Preserve convexId for server linkage
+    ↓
+  When online, useSyncOnOnline detects unsynced entries
+    ↓
+  Check if convexId exists:
+    - YES → Call updateHealthEntry (server UPDATE)
+    - NO → Call logManualEntry (server INSERT)
+    ↓
+  Mark isSynced=true after successful sync
+    ↓
+  Server and local database now consistent
+  ```
+
+- **Code Locations:**
+  - Sync logic: `app/hooks/useSyncOnOnline.ts` lines ~302-360
+  - Edit form: `app/(tabs)/tracker/add-health-entry.tsx` lines ~124-228 (loader), ~650-760 (offline save)
+  - Schema: `convex/schema.ts` (health_entries table with convexId, isSynced, editCount, lastEditedAt)
+
+### 📷 Photo Capture Option Removed (Gallery-only uploads)
+- **Type:** Product/UX change 
+- **Status:** ✅ Completed
+- **Rationale:** Simplify the photo workflow, reduce permission prompts, and improve reliability across devices by supporting a single, predictable path for images (gallery selection). Camera capture often introduced permission friction and inconsistent device behavior.
+- **Scope:**
+  - Add Health Entry: Removed the “Take Photo” button and camera flow; gallery upload remains
+  - AI Assessment: Removed the “Take Photo” button and camera flow; gallery upload remains
+- **User Impact:**
+  - Users attach photos from the gallery only
+  - Offline behavior is unchanged — selected gallery images are cached locally and synced when online
+  - Fewer permission prompts (no camera permission requested)
+- **Code Locations:**
+  - `app/(tabs)/tracker/add-health-entry.tsx`: Removed `takePhoto` handler and camera button; kept `launchImageLibraryAsync`
+  - `app/(tabs)/ai-assess/index.tsx`: Removed camera permission request, `handleTakePhoto`, and camera button; kept gallery upload
+
+### 🧠 Medical Info Keyboard Visibility Fix
+- **Type:** Usability/UI improvement (not a reported bug, proactive enhancement)
+- **Status:** ✅ Completed
+- **Issue Observed:** When editing long Medical Information fields (Allergies, Current Medications, Medical Conditions), the on-screen keyboard overlapped the active multiline TextInput, forcing the user to manually scroll and sometimes hiding the caret and last typed lines.
+- **Root Cause:** Form content rendered directly inside a `ScrollView` without a `KeyboardAvoidingView` wrapper or sufficient bottom padding; multiline inputs had no guaranteed clearance under keyboard on iOS/Android.
+- **Solution Implemented:**
+  - Wrapped the entire scrollable form area in a `KeyboardAvoidingView` (`behavior='padding'` on iOS) with a calibrated `keyboardVerticalOffset` to account for curved header spacing.
+  - Added `keyboardShouldPersistTaps="handled"` and `keyboardDismissMode='on-drag'` (iOS) to improve scroll interaction while typing.
+  - Increased bottom padding (`contentContainerStyle={{ paddingBottom: 200 }}`) so the last medical field remains above the keyboard when focused.
+  - Ensures smooth vertical repositioning and keeps focus context visible during continuous typing.
+- **User Impact:**
+  - Medical fields remain visible while entering long text; no hidden caret or obstructed input.
+  - More predictable editing experience across devices and orientations.
+  - Drag-to-dismiss works on iOS; tap interactions no longer accidentally close or ignore inputs.
+- **Code Location:** `app/(tabs)/profile/profile-information.tsx` (added `KeyboardAvoidingView`, adjusted `ScrollView` props, and content padding).
 ---
 
 ## Summary Statistics
 
-- **Total Bugs Reported:** 23
+- **Total Bugs Reported:** 24
 - **Critical (P1):** 2 fixed, 0 open ✅
-- **High (P2):** 4 fixed, 0 open ✅
+- **High (P2):** 5 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
 - **Additional Issues:** 6 closed (4 fixed, 2 working as designed, 1 added to FAQ), 3 open
-- **Fixed This Sprint:** 14
+- **Fixed This Sprint:** 15
 - **Closed as Expected Behavior:** 2
-- **Enhancements Completed:** 1
+- **Enhancements Completed:** 3
 
----
 
-## Next Actions
-
-1. **Priority Focus:** All critical P1 bugs fixed ✅
-2. **High Priority:** All P2 issues fixed ✅ (Profile consistency, Notifications, Location services)
-3. **Medium Priority:** All P3-P4 issues fixed ✅ (Date picker malfunction resolved)
-4. **Continue Testing:** Test date picker fixes on both iOS and Android devices
-5. **Enhancement Testing:** Gather user feedback on new Help & Support feature

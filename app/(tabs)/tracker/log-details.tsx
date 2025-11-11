@@ -1,17 +1,24 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
-import { useQuery } from "convex/react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { ensureHealthEntriesCoreColumns, ensureHealthEntriesV10Columns } from "../../../watermelon/database/selfHeal";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import HealthEntry from "../../../watermelon/models/HealthEntry";
+import { safeWrite } from "../../../watermelon/utils/safeWrite";
+import { addTombstone, isEntryTombstoned, listTombstones, shouldUseTombstoneFallback } from "../../../watermelon/utils/tombstones";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
+import StatusModal from "../../components/StatusModal";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
@@ -157,94 +164,230 @@ export default function LogDetails() {
   const convexIdParam = (params.convexId as string) || undefined;
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
+  const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
-  
+  const [offlineTried, setOfflineTried] = useState(false);
+
+  // Metadata state to track both IDs explicitly
+  const [entryMetadata, setEntryMetadata] = useState<{
+    watermelonId: string | null;
+    convexId: string | null;
+  }>({ watermelonId: null, convexId: null });
+
   // Convert string to Convex ID type - but only if it looks like a Convex ID
   // Convex IDs start with 'k' or 'j' and are longer than 20 chars
   const isConvexId = entryId && entryId.length > 20 && /^[kj]/.test(entryId);
   const convexEntryId = isConvexId ? (entryId as Id<"healthEntries">) : undefined;
-  
+
+  // Convex hooks - use "skip" to prevent network calls when offline
+  // This prevents errors when offline while still following React hook rules
+  const currentUser = useQuery(api.users.getCurrentUser,
+    isOnline && isAuthenticated ? {} : "skip"
+  );
+
+  // Delete mutation - safe to call, but only use when online
+  const deleteHealthEntry = useMutation(api.healthEntries.deleteHealthEntry);
+
   // Online query - only run if we have a valid Convex ID
-  const entryOnline = useQuery(api.healthEntries.getEntryById, 
+  const entryOnline = useQuery(api.healthEntries.getEntryById,
     convexEntryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
 
-  // Offline query from WatermelonDB
-  useEffect(() => {
-      if ((entryId || convexIdParam) && (!isOnline || !isConvexId)) {
-        // Query WatermelonDB if:
-        // 1. We're offline, OR
-        // 2. We're online but the entryId is a WatermelonDB ID (not Convex format)
-      const loadOfflineEntry = async () => {
+  // Offline query from WatermelonDB (always attempt so we can fallback or show deleted state)
+  const loadOfflineEntry = React.useCallback(async () => {
+    if (!(entryId || convexIdParam)) return;
+    try {
+      const healthCollection = database.get('health_entries');
+      let localEntry: any = null;
+
+      // Try by WatermelonDB id first (when entryId is a local id)
+      if (entryId && !isConvexId) {
         try {
-          const healthCollection = database.get("health_entries");
-          let localEntry: any = null;
-          
-            // Try to find by WatermelonDB ID first
-            if (entryId && !isConvexId) {
-            try {
-              localEntry = await healthCollection.find(entryId);
-            } catch {
-              // Not found by WatermelonDB ID, try convexId
+          localEntry = await healthCollection.find(entryId);
+        } catch {}
+      }
+
+      // Fallback: lookup by convexId field
+      if (!localEntry) {
+        const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
+        if (convexLookup) {
+          const results = await healthCollection.query(Q.where('convexId', convexLookup)).fetch();
+          if (results.length > 0) {
+            // Choose best candidate if multiple (higher tuple wins lexicographically)
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const best = results.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked; // prefer larger value
+              }
+              return picked;
+            }, results[0]);
+            localEntry = best;
+          }
+        }
+      }
+
+      // Even if we found localEntry directly by id, we may have newer duplicates for same convexId.
+      // Re-evaluate group to pick freshest version so edits made via duplicate strategy show instantly.
+      const groupConvexId = (localEntry?.convexId) || convexIdParam || (isConvexId ? entryId : undefined);
+      if (groupConvexId) {
+        try {
+          const group = await healthCollection.query(Q.where('convexId', groupConvexId)).fetch();
+          if (group.length > 0) {
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const freshest = group.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked;
+              }
+              return picked;
+            }, group[0]);
+            if (freshest && localEntry && freshest.id !== localEntry.id) {
+              console.log('🔄 [LOG-DETAILS] Replacing localEntry with fresher duplicate', { prev: localEntry.id, next: freshest.id });
+              localEntry = freshest;
             }
           }
-          
-            // If not found, try querying by convexId field
-          if (!localEntry) {
-            const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
-            if (convexLookup) {
-            const results = await healthCollection.query(
-              Q.where('convexId', convexLookup)
-            ).fetch();
-            if (results.length > 0) {
-              localEntry = results[0];
-            }
-            }
+        } catch (e) {
+          console.warn('⚠️ [LOG-DETAILS] Failed duplicate group re-eval', e);
+        }
+      }
+
+      if (!localEntry) {
+        console.warn(`🔎 [LOG-DETAILS] No local record found for localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
+        setOfflineEntry(null);
+        return;
+      }
+
+      // Map WatermelonDB entry to a Convex-like shape (include dedupe metadata)
+      const entryData = localEntry as any;
+      let photos: string[] = [];
+      try {
+        if (entryData.photos) {
+          photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
+        }
+      } catch {
+        photos = [];
+      }
+
+      const tombstoneSet = await listTombstones();
+      setOfflineEntry({
+        _id: localEntry.id,
+        _creationTime: entryData.createdAt || Date.now(),
+        userId: entryData.userId,
+        timestamp: entryData.timestamp,
+        severity: entryData.severity,
+        type: entryData.type,
+        symptoms: entryData.symptoms || '',
+        category: entryData.category || '',
+        notes: entryData.notes || '',
+        photos,
+        aiContext: entryData.aiContext || null,
+        convexId: entryData.convexId || null,
+        createdBy: entryData.createdBy || 'User',
+        date: entryData.date || '',
+        isDeleted: entryData.isDeleted === true || isEntryTombstoned({ convexId: entryData.convexId, _id: localEntry.id }, tombstoneSet),
+        lastEditedAt: entryData.lastEditedAt || 0,
+        editCount: entryData.editCount || 0,
+      });
+
+      setEntryMetadata({
+        watermelonId: localEntry.id,
+        convexId: entryData.convexId || null,
+      });
+    } catch (error) {
+      console.error('Failed to load offline entry:', error);
+      setOfflineEntry(null);
+    } finally {
+      setOfflineTried(true);
+    }
+  }, [entryId, convexIdParam, isConvexId, database]);
+
+  useEffect(() => {
+    loadOfflineEntry();
+  }, [loadOfflineEntry]);
+
+  // Subscribe to edit/delete events for this entry (always active, not just when focused)
+  useEffect(() => {
+    const unsub = healthEntriesEvents.subscribe((p) => {
+      if (!p) return;
+      const matchByConvex = (p.convexId && (p.convexId === (convexIdParam || (isConvexId ? entryId : undefined))));
+      const matchByLocal = (p.watermelonId && (p.watermelonId === entryId));
+      if (matchByConvex || matchByLocal) {
+        console.log('🔔 [LOG-DETAILS] Received event for this entry:', p.type, { convexId: p.convexId, watermelonId: p.watermelonId });
+        loadOfflineEntry();
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [entryId, convexIdParam, isConvexId, loadOfflineEntry]);
+
+  // Refresh when screen regains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadOfflineEntry();
+    }, [loadOfflineEntry])
+  );
+
+  // Populate metadata when online entry is loaded
+  useEffect(() => {
+    if (entryOnline && isOnline && isConvexId) {
+      // Find the corresponding WatermelonDB record
+      const findWatermelonId = async () => {
+        try {
+          const healthCollection = database.get('health_entries');
+          const results = await healthCollection
+            .query(Q.where('convexId', entryOnline._id))
+            .fetch();
+
+          if (results.length > 0) {
+            setEntryMetadata({
+              watermelonId: results[0].id,
+              convexId: entryOnline._id
+            });
+          } else {
+            // Online-only entry, no local copy
+            setEntryMetadata({
+              watermelonId: null,
+              convexId: entryOnline._id
+            });
           }
-          
-          if (!localEntry) {
-            console.error(`Failed to find entry with id(s): localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
-            setOfflineEntry(null);
-            return;
-          }
-          
-          // Map WatermelonDB entry to Convex format
-          const entryData = localEntry as any;
-          
-          // Safely handle photos - it's already parsed by the @json decorator
-          let photos: string[] = [];
-          try {
-            if (entryData.photos) {
-              photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
-            }
-          } catch {
-            photos = [];
-          }
-          
-          setOfflineEntry({
-            _id: localEntry.id,
-            _creationTime: entryData.createdAt || Date.now(),
-            userId: entryData.userId,
-            timestamp: entryData.timestamp,
-            severity: entryData.severity,
-            type: entryData.type,
-            symptoms: entryData.symptoms || "",
-            category: entryData.category || "",
-            notes: entryData.notes || "",
-            photos: photos,
-            aiContext: entryData.aiContext || null,
-          });
         } catch (error) {
-          console.error("Failed to load offline entry:", error);
-          setOfflineEntry(null);
+          console.error("Failed to find WatermelonDB record:", error);
         }
       };
-      loadOfflineEntry();
+      findWatermelonId();
     }
-  }, [isOnline, entryId, database, isConvexId, convexIdParam]);
+  }, [entryOnline, isOnline, isConvexId, database]);
 
-  // Use online entry if available, otherwise offline entry
-  const entry = isOnline ? entryOnline : offlineEntry;
+  // Prefer online entry when available, but fallback to offline if missing
+  // Choose between online and offline variants: prefer the freshest (higher lastEditedAt/editCount) or deletion state.
+  let resolvedEntry: any = offlineEntry;
+  if (entryOnline) {
+    if (!offlineEntry) {
+      resolvedEntry = entryOnline;
+    } else if (offlineEntry.convexId && offlineEntry.convexId === entryOnline._id) {
+      const onlineLastEdited = (entryOnline as any).lastEditedAt || 0;
+      const onlineEditCount = (entryOnline as any).editCount || 0;
+      const offlineLastEdited = offlineEntry.lastEditedAt || 0;
+      const offlineEditCount = offlineEntry.editCount || 0;
+      const offlineDeleted = offlineEntry.isDeleted === true;
+      // Prefer offline if it reflects a deletion not yet synced, or has more recent edits.
+      if (offlineDeleted || offlineLastEdited > onlineLastEdited || offlineEditCount > onlineEditCount) {
+        resolvedEntry = offlineEntry;
+      } else {
+        resolvedEntry = entryOnline;
+      }
+    } else {
+      // Different convex linkage; default to online if available.
+      resolvedEntry = entryOnline;
+    }
+  }
+  const isDeletedEntry = resolvedEntry?.isDeleted === true;
+  const isLoadingOnline = isOnline && isConvexId && typeof entryOnline === 'undefined';
+  const stillLoading = isLoadingOnline || (!offlineTried && offlineEntry === null);
 
   const getSeverityColor = (severity: number) => {
     if (severity >= 9) return "#DC3545";
@@ -269,7 +412,215 @@ export default function LogDetails() {
     };
   };
 
-  if (!entry) {
+  // Modal state for delete confirmation & status
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  const confirmDelete = () => {
+    setDeleteError(null);
+    setDeleteSuccess(false);
+    setDeleteModalVisible(true);
+  };
+
+  const performDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+  const { watermelonId, convexId } = entryMetadata;
+
+      if (!isOnline) {
+        // OFFLINE MODE: Prefer soft delete, but if environment lacks mutation support use tombstone fallback
+        const idToUse = watermelonId || resolvedEntry?._id;
+        if (!idToUse) {
+          throw new Error('Unable to identify entry for deletion');
+        }
+        const fallback = shouldUseTombstoneFallback(database);
+        if (fallback) {
+          // Tombstone path – do NOT touch Watermelon rows (prevents TypeError crash)
+          const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Tombstoned entry (no mutation environment):', preferred);
+        } else {
+          // Attempt normal soft-delete (with rescue duplicate if needed)
+          try {
+            await ensureHealthEntriesCoreColumns(database as any);
+            await ensureHealthEntriesV10Columns(database as any);
+          } catch {}
+          let anyWriteSucceeded = false;
+          await safeWrite(
+            database,
+            async () => {
+              const healthCollection = database.get('health_entries');
+              let localEntry: HealthEntry | null = null;
+              try {
+                localEntry = await healthCollection.find(idToUse) as HealthEntry;
+              } catch (e) {
+                console.warn('⚠️ [OFFLINE DELETE] Local record not found by id, will use tombstone if possible:', idToUse);
+                if (convexId) {
+                  const preferred = convexId;
+                  await addTombstone(preferred);
+                  console.log('🪦 [OFFLINE DELETE] Added tombstone for missing local record:', preferred);
+                  anyWriteSucceeded = true; // treat as handled
+                  return; // skip the rest of the write block
+                }
+                // If no convexId either, nothing to mutate; let outer fallback handle
+                throw e;
+              }
+              try {
+                await localEntry.update((e: any) => {
+                  e.isDeleted = true;
+                  e.isSynced = false;
+                  e.lastEditedAt = Date.now();
+                });
+                console.log('📴 Entry soft-deleted offline');
+                anyWriteSucceeded = true;
+              } catch (primaryErr) {
+                console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
+                const now = Date.now();
+                const deletedDuplicate = await healthCollection.create((newRec: any) => {
+                  newRec.userId = localEntry.userId;
+                  newRec.convexId = localEntry.convexId;
+                  newRec.date = localEntry.date;
+                  newRec.timestamp = now;
+                  newRec.symptoms = localEntry.symptoms;
+                  newRec.severity = localEntry.severity;
+                  newRec.notes = localEntry.notes || '';
+                  newRec.photos = localEntry.photos;
+                  newRec.type = localEntry.type || 'manual_entry';
+                  newRec.isSynced = false;
+                  newRec.createdBy = localEntry.createdBy;
+                  newRec.lastEditedAt = now;
+                  newRec.editCount = (localEntry.editCount || 0) + 1;
+                  newRec.isDeleted = true;
+                });
+                console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
+                anyWriteSucceeded = true;
+              }
+
+              // Also mark duplicates
+              const now2 = Date.now();
+              const cvx = (localEntry as any)?.convexId || entryMetadata.convexId;
+              if (cvx) {
+                const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
+                let updated = 0;
+                for (const rec of dupes) {
+                  const healthRec = rec as HealthEntry;
+                  if (localEntry && healthRec.id === (localEntry as any).id) continue;
+                  try {
+                    await healthRec.update((e2: any) => {
+                      e2.isDeleted = true;
+                      e2.isSynced = false;
+                      e2.lastEditedAt = now2;
+                    });
+                    updated++;
+                    anyWriteSucceeded = true;
+                  } catch (e) {
+                    console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', healthRec.id, e);
+                  }
+                }
+                if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
+              }
+            },
+            10000,
+            'deleteHealthEntryOffline'
+          );
+          if (!anyWriteSucceeded) {
+            // Fall back to tombstone if everything failed
+            const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Fallback tombstone after failed mutations:', preferred);
+          }
+        }
+        console.log('📴 Entry marked for deletion (soft or tombstone) – will sync when online');
+      } else {
+        // ONLINE MODE
+        if (convexId && currentUser) {
+          try {
+            await deleteHealthEntry({
+              entryId: convexId as Id<'healthEntries'>,
+              userId: currentUser._id,
+            });
+            console.log('✅ Deleted from Convex:', convexId);
+          } catch (error) {
+            throw new Error('Failed to delete entry from server. Please try again.');
+          }
+        }
+
+        // Clean up ALL local duplicates for this entry (same convexId)
+        await safeWrite(
+          database,
+          async () => {
+            const healthCollection = database.get('health_entries');
+            if (convexId) {
+              const dupes = await healthCollection.query(Q.where('convexId', convexId)).fetch();
+              console.log(`🧽 [ONLINE DELETE] Removing ${dupes.length} local duplicates for convexId=${convexId}`);
+              for (const rec of dupes as any[]) {
+                try {
+                  await (rec as any).destroyPermanently();
+                } catch (e) {
+                  console.warn('⚠️ [ONLINE DELETE] Failed to destroy duplicate, trying soft-delete', (rec as any)?.id, e);
+                  await (rec as any).update((e2: any) => {
+                    e2.isDeleted = true;
+                    e2.isSynced = true; // matches server state
+                    e2.lastEditedAt = Date.now();
+                  });
+                }
+              }
+            } else if (watermelonId) {
+              // Fallback: remove the current local record
+              const localEntry = await healthCollection.find(watermelonId);
+              await localEntry.destroyPermanently();
+              console.log('✅ Deleted from WatermelonDB (single):', watermelonId);
+            }
+          },
+          15000,
+          'deleteHealthEntryOnlineCleanup'
+        );
+      }
+      setDeleteSuccess(true);
+      // Emit delete event before navigating back
+      healthEntriesEvents.emit({ type: 'delete', convexId: entryMetadata.convexId, watermelonId: entryMetadata.watermelonId, timestamp: Date.now() });
+      setTimeout(() => {
+        setDeleteModalVisible(false);
+        router.back();
+      }, 600);
+    } catch (err: any) {
+      console.error('❌ Delete failed:', err);
+      setDeleteError(err?.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (!resolvedEntry) {
+    if (stillLoading) {
+      return (
+        <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
+          <CurvedBackground style={{ flex: 1 }}>
+            <DueReminderBanner topOffset={120} />
+            <CurvedHeader
+              title="Tracker - Entry Details"
+              height={150}
+              showLogo={true}
+              screenType="signin"
+              bottomSpacing={0}
+              showNotificationBell={true}
+            />
+            <View style={styles.contentArea}>
+              <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Loading entry details...</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </CurvedBackground>
+          <BottomNavigation />
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground style={{ flex: 1 }}>
@@ -285,7 +636,11 @@ export default function LogDetails() {
           <View style={styles.contentArea}>
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading entry details...</Text>
+                <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                <Text style={[styles.loadingText, { marginTop: 8 }]}>Entry not found or was deleted.</Text>
+                <TouchableOpacity style={[{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#2A7DE1' }]} onPress={() => router.back()}>
+                  <Text style={{ color: 'white', fontFamily: FONTS.BarlowSemiCondensed }}>Go Back</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -295,7 +650,7 @@ export default function LogDetails() {
     );
   }
 
-  const dateTime = formatDateTime(entry.timestamp);
+  const dateTime = formatDateTime(resolvedEntry.timestamp);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
@@ -328,23 +683,65 @@ export default function LogDetails() {
                     <Text style={styles.dateText}>{dateTime.date}</Text>
                     <Text style={styles.timeText}>{dateTime.time}</Text>
                   </View>
-                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(entry.severity) }]}>
+                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(resolvedEntry.severity) }]}>
                     <Text style={styles.severityBadgeText}>
-                      {getSeverityText(entry.severity)} ({entry.severity}/10)
+                      {getSeverityText(resolvedEntry.severity)} ({resolvedEntry.severity}/10)
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.typeContainer}>
                   <Ionicons
-                    name={entry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
+                    name={resolvedEntry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
                     size={16}
                     color="#666"
                   />
                   <Text style={styles.typeText}>
-                    {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
+                    {resolvedEntry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {resolvedEntry.createdBy}
                   </Text>
                 </View>
+
+                {isDeletedEntry && (
+                  <View style={[styles.detailCard, { backgroundColor: '#FFF5F5', borderColor: '#F3C7C7' }] }>
+                    <View style={styles.cardHeader}>
+                      <Ionicons name="trash" size={20} color="#DC3545" />
+                      <Text style={[styles.cardTitle, { color: '#DC3545' }]}>This entry was deleted</Text>
+                    </View>
+                    <Text style={styles.cardContent}>This entry has been marked as deleted and is kept locally for sync. You can go back to the list.</Text>
+                  </View>
+                )}
+
+                {/* Edit/Delete Actions - Only for Manual Entries */}
+                {!isDeletedEntry && resolvedEntry.type !== "ai_assessment" && (
+                  <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/tracker/add-health-entry',
+                          params: {
+                            mode: 'edit',
+                            // Pass both local and convex identifiers so the editor can resolve correctly
+                            entryId: entryMetadata.watermelonId || resolvedEntry._id,
+                            convexId: entryMetadata.convexId || resolvedEntry.convexId || resolvedEntry._id,
+                          }
+                        });
+                      }}
+                    >
+                      <Ionicons name="pencil" size={18} color="#2A7DE1" />
+                      <Text style={styles.editButtonText}>Edit Entry</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={confirmDelete}
+                      disabled={deleting}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#DC3545" />
+                      <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Symptoms */}
@@ -353,60 +750,60 @@ export default function LogDetails() {
                   <Ionicons name="medical" size={20} color="#2A7DE1" />
                   <Text style={styles.cardTitle}>Symptoms & Description</Text>
                 </View>
-                <Text style={styles.cardContent}>{entry.symptoms}</Text>
+                <Text style={styles.cardContent}>{resolvedEntry.symptoms}</Text>
               </View>
 
               {/* Category */}
-              {entry.category && (
+              {resolvedEntry.category && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="pricetag" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Category</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.category}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.category}</Text>
                 </View>
               )}
 
               {/* Duration */}
-              {entry.duration && (
+              {resolvedEntry.duration && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="time" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Duration</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.duration}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.duration}</Text>
                 </View>
               )}
 
               {/* AI Assessment - split into cards like assessment-results */}
-              {entry.aiContext && (
+              {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(entry.aiContext)}
+                  {renderAssessmentCards(resolvedEntry.aiContext)}
                 </View>
               )}
 
               {/* Notes */}
-              {entry.notes && (
+              {resolvedEntry.notes && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="document-text" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Additional Notes</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.notes}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>
               )}
 
               {/* Photos */}
-              {entry.photos && entry.photos.length > 0 && (
+              {resolvedEntry.photos && resolvedEntry.photos.length > 0 && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="camera" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Photos ({entry.photos.length})</Text>
+                    <Text style={styles.cardTitle}>Photos ({resolvedEntry.photos.length})</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.photosContainer}>
-                      {entry.photos.map((photo, index) => (
+                      {resolvedEntry.photos.map((photo: string, index: number) => (
                         <View key={index} style={styles.photoItem}>
                           <Image source={{ uri: photo }} style={styles.photo} />
                           <Text style={styles.photoLabel}>Photo {index + 1}</Text>
@@ -426,19 +823,19 @@ export default function LogDetails() {
                 <View style={styles.techDetails}>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Entry ID:</Text>
-                    <Text style={styles.techValue}>{entry._id}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry._id}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Timestamp:</Text>
-                    <Text style={styles.techValue}>{entry.timestamp}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.timestamp}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Date Key:</Text>
-                    <Text style={styles.techValue}>{entry.date}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.date}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Entry Type:</Text>
-                    <Text style={styles.techValue}>{entry.type || "manual_entry"}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.type || "manual_entry"}</Text>
                   </View>
                 </View>
               </View>
@@ -447,6 +844,60 @@ export default function LogDetails() {
         </View>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Delete Confirmation Modal - replaces Alert.alert */}
+      <StatusModal
+        visible={deleteModalVisible}
+        type={deleteError ? 'error' : deleteSuccess ? 'success' : 'confirm'}
+        title={
+          deleteError
+            ? 'Delete Failed'
+            : deleteSuccess
+            ? 'Entry Deleted'
+            : 'Delete Entry'
+        }
+        message={
+          deleteError
+            ? deleteError
+            : deleteSuccess
+            ? 'The entry has been deleted.'
+            : 'Are you sure you want to delete this health entry? This action cannot be undone.'
+        }
+        onClose={() => setDeleteModalVisible(false)}
+        buttons={
+          deleteError
+            ? [
+                {
+                  label: 'Close',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'primary',
+                },
+              ]
+            : deleteSuccess
+            ? [
+                {
+                  label: 'Continue',
+                  onPress: () => {
+                    setDeleteModalVisible(false);
+                    router.back();
+                  },
+                  variant: 'primary',
+                },
+              ]
+            : [
+                {
+                  label: 'Cancel',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'secondary',
+                },
+                {
+                  label: deleting ? 'Deleting…' : 'Delete',
+                  onPress: performDelete,
+                  variant: 'destructive',
+                },
+              ]
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -544,6 +995,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginLeft: 6,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E9ECEF",
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    color: "#2A7DE1",
+    fontWeight: "600",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#DC3545",
+    gap: 8,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    color: "#DC3545",
+    fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
   detailCard: {

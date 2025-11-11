@@ -6,16 +6,19 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
+import { analyzeDuplicates, dedupeHealthEntries } from "../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../watermelon/utils/filterActiveHealthEntries";
+import { listTombstones } from "../../watermelon/utils/tombstones";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -159,13 +162,22 @@ export default function Dashboard() {
 
           const mapped = entries.map((entry: any) => ({
             _id: entry.id,
+            convexId: entry.convexId,
             symptoms: entry.symptoms || "",
             severity: entry.severity || 0,
             timestamp: entry.timestamp || Date.now(),
+            type: entry.type || "",
+            isDeleted: entry.isDeleted ?? false,
+            lastEditedAt: entry.lastEditedAt ?? entry.timestamp ?? Date.now(),
+            editCount: entry.editCount ?? 0,
           }));
-          console.log(`📊 [DASHBOARD OFFLINE] Loaded ${mapped.length} entries for last 7 days (local cache, user=${uid})`);
-          setCachedWeeklyEntries(mapped);
-          setLocalWeeklyEntries(mapped);
+          console.log(`📊 [DASHBOARD OFFLINE] Loaded ${mapped.length} raw local entries (including deleted) for last 7 days (user=${uid})`);
+          const filtered = mapped.filter(e => !e.isDeleted);
+          if (filtered.length !== mapped.length) {
+            console.log(`🗑️ [DASHBOARD OFFLINE FILTER] Removed ${mapped.length - filtered.length} deleted entries -> ${filtered.length} remaining`);
+          }
+          setCachedWeeklyEntries(filtered);
+          setLocalWeeklyEntries(filtered);
         } catch (error) {
           console.error("Error fetching offline entries from WatermelonDB:", error);
         }
@@ -200,16 +212,18 @@ export default function Dashboard() {
 
         const mapped = entries.map((entry: any) => ({
           _id: entry.id,
-          convexId: entry.convexId,
-          symptoms: entry.symptoms || "",
-          severity: entry.severity || 0,
-          timestamp: entry.timestamp || Date.now(),
-          type: entry.type || "",
+            convexId: entry.convexId,
+            symptoms: entry.symptoms || "",
+            severity: entry.severity || 0,
+            timestamp: entry.timestamp || Date.now(),
+            type: entry.type || "",
+            isDeleted: entry.isDeleted ?? false,
+            lastEditedAt: entry.lastEditedAt ?? entry.timestamp ?? Date.now(),
+            editCount: entry.editCount ?? 0,
         }));
-        
-        console.log(`📊 [DASHBOARD LOCAL RESULT] Found ${mapped.length} local entries for last 7 days`);
-        
-        setLocalWeeklyEntries(mapped);
+        const filtered = mapped.filter(e => !e.isDeleted);
+        console.log(`📊 [DASHBOARD LOCAL RESULT] Found ${mapped.length} local entries (raw) -> ${filtered.length} after filtering deleted`);
+        setLocalWeeklyEntries(filtered);
       } catch (error) {
         console.error("Error fetching local weekly entries:", error);
       }
@@ -226,35 +240,78 @@ export default function Dashboard() {
     [user, cachedUser]
   );
   // Merge local and online results to avoid temporary regressions when coming online
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
+  useEffect(() => { (async () => { setTombstones(await listTombstones()); })(); }, [isOnline]);
   const displayedWeeklyEntries = useMemo(() => {
-    const onlineArr = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
-    const localArr = Array.isArray(localWeeklyEntries) && localWeeklyEntries.length > 0
+    const onlineRaw = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
+    // Ensure online entries carry deletion metadata (fallbacks if missing)
+    const onlineArr = onlineRaw.map((e: any) => ({
+      ...e,
+      isDeleted: e.isDeleted ?? false,
+      lastEditedAt: e.lastEditedAt ?? e.timestamp ?? Date.now(),
+      editCount: e.editCount ?? 0,
+    }));
+    const localSource = Array.isArray(localWeeklyEntries) && localWeeklyEntries.length > 0
       ? localWeeklyEntries
       : cachedWeeklyEntries;
-    
-    console.log(`📊 [DASHBOARD MERGE] Online: ${onlineArr.length}, Local: ${localArr.length}, Cached: ${cachedWeeklyEntries.length}`);
+    const localArr = localSource.map((e: any) => ({
+      ...e,
+      isDeleted: e.isDeleted ?? false,
+      lastEditedAt: e.lastEditedAt ?? e.timestamp ?? Date.now(),
+      editCount: e.editCount ?? 0,
+    }));
+
+    // Filter out deleted entries before dedupe/merge for consistent counts
+  const filteredOnline = filterActiveHealthEntries(onlineArr as any, tombstones);
+  const filteredLocal = filterActiveHealthEntries(localArr as any, tombstones);
+
+    console.log(`📊 [DASHBOARD MERGE] Online(raw): ${onlineArr.length} -> ${filteredOnline.length} active, Local(raw): ${localArr.length} -> ${filteredLocal.length} active, Cached(raw): ${cachedWeeklyEntries.length}`);
     
     // When online: prefer whichever has MORE entries (more up-to-date)
     // This handles the case where sync completes but Convex query hasn't refetched yet
-    if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
-      if (localArr.length > onlineArr.length) {
-        console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
-        return localArr;
+    if (isOnline && filteredOnline.length > 0 && filteredLocal.length > 0) {
+      if (filteredLocal.length > filteredOnline.length) {
+        console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer, active): ${filteredLocal.length} > ${filteredOnline.length}`);
+        const deduped = dedupeHealthEntries(filteredLocal as any);
+        if (deduped.length !== filteredLocal.length) {
+          console.log(`🧹 [DASHBOARD DEDUPE] Local active entries reduced ${filteredLocal.length} -> ${deduped.length}`);
+          const dups = analyzeDuplicates(filteredLocal as any);
+          if (dups.length) {
+            console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+          }
+        }
+        return deduped;
       }
-      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online active entries: ${filteredOnline.length}`);
+      const dedupedOnline = dedupeHealthEntries(filteredOnline as any);
+      if (dedupedOnline.length !== filteredOnline.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online active entries reduced ${filteredOnline.length} -> ${dedupedOnline.length}`);
+        const dups = analyzeDuplicates(filteredOnline as any);
+        if (dups.length) {
+          console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+        }
+      }
+      return dedupedOnline;
     }
     
     // Fallback: prefer online if available, else local
-    if (onlineArr.length > 0) {
-      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+    if (filteredOnline.length > 0) {
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online active entries (no local): ${filteredOnline.length}`);
+      const dedupedOnline = dedupeHealthEntries(filteredOnline as any);
+      if (dedupedOnline.length !== filteredOnline.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online active entries reduced ${filteredOnline.length} -> ${dedupedOnline.length}`);
+      }
+      return dedupedOnline;
     }
     
     // Offline mode: use local entries
-    console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries: ${localArr.length}`);
-    return localArr;
-  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries]);
+    console.log(`📊 [DASHBOARD MERGE RESULT] Using local active entries (offline): ${filteredLocal.length}`);
+    const dedupedLocal = dedupeHealthEntries(filteredLocal as any);
+    if (dedupedLocal.length !== filteredLocal.length) {
+      console.log(`🧹 [DASHBOARD DEDUPE] Local active entries reduced ${filteredLocal.length} -> ${dedupedLocal.length}`);
+    }
+    return dedupedLocal;
+  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries, tombstones]);
 
 
 

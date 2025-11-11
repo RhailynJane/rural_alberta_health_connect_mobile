@@ -1,23 +1,29 @@
+import HealthEntry from "@/watermelon/models/HealthEntry";
 import { Q } from "@nozbe/watermelondb";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { analyzeDuplicates, dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../../watermelon/utils/filterActiveHealthEntries";
+import { listTombstones } from "../../../watermelon/utils/tombstones";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -32,6 +38,7 @@ export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
   const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -77,95 +84,117 @@ export default function History() {
     currentUser && isOnline ? { userId: currentUser._id } : "skip"
   );
 
-  // Get offline entries from WatermelonDB
-  useEffect(() => {
-    const fetchOfflineEntries = async () => {
-      try {
-        // ALWAYS load from WatermelonDB first for instant display
-        // Then online data will replace it when loaded
-        
-        // Determine user id
-        let uid: string | undefined = currentUser?._id as any;
-        if (!uid) {
-          try {
-            const raw = await AsyncStorage.getItem("@profile_user");
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              uid = parsed?._id || parsed?.id || uid;
-            }
-          } catch {}
-        }
-        if (!uid) {
-          // Try Watermelon users table
-          try {
-            const usersCol = database.get('users');
+  // Offline fetch function reused across focus & events
+  const fetchOfflineEntries = React.useCallback(async () => {
+    try {
+      let uid: string | undefined = currentUser?._id as any;
+      if (!uid) {
+        try {
+          const raw = await AsyncStorage.getItem("@profile_user");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            uid = parsed?._id || parsed?.id || uid;
+          }
+        } catch { }
+      }
+      if (!uid) {
+        try {
+          const usersCol = database.get('users');
             const allUsers = await usersCol.query().fetch();
             const first = (allUsers as any[])[0];
             if (first) {
               const r = (first as any)._raw || {};
               uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
             }
-          } catch {}
-        }
-        if (!uid) {
-          console.log('⚠️ [OFFLINE HISTORY] No user id available');
-          setOfflineEntries([]);
-          return;
-        }
-
-        const collection = database.get("health_entries");
-        const entries = await collection
-          .query(
-            Q.where('userId', uid),
-            Q.sortBy("timestamp", Q.desc)
-          )
-          .fetch();
-
-        console.log(`🔍 [LOCAL HISTORY] Fetched ${entries.length} entries from WatermelonDB for user ${uid}`);
-        
-        // Map WatermelonDB entries to match Convex format
-        const mapped = entries.map((entry: any) => {
-          return {
-            _id: entry.id,
-            symptoms: entry.symptoms || "",
-            severity: entry.severity || 0,
-            category: entry.category || "",
-            notes: entry.notes || "",
-            timestamp: entry.timestamp || Date.now(),
-            createdBy: entry.createdBy || "User",
-            type: entry.type || "manual_entry",
-            convexId: entry.convexId, // For de-duplication
-          };
-        });
-        
-        console.log(`✅ [LOCAL HISTORY] Loaded ${mapped.length} entries instantly from local cache`);
-        setOfflineEntries(mapped);
-      } catch (error) {
-        console.error("Error fetching offline entries:", error);
-        setOfflineEntries([]);
+        } catch { }
       }
-    };
-    // Fetch immediately on mount for instant display
-    fetchOfflineEntries();
-  }, [database, currentUser?._id]); // Removed isOnline dependency - always load local cache
-
-  // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
-  const allEntries = useMemo(() => {
-    // If online and have server data, use that (it's fresher)
-    // Otherwise use local cache
-    const base = (isOnline && allEntriesOnline) ? allEntriesOnline : offlineEntries;
-    if (!Array.isArray(base)) return base;
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const eRaw of base as any[]) {
-      const e = eRaw || {};
-      const key = (e as any).convexId || `${(e as any).timestamp || '0'}_${(e as any).type || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
+      if (!uid) {
+        console.log('⚠️ [OFFLINE HISTORY] No user id available');
+        setOfflineEntries([]);
+        return;
+      }
+      const collection = database.get<HealthEntry>("health_entries");
+      const entries = await collection
+        .query(
+          Q.where('userId', uid),
+          Q.sortBy("timestamp", Q.desc)
+        )
+        .fetch();
+      const mapped = entries.map((entry: any) => ({
+        _id: entry.id,
+        symptoms: entry.symptoms || "",
+        severity: entry.severity || 0,
+        category: entry.category || "",
+        notes: entry.notes || "",
+        timestamp: entry.timestamp || Date.now(),
+        createdBy: entry.createdBy || "User",
+        type: entry.type || "manual_entry",
+        convexId: entry.convexId,
+        isDeleted: entry.isDeleted === true,
+        lastEditedAt: entry.lastEditedAt || 0,
+        editCount: entry.editCount || 0,
+      }));
+      const tombstoneSet = await listTombstones();
+      setTombstones(tombstoneSet);
+  const filtered = filterActiveHealthEntries(mapped, tombstoneSet);
+  setOfflineEntries(filtered);
+    } catch (error) {
+      console.error("Error fetching offline entries:", error);
+      setOfflineEntries([]);
     }
-    return out;
-  }, [isOnline, allEntriesOnline, offlineEntries]);
+  }, [database, currentUser?._id]);
+
+  useEffect(() => { fetchOfflineEntries(); }, [fetchOfflineEntries]);
+
+  // Refresh when screen gains focus or entry changed
+  useFocusEffect(
+    useCallback(() => {
+      const unsub = healthEntriesEvents.subscribe(() => fetchOfflineEntries());
+      fetchOfflineEntries();
+      return () => unsub();
+    }, [fetchOfflineEntries])
+  );
+
+  // Choose between online and local caches similarly to Dashboard (prefer the larger, more up-to-date set)
+  const allEntries = useMemo(() => {
+    const onlineArr = Array.isArray(allEntriesOnline) ? allEntriesOnline : [];
+    const localArr = Array.isArray(offlineEntries) ? offlineEntries : [];
+
+    // Diagnostic log to match Dashboard-style visibility
+    console.log(`📈 [HISTORY MERGE] Online: ${onlineArr.length}, Local: ${localArr.length}`);
+
+  let base: any[] = [];
+    if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
+      if (localArr.length > onlineArr.length) {
+        console.log(`📈 [HISTORY MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
+        base = localArr;
+      } else {
+        console.log(`📈 [HISTORY MERGE RESULT] Using online entries: ${onlineArr.length}`);
+        base = onlineArr;
+      }
+    } else if (onlineArr.length > 0) {
+      console.log(`📈 [HISTORY MERGE RESULT] Using online entries: ${onlineArr.length}`);
+      base = onlineArr;
+    } else {
+      console.log(`📈 [HISTORY MERGE RESULT] Using local entries: ${localArr.length}`);
+      base = localArr;
+    }
+
+  if (!Array.isArray(base)) return base as any;
+
+  // Never show locally or remotely deleted entries in History
+  const nonDeletedBase = filterActiveHealthEntries(base as any[], tombstones);
+
+  const deduped = dedupeHealthEntries(nonDeletedBase as any);
+    if (deduped.length !== base.length) {
+      console.log(`🧹 [HISTORY DEDUPE] Reduced entries ${base.length} -> ${deduped.length}`);
+      const dups = analyzeDuplicates(base as any);
+      if (dups.length) {
+        console.log(`🧪 [HISTORY DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+      }
+    }
+    return deduped;
+  }, [isOnline, allEntriesOnline, offlineEntries, tombstones]);
 
   // Status log to verify mode and counts
   useEffect(() => {
@@ -182,10 +211,10 @@ export default function History() {
     );
   }, [isOnline, currentUser?._id, allEntriesOnline, offlineEntries]);
 
-  const handleViewEntryDetails = (entryId: string) => {
+  const handleViewEntryDetails = (entry: any) => {
     router.push({
       pathname: "/tracker/log-details",
-      params: { entryId },
+      params: { entryId: entry?._id, convexId: entry?.convexId || "" },
     });
   };
 
@@ -304,11 +333,11 @@ export default function History() {
   const healthScore =
     searchFilteredEntries.length > 0
       ? (
-          searchFilteredEntries.reduce(
-            (sum, entry) => sum + (10 - entry.severity),
-            0
-          ) / searchFilteredEntries.length
-        ).toFixed(1)
+        searchFilteredEntries.reduce(
+          (sum, entry) => sum + (10 - entry.severity),
+          0
+        ) / searchFilteredEntries.length
+      ).toFixed(1)
       : "0.0";
 
   // Debug logging
@@ -420,7 +449,7 @@ export default function History() {
                     style={[
                       styles.quickSelectButton,
                       selectedRange === "today" &&
-                        styles.quickSelectButtonActive,
+                      styles.quickSelectButtonActive,
                     ]}
                     onPress={() => handleRangeSelection("today")}
                   >
@@ -428,7 +457,7 @@ export default function History() {
                       style={[
                         styles.quickSelectText,
                         selectedRange === "today" &&
-                          styles.quickSelectTextActive,
+                        styles.quickSelectTextActive,
                       ]}
                     >
                       Today
@@ -561,7 +590,7 @@ export default function History() {
                     <TouchableOpacity
                       key={entry._id}
                       style={styles.entryItem}
-                      onPress={() => handleViewEntryDetails(entry._id)}
+                      onPress={() => handleViewEntryDetails(entry)}
                     >
                       <Ionicons
                         name={
@@ -591,9 +620,9 @@ export default function History() {
                                 backgroundColor: "#E8F5E8",
                               },
                               entry.severity > 3 &&
-                                entry.severity <= 7 && {
-                                  backgroundColor: "#FFF3CD",
-                                },
+                              entry.severity <= 7 && {
+                                backgroundColor: "#FFF3CD",
+                              },
                               entry.severity > 7 && {
                                 backgroundColor: "#F8D7DA",
                               },
@@ -616,9 +645,9 @@ export default function History() {
                                 { fontFamily: FONTS.BarlowSemiCondensed },
                                 entry.severity <= 3 && { color: "#28A745" },
                                 entry.severity > 3 &&
-                                  entry.severity <= 7 && {
-                                    color: "#856404",
-                                  },
+                                entry.severity <= 7 && {
+                                  color: "#856404",
+                                },
                                 entry.severity > 7 && {
                                   color: "#721C24",
                                 },
@@ -671,8 +700,8 @@ export default function History() {
                   <View style={styles.noEntries}>
                     <Ionicons name="document" size={40} color="#CCC" />
                     <Text style={styles.noEntriesText}>
-                      {searchQuery.trim() 
-                        ? "No entries match your search" 
+                      {searchQuery.trim()
+                        ? "No entries match your search"
                         : "No entries found for selected date range"}
                     </Text>
                   </View>

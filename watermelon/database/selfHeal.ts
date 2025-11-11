@@ -92,4 +92,273 @@ export async function ensureUserProfilesSchema(db: Database | any) {
   }
 }
 
+// Ensure legacy health_entries have a valid `type` value so updates don't fail.
+// Strategy:
+// - If `type` is NULL or empty, set it to:
+//   - 'ai_assessment' when aiContext is non-empty
+//   - otherwise 'manual_entry'
+export async function ensureHealthEntriesType(db: Database | any) {
+  console.log('🔧 [WMDB] ensureHealthEntriesType called - patching missing type values...');
+  try {
+    const adapter: any = (db as any)?.adapter;
+    if (!adapter?.unsafeSqlQuery) {
+      console.warn('⚠️ [WMDB] No unsafeSqlQuery available - using model-level fallback to patch types/notes');
+      try {
+        const collection = db.get('health_entries');
+        const all = await collection.query().fetch();
+        const toFix = all.filter((r: any) => !r.type || r.type === '' || r.notes == null);
+        if (toFix.length > 0) {
+          await db.write(async () => {
+            await db.batch(
+              ...toFix.map((rec: any) => rec.prepareUpdate((r: any) => {
+                if (!r.type || r.type === '') {
+                  r.type = r.aiContext && String(r.aiContext).length > 0 ? 'ai_assessment' : 'manual_entry';
+                }
+                if (r.notes == null) {
+                  r.notes = '';
+                }
+              }))
+            );
+          });
+          console.log(`✅ [WMDB] Patched ${toFix.length} records via model-level fallback (no unsafeSqlQuery)`);
+        } else {
+          console.log('👍 [WMDB] No records required model-level patch');
+        }
+      } catch (e) {
+        console.warn('⚠️ [WMDB] Model-level ensureHealthEntriesType fallback failed:', e);
+      }
+      return;
+    }
+
+    // Verify the column exists to avoid exceptions on some devices
+    let hasTypeCol = false;
+    try {
+      const pragma: any = await adapter.unsafeSqlQuery("PRAGMA table_info('health_entries')");
+      const rows: any[] = Array.isArray(pragma)
+        ? pragma
+        : Array.isArray((pragma as any)?.rows)
+          ? (pragma as any).rows
+          : ((pragma as any)?.map ? pragma : []);
+      for (const row of rows) {
+        const name = row?.name ?? row?.[1] ?? row?.column_name;
+        if (name === 'type') {
+          hasTypeCol = true;
+          break;
+        }
+      }
+      console.log('🧪 [WMDB] health_entries has type column:', hasTypeCol);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Failed to introspect health_entries schema:', e);
+      // Assume it exists — we've seen duplicate-column errors previously
+      hasTypeCol = true;
+    }
+
+    if (!hasTypeCol) {
+      console.warn('⚠️ [WMDB] health_entries.type column missing. Skipping data patch to avoid ALTER TABLE conflicts.');
+      return;
+    }
+
+    // Count how many rows need patching
+    let needsPatch = 0;
+    try {
+      const res: any = await adapter.unsafeSqlQuery(
+        "SELECT COUNT(*) as cnt FROM health_entries WHERE type IS NULL OR type = ''"
+      );
+      const row = Array.isArray(res)
+        ? res[0]
+        : Array.isArray(res?.rows)
+          ? res.rows[0]
+          : (res?.[0] ?? res);
+      const cntVal = row?.cnt ?? row?.["COUNT(*)"] ?? row?.[0] ?? 0;
+      needsPatch = Number(cntVal) || 0;
+      console.log(`🧮 [WMDB] health_entries needing type patch: ${needsPatch}`);
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Could not count rows needing type patch:', e);
+    }
+
+    if (needsPatch > 0) {
+      try {
+        await adapter.unsafeSqlQuery(
+          "UPDATE health_entries SET type = CASE WHEN aiContext IS NOT NULL AND aiContext != '' THEN 'ai_assessment' ELSE 'manual_entry' END WHERE type IS NULL OR type = ''"
+        );
+        console.log('✅ [WMDB] Patched missing health_entries.type values successfully');
+      } catch (e) {
+        console.warn('⚠️ [WMDB] Failed to patch health_entries.type via SQL, will attempt record-by-record fallback:', e);
+        // Fallback: try to patch via Watermelon where possible
+        try {
+          const collection = db.get('health_entries');
+          const allMissing = await collection.query().fetch();
+          const toFix = allMissing.filter((r: any) => !r.type || r.type === '');
+          if (toFix.length > 0) {
+            await db.write(async () => {
+              await db.batch(
+                ...toFix.map((rec: any) => rec.prepareUpdate((r: any) => {
+                  r.type = r.aiContext && String(r.aiContext).length > 0 ? 'ai_assessment' : 'manual_entry';
+                }))
+              );
+            });
+            console.log(`✅ [WMDB] Patched ${toFix.length} records via model fallback`);
+          }
+        } catch (e2) {
+          console.warn('⚠️ [WMDB] Model-level fallback also failed:', e2);
+        }
+      }
+    } else {
+      console.log('👍 [WMDB] No health_entries records require type patch');
+    }
+
+    // Also ensure notes defaults to empty string if NULL to match Convex required string
+    try {
+      await adapter.unsafeSqlQuery(
+        "UPDATE health_entries SET notes = '' WHERE notes IS NULL"
+      );
+      console.log('✅ [WMDB] Ensured notes has empty-string defaults for NULL values');
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Could not normalize notes defaults:', e);
+    }
+  } catch (err) {
+    console.warn('⚠️ [WMDB] ensureHealthEntriesType encountered an error (continuing):', err);
+  }
+}
+
 export default ensureUserProfilesSchema;
+
+// Ensure v10 columns exist on health_entries: isDeleted, lastEditedAt, editCount
+export async function ensureHealthEntriesV10Columns(db: Database | any) {
+  console.log('🔧 [WMDB] ensureHealthEntriesV10Columns called - verifying v10 columns...');
+  try {
+    const adapter: any = (db as any)?.adapter;
+    if (!adapter?.unsafeSqlQuery) {
+      console.warn('⚠️ [WMDB] No unsafeSqlQuery available - cannot add v10 columns');
+      return;
+    }
+
+    const existing = new Set<string>();
+    try {
+      const pragma: any = await adapter.unsafeSqlQuery("PRAGMA table_info('health_entries')");
+      const rows: any[] = Array.isArray(pragma)
+        ? pragma
+        : Array.isArray(pragma?.rows)
+          ? pragma.rows
+          : (pragma?.map ? pragma : []);
+      for (const row of rows) {
+        const name = row?.name ?? row?.[1] ?? row?.column_name;
+        if (typeof name === 'string') existing.add(name);
+      }
+      console.log('🧪 [WMDB] health_entries actual columns (pre-v10-heal):', Array.from(existing));
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Failed to read PRAGMA table_info(health_entries) before v10-heal:', e);
+    }
+
+    type Col = { name: string; type: 'INTEGER' | 'TEXT' };
+    const expected: Col[] = [
+      { name: 'isDeleted', type: 'INTEGER' },
+      { name: 'lastEditedAt', type: 'INTEGER' },
+      { name: 'editCount', type: 'INTEGER' },
+    ];
+
+    for (const col of expected) {
+      if (existing.size > 0 && existing.has(col.name)) continue;
+      const sql = `ALTER TABLE health_entries ADD COLUMN ${col.name} ${col.type}`;
+      try {
+        await adapter.unsafeSqlQuery(sql);
+        console.log(`🛠️ [WMDB] Added missing column health_entries.${col.name} (${col.type})`);
+      } catch (e) {
+        console.warn(`ℹ️ [WMDB] Could not add column health_entries.${col.name} (likely exists):`, String(e));
+      }
+    }
+
+    // Initialize defaults for new columns when missing values
+    try {
+      await adapter.unsafeSqlQuery("UPDATE health_entries SET editCount = COALESCE(editCount, 0)");
+      await adapter.unsafeSqlQuery("UPDATE health_entries SET lastEditedAt = COALESCE(lastEditedAt, 0)");
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Could not normalize defaults for v10 columns:', e);
+    }
+  } catch (err) {
+    console.warn('⚠️ [WMDB] ensureHealthEntriesV10Columns encountered an error (continuing):', err);
+  }
+}
+
+// Ensure core health_entries columns that were added directly to base schema (without a migration)
+// exist on legacy devices whose database was created before the columns were present.
+// This specifically fixes crashes during record updates: "Cannot read property 'type' of undefined".
+// NOTE: Adding columns dynamically is safe because WatermelonDB tolerates additive schema changes.
+export async function ensureHealthEntriesCoreColumns(db: Database | any) {
+  console.log('🔧 [WMDB] ensureHealthEntriesCoreColumns called - verifying core columns (type, notes, photos, createdBy, isSynced, syncError, createdAt, updatedAt)...');
+  try {
+    const adapter: any = (db as any)?.adapter;
+    if (!adapter?.unsafeSqlQuery) {
+      console.warn('⚠️ [WMDB] No unsafeSqlQuery available - cannot add core columns');
+      return;
+    }
+    const existing = new Set<string>();
+    try {
+      const pragma: any = await adapter.unsafeSqlQuery("PRAGMA table_info('health_entries')");
+      const rows: any[] = Array.isArray(pragma)
+        ? pragma
+        : Array.isArray(pragma?.rows)
+          ? pragma.rows
+          : (pragma?.map ? pragma : []);
+      for (const row of rows) {
+        const name = row?.name ?? row?.[1] ?? row?.column_name;
+        if (typeof name === 'string') existing.add(name);
+      }
+      console.log('🧪 [WMDB] health_entries actual columns (pre-core-heal):', Array.from(existing));
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Failed to read PRAGMA table_info(health_entries) before core-heal:', e);
+    }
+
+    type Col = { name: string; type: 'INTEGER' | 'TEXT' | 'BOOLEAN' };
+    // Map column types to SQLite types Watermelon expects.
+    const expected: Col[] = [
+      { name: 'type', type: 'TEXT' },
+      { name: 'notes', type: 'TEXT' },
+      { name: 'photos', type: 'TEXT' }, // stored as JSON string
+      { name: 'createdBy', type: 'TEXT' },
+      { name: 'isSynced', type: 'INTEGER' },
+      { name: 'syncError', type: 'TEXT' },
+      { name: 'createdAt', type: 'INTEGER' },
+      { name: 'updatedAt', type: 'INTEGER' },
+    ];
+
+    for (const col of expected) {
+      if (existing.size > 0 && existing.has(col.name)) continue;
+      const sql = `ALTER TABLE health_entries ADD COLUMN ${col.name} ${col.type}`;
+      try {
+        await adapter.unsafeSqlQuery(sql);
+        console.log(`🛠️ [WMDB] Added missing column health_entries.${col.name} (${col.type})`);
+      } catch (e) {
+        console.warn(`ℹ️ [WMDB] Could not add column health_entries.${col.name} (likely exists):`, String(e));
+      }
+    }
+
+    // Initialize defaults for newly added columns where appropriate
+    try {
+      if (!existing.has('type')) {
+        await adapter.unsafeSqlQuery("UPDATE health_entries SET type = CASE WHEN aiContext IS NOT NULL AND aiContext != '' THEN 'ai_assessment' ELSE 'manual_entry' END WHERE type IS NULL OR type = ''");
+        console.log('✅ [WMDB] Initialized type column defaults');
+      }
+      if (!existing.has('notes')) {
+        await adapter.unsafeSqlQuery("UPDATE health_entries SET notes = COALESCE(notes, '')");
+        console.log('✅ [WMDB] Initialized notes column defaults');
+      }
+      if (!existing.has('isSynced')) {
+        await adapter.unsafeSqlQuery("UPDATE health_entries SET isSynced = COALESCE(isSynced, 0)");
+        console.log('✅ [WMDB] Initialized isSynced column defaults');
+      }
+      if (!existing.has('createdAt')) {
+        await adapter.unsafeSqlQuery("UPDATE health_entries SET createdAt = COALESCE(createdAt, timestamp)");
+        console.log('✅ [WMDB] Initialized createdAt column defaults');
+      }
+      if (!existing.has('updatedAt')) {
+        await adapter.unsafeSqlQuery("UPDATE health_entries SET updatedAt = COALESCE(updatedAt, createdAt, timestamp)");
+        console.log('✅ [WMDB] Initialized updatedAt column defaults');
+      }
+    } catch (e) {
+      console.warn('⚠️ [WMDB] Could not initialize defaults for core columns:', e);
+    }
+  } catch (err) {
+    console.warn('⚠️ [WMDB] ensureHealthEntriesCoreColumns encountered an error (continuing):', err);
+  }
+}

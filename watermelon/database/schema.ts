@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export default appSchema({
-  version: 9,
+  version: 10,
   tables: [
     tableSchema({
       name: 'users',
@@ -79,7 +79,11 @@ export default appSchema({
         { name: 'isSynced', type: 'boolean' },
         { name: 'syncError', type: 'string', isOptional: true },
         { name: 'createdAt', type: 'number' },
-        { name: 'updatedAt', type: 'number' },
+        { name: 'updatedAt', type: 'number' }, 
+        // Soft delete and edit tracking (added in v10)
+        { name: 'isDeleted', type: 'boolean', isOptional: true },
+        { name: 'lastEditedAt', type: 'number', isOptional: true },
+        { name: 'editCount', type: 'number', isOptional: true },
       ],
     }),
     tableSchema({
