@@ -137,6 +137,10 @@ export default function History() {
             createdBy: entry.createdBy || "User",
             type: entry.type || "manual_entry",
             convexId: entry.convexId, // For de-duplication
+            // Include dedupe metadata so deleted/edited versions are handled correctly
+            isDeleted: entry.isDeleted === true,
+            lastEditedAt: entry.lastEditedAt || 0,
+            editCount: entry.editCount || 0,
           };
         });
 
@@ -151,13 +155,37 @@ export default function History() {
     fetchOfflineEntries();
   }, [database, currentUser?._id]); // Removed isOnline dependency - always load local cache
 
-  // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
+  // Choose between online and local caches similarly to Dashboard (prefer the larger, more up-to-date set)
   const allEntries = useMemo(() => {
-    // Prefer online if available; otherwise offline.
-    const base = (isOnline && allEntriesOnline) ? allEntriesOnline : offlineEntries;
-    if (!Array.isArray(base)) return base;
-    // Apply more robust dedupe that chooses best candidate among duplicates instead of first-seen.
-    const deduped = dedupeHealthEntries(base as any);
+    const onlineArr = Array.isArray(allEntriesOnline) ? allEntriesOnline : [];
+    const localArr = Array.isArray(offlineEntries) ? offlineEntries : [];
+
+    // Diagnostic log to match Dashboard-style visibility
+    console.log(`📈 [HISTORY MERGE] Online: ${onlineArr.length}, Local: ${localArr.length}`);
+
+  let base: any[] = [];
+    if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
+      if (localArr.length > onlineArr.length) {
+        console.log(`📈 [HISTORY MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
+        base = localArr;
+      } else {
+        console.log(`📈 [HISTORY MERGE RESULT] Using online entries: ${onlineArr.length}`);
+        base = onlineArr;
+      }
+    } else if (onlineArr.length > 0) {
+      console.log(`📈 [HISTORY MERGE RESULT] Using online entries: ${onlineArr.length}`);
+      base = onlineArr;
+    } else {
+      console.log(`📈 [HISTORY MERGE RESULT] Using local entries: ${localArr.length}`);
+      base = localArr;
+    }
+
+  if (!Array.isArray(base)) return base as any;
+
+  // Never show locally or remotely deleted entries in History
+  const nonDeletedBase = (base as any[]).filter(e => e && e.isDeleted !== true);
+
+  const deduped = dedupeHealthEntries(nonDeletedBase as any);
     if (deduped.length !== base.length) {
       console.log(`🧹 [HISTORY DEDUPE] Reduced entries ${base.length} -> ${deduped.length}`);
       const dups = analyzeDuplicates(base as any);
@@ -183,10 +211,10 @@ export default function History() {
     );
   }, [isOnline, currentUser?._id, allEntriesOnline, offlineEntries]);
 
-  const handleViewEntryDetails = (entryId: string) => {
+  const handleViewEntryDetails = (entry: any) => {
     router.push({
       pathname: "/tracker/log-details",
-      params: { entryId },
+      params: { entryId: entry?._id, convexId: entry?.convexId || "" },
     });
   };
 
@@ -562,7 +590,7 @@ export default function History() {
                     <TouchableOpacity
                       key={entry._id}
                       style={styles.entryItem}
-                      onPress={() => handleViewEntryDetails(entry._id)}
+                      onPress={() => handleViewEntryDetails(entry)}
                     >
                       <Ionicons
                         name={

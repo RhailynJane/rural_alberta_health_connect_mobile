@@ -161,6 +161,7 @@ export default function LogDetails() {
   const { isOnline } = useNetworkStatus();
   const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
+  const [offlineTried, setOfflineTried] = useState(false);
 
   // Metadata state to track both IDs explicitly
   const [entryMetadata, setEntryMetadata] = useState<{
@@ -187,88 +188,82 @@ export default function LogDetails() {
     convexEntryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
 
-  // Offline query from WatermelonDB
+  // Offline query from WatermelonDB (always attempt so we can fallback or show deleted state)
   useEffect(() => {
-      if ((entryId || convexIdParam) && (!isOnline || !isConvexId)) {
-        // Query WatermelonDB if:
-        // 1. We're offline, OR
-        // 2. We're online but the entryId is a WatermelonDB ID (not Convex format)
-      const loadOfflineEntry = async () => {
-        try {
-          const healthCollection = database.get("health_entries");
-          let localEntry: any = null;
-          
-            // Try to find by WatermelonDB ID first
-            if (entryId && !isConvexId) {
-            try {
-              localEntry = await healthCollection.find(entryId);
-            } catch {
-              // Not found by WatermelonDB ID, try convexId
-            }
-          }
-          
-            // If not found, try querying by convexId field
-          if (!localEntry) {
-            const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
-            if (convexLookup) {
-            const results = await healthCollection.query(
-              Q.where('convexId', convexLookup)
-            ).fetch();
+    if (!(entryId || convexIdParam)) return;
+    const loadOfflineEntry = async () => {
+      try {
+        const healthCollection = database.get('health_entries');
+        let localEntry: any = null;
+
+        // Try by WatermelonDB id first (when entryId is a local id)
+        if (entryId && !isConvexId) {
+          try {
+            localEntry = await healthCollection.find(entryId);
+          } catch {}
+        }
+
+        // Fallback: lookup by convexId field
+        if (!localEntry) {
+          const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
+          if (convexLookup) {
+            const results = await healthCollection.query(Q.where('convexId', convexLookup)).fetch();
             if (results.length > 0) {
               localEntry = results[0];
             }
-            }
           }
-          
-          if (!localEntry) {
-            console.error(`Failed to find entry with id(s): localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
-            setOfflineEntry(null);
-            return;
-          }
-          
-          // Map WatermelonDB entry to Convex format
-          const entryData = localEntry as any;
-          
-          // Safely handle photos - it's already parsed by the @json decorator
-          let photos: string[] = [];
-          try {
-            if (entryData.photos) {
-              photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
-            }
-          } catch {
-            photos = [];
-          }
-          
-          setOfflineEntry({
-            _id: localEntry.id,
-            _creationTime: entryData.createdAt || Date.now(),
-            userId: entryData.userId,
-            timestamp: entryData.timestamp,
-            severity: entryData.severity,
-            type: entryData.type,
-            symptoms: entryData.symptoms || "",
-            category: entryData.category || "",
-            notes: entryData.notes || "",
-            photos: photos,
-            aiContext: entryData.aiContext || null,
-            convexId: entryData.convexId || null,  // Include the convexId field
-            createdBy: entryData.createdBy || "User",
-            date: entryData.date || "",
-          });
-
-          // Set metadata for tracking both IDs
-          setEntryMetadata({
-            watermelonId: localEntry.id,
-            convexId: entryData.convexId || null
-          });
-        } catch (error) {
-          console.error("Failed to load offline entry:", error);
-          setOfflineEntry(null);
         }
-      };
-      loadOfflineEntry();
-    }
-  }, [isOnline, entryId, database, isConvexId, convexIdParam]);
+
+        if (!localEntry) {
+          console.warn(`🔎 [LOG-DETAILS] No local record found for localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
+          setOfflineEntry(null);
+          return;
+        }
+
+        // Map WatermelonDB entry to a Convex-like shape (include dedupe metadata)
+        const entryData = localEntry as any;
+        let photos: string[] = [];
+        try {
+          if (entryData.photos) {
+            photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
+          }
+        } catch {
+          photos = [];
+        }
+
+        setOfflineEntry({
+          _id: localEntry.id,
+          _creationTime: entryData.createdAt || Date.now(),
+          userId: entryData.userId,
+          timestamp: entryData.timestamp,
+          severity: entryData.severity,
+          type: entryData.type,
+          symptoms: entryData.symptoms || '',
+          category: entryData.category || '',
+          notes: entryData.notes || '',
+          photos,
+          aiContext: entryData.aiContext || null,
+          convexId: entryData.convexId || null,
+          createdBy: entryData.createdBy || 'User',
+          date: entryData.date || '',
+          isDeleted: entryData.isDeleted === true,
+          lastEditedAt: entryData.lastEditedAt || 0,
+          editCount: entryData.editCount || 0,
+        });
+
+        setEntryMetadata({
+          watermelonId: localEntry.id,
+          convexId: entryData.convexId || null,
+        });
+      } catch (error) {
+        console.error('Failed to load offline entry:', error);
+        setOfflineEntry(null);
+      } finally {
+        setOfflineTried(true);
+      }
+    };
+    loadOfflineEntry();
+  }, [entryId, convexIdParam, isConvexId, database]);
 
   // Populate metadata when online entry is loaded
   useEffect(() => {
@@ -301,8 +296,11 @@ export default function LogDetails() {
     }
   }, [entryOnline, isOnline, isConvexId, database]);
 
-  // Use online entry if available, otherwise offline entry
-  const entry = isOnline ? entryOnline : offlineEntry;
+  // Prefer online entry when available, but fallback to offline if missing
+  const resolvedEntry = (entryOnline as any) || offlineEntry;
+  const isDeletedEntry = resolvedEntry?.isDeleted === true;
+  const isLoadingOnline = isOnline && isConvexId && typeof entryOnline === 'undefined';
+  const stillLoading = isLoadingOnline || (!offlineTried && offlineEntry === null);
 
   const getSeverityColor = (severity: number) => {
     if (severity >= 9) return "#DC3545";
@@ -344,11 +342,11 @@ export default function LogDetails() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const { watermelonId, convexId } = entryMetadata;
+  const { watermelonId, convexId } = entryMetadata;
 
       if (!isOnline) {
         // OFFLINE MODE: Mark for deletion using rescue duplicate strategy
-        const idToUse = watermelonId || entry._id;
+        const idToUse = watermelonId || resolvedEntry?._id;
         if (!idToUse) {
           throw new Error('Unable to identify entry for deletion');
         }
@@ -385,6 +383,28 @@ export default function LogDetails() {
               });
               console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
             }
+
+            // Also mark all other local duplicates with the same convexId as deleted
+            const now2 = Date.now();
+            const cvx = (localEntry as any).convexId || entryMetadata.convexId;
+            if (cvx) {
+              const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
+              let updated = 0;
+              for (const rec of dupes as any[]) {
+                if ((rec as any).id === (localEntry as any).id) continue;
+                try {
+                  await (rec as any).update((e2: any) => {
+                    e2.isDeleted = true;
+                    e2.isSynced = false;
+                    e2.lastEditedAt = now2;
+                  });
+                  updated++;
+                } catch (e) {
+                  console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', (rec as any)?.id, e);
+                }
+              }
+              if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
+            }
           },
           10000,
           'deleteHealthEntryOffline'
@@ -403,19 +423,37 @@ export default function LogDetails() {
             throw new Error('Failed to delete entry from server. Please try again.');
           }
         }
-        if (watermelonId) {
-          await safeWrite(
-            database,
-            async () => {
-              const healthCollection = database.get('health_entries');
+
+        // Clean up ALL local duplicates for this entry (same convexId)
+        await safeWrite(
+          database,
+          async () => {
+            const healthCollection = database.get('health_entries');
+            if (convexId) {
+              const dupes = await healthCollection.query(Q.where('convexId', convexId)).fetch();
+              console.log(`🧽 [ONLINE DELETE] Removing ${dupes.length} local duplicates for convexId=${convexId}`);
+              for (const rec of dupes as any[]) {
+                try {
+                  await (rec as any).destroyPermanently();
+                } catch (e) {
+                  console.warn('⚠️ [ONLINE DELETE] Failed to destroy duplicate, trying soft-delete', (rec as any)?.id, e);
+                  await (rec as any).update((e2: any) => {
+                    e2.isDeleted = true;
+                    e2.isSynced = true; // matches server state
+                    e2.lastEditedAt = Date.now();
+                  });
+                }
+              }
+            } else if (watermelonId) {
+              // Fallback: remove the current local record
               const localEntry = await healthCollection.find(watermelonId);
               await localEntry.destroyPermanently();
-            },
-            10000,
-            'deleteHealthEntryOnline'
-          );
-          console.log('✅ Deleted from WatermelonDB:', watermelonId);
-        }
+              console.log('✅ Deleted from WatermelonDB (single):', watermelonId);
+            }
+          },
+          15000,
+          'deleteHealthEntryOnlineCleanup'
+        );
       }
       setDeleteSuccess(true);
       setTimeout(() => {
@@ -430,7 +468,32 @@ export default function LogDetails() {
     }
   };
 
-  if (!entry) {
+  if (!resolvedEntry) {
+    if (stillLoading) {
+      return (
+        <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
+          <CurvedBackground style={{ flex: 1 }}>
+            <DueReminderBanner topOffset={120} />
+            <CurvedHeader
+              title="Tracker - Entry Details"
+              height={150}
+              showLogo={true}
+              screenType="signin"
+              bottomSpacing={0}
+              showNotificationBell={true}
+            />
+            <View style={styles.contentArea}>
+              <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Loading entry details...</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </CurvedBackground>
+          <BottomNavigation />
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground style={{ flex: 1 }}>
@@ -446,7 +509,11 @@ export default function LogDetails() {
           <View style={styles.contentArea}>
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading entry details...</Text>
+                <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                <Text style={[styles.loadingText, { marginTop: 8 }]}>Entry not found or was deleted.</Text>
+                <TouchableOpacity style={[{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#2A7DE1' }]} onPress={() => router.back()}>
+                  <Text style={{ color: 'white', fontFamily: FONTS.BarlowSemiCondensed }}>Go Back</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -456,7 +523,7 @@ export default function LogDetails() {
     );
   }
 
-  const dateTime = formatDateTime(entry.timestamp);
+  const dateTime = formatDateTime(resolvedEntry.timestamp);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
@@ -489,26 +556,36 @@ export default function LogDetails() {
                     <Text style={styles.dateText}>{dateTime.date}</Text>
                     <Text style={styles.timeText}>{dateTime.time}</Text>
                   </View>
-                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(entry.severity) }]}>
+                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(resolvedEntry.severity) }]}>
                     <Text style={styles.severityBadgeText}>
-                      {getSeverityText(entry.severity)} ({entry.severity}/10)
+                      {getSeverityText(resolvedEntry.severity)} ({resolvedEntry.severity}/10)
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.typeContainer}>
                   <Ionicons
-                    name={entry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
+                    name={resolvedEntry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
                     size={16}
                     color="#666"
                   />
                   <Text style={styles.typeText}>
-                    {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
+                    {resolvedEntry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {resolvedEntry.createdBy}
                   </Text>
                 </View>
 
+                {isDeletedEntry && (
+                  <View style={[styles.detailCard, { backgroundColor: '#FFF5F5', borderColor: '#F3C7C7' }] }>
+                    <View style={styles.cardHeader}>
+                      <Ionicons name="trash" size={20} color="#DC3545" />
+                      <Text style={[styles.cardTitle, { color: '#DC3545' }]}>This entry was deleted</Text>
+                    </View>
+                    <Text style={styles.cardContent}>This entry has been marked as deleted and is kept locally for sync. You can go back to the list.</Text>
+                  </View>
+                )}
+
                 {/* Edit/Delete Actions - Only for Manual Entries */}
-                {entry.type !== "ai_assessment" && (
+                {!isDeletedEntry && resolvedEntry.type !== "ai_assessment" && (
                   <View style={styles.actionButtonsContainer}>
                     <TouchableOpacity
                       style={styles.editButton}
@@ -517,9 +594,9 @@ export default function LogDetails() {
                           pathname: '/(tabs)/tracker/add-health-entry',
                           params: {
                             mode: 'edit',
-                            // Always pass Convex ID - edit loader will query by convexId field and score duplicates
-                            entryId: entry._id,
-                            convexId: entry._id,
+                            // Pass both local and convex identifiers so the editor can resolve correctly
+                            entryId: entryMetadata.watermelonId || resolvedEntry._id,
+                            convexId: entryMetadata.convexId || resolvedEntry.convexId || resolvedEntry._id,
                           }
                         });
                       }}
@@ -546,60 +623,60 @@ export default function LogDetails() {
                   <Ionicons name="medical" size={20} color="#2A7DE1" />
                   <Text style={styles.cardTitle}>Symptoms & Description</Text>
                 </View>
-                <Text style={styles.cardContent}>{entry.symptoms}</Text>
+                <Text style={styles.cardContent}>{resolvedEntry.symptoms}</Text>
               </View>
 
               {/* Category */}
-              {entry.category && (
+              {resolvedEntry.category && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="pricetag" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Category</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.category}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.category}</Text>
                 </View>
               )}
 
               {/* Duration */}
-              {entry.duration && (
+              {resolvedEntry.duration && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="time" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Duration</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.duration}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.duration}</Text>
                 </View>
               )}
 
               {/* AI Assessment - split into cards like assessment-results */}
-              {entry.aiContext && (
+              {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(entry.aiContext)}
+                  {renderAssessmentCards(resolvedEntry.aiContext)}
                 </View>
               )}
 
               {/* Notes */}
-              {entry.notes && (
+              {resolvedEntry.notes && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="document-text" size={20} color="#2A7DE1" />
                     <Text style={styles.cardTitle}>Additional Notes</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.notes}</Text>
+                  <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>
               )}
 
               {/* Photos */}
-              {entry.photos && entry.photos.length > 0 && (
+              {resolvedEntry.photos && resolvedEntry.photos.length > 0 && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
                     <Ionicons name="camera" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Photos ({entry.photos.length})</Text>
+                    <Text style={styles.cardTitle}>Photos ({resolvedEntry.photos.length})</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.photosContainer}>
-                      {entry.photos.map((photo: string, index: number) => (
+                      {resolvedEntry.photos.map((photo: string, index: number) => (
                         <View key={index} style={styles.photoItem}>
                           <Image source={{ uri: photo }} style={styles.photo} />
                           <Text style={styles.photoLabel}>Photo {index + 1}</Text>
@@ -619,19 +696,19 @@ export default function LogDetails() {
                 <View style={styles.techDetails}>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Entry ID:</Text>
-                    <Text style={styles.techValue}>{entry._id}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry._id}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Timestamp:</Text>
-                    <Text style={styles.techValue}>{entry.timestamp}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.timestamp}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Date Key:</Text>
-                    <Text style={styles.techValue}>{entry.date}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.date}</Text>
                   </View>
                   <View style={styles.techRow}>
                     <Text style={styles.techLabel}>Entry Type:</Text>
-                    <Text style={styles.techValue}>{entry.type || "manual_entry"}</Text>
+                    <Text style={styles.techValue}>{resolvedEntry.type || "manual_entry"}</Text>
                   </View>
                 </View>
               </View>

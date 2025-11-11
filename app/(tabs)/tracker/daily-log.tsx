@@ -269,13 +269,16 @@ export default function DailyLog() {
   const todaysEntries = useMemo(() => {
     const base = (isOnline && todaysEntriesOnline) ? todaysEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
-    
-      // Apply deduplication using the centralized utility
-      const deduped = dedupeHealthEntries(base as any);
-    
+
+    // Exclude any entries marked deleted (locally or from server)
+    const nonDeletedBase = (base as any[]).filter(e => e && e.isDeleted !== true);
+
+    // Apply deduplication using the centralized utility
+    const deduped = dedupeHealthEntries(nonDeletedBase as any);
+
     // Sort entries by timestamp desc (most recent first)
     deduped.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
-    
+
     return deduped;
   }, [isOnline, todaysEntriesOnline, offlineEntries]);
 
