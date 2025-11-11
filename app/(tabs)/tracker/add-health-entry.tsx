@@ -279,40 +279,8 @@ export default function AddHealthEntry() {
     }
   };
 
-  // Take photo with camera
-  const takePhoto = async () => {
-    try {
-      // Check photo limit (combine both online and offline photos)
-      if (photos.length + localPhotoUris.length >= 3) {
-        setErrorModalMessage("You can only add up to 3 photos per health entry.");
-        setErrorModalVisible(true);
-        return;
-      }
-
-      // Request permissions
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        setErrorModalMessage("Sorry, we need camera permissions to take photos.");
-        setErrorModalVisible(true);
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const takenPhoto = result.assets[0];
-        await uploadImage(takenPhoto.uri);
-      }
-    } catch (error) {
-      console.error("Error taking photo:", error);
-      setErrorModalMessage("Failed to take photo. Please try again.");
-      setErrorModalVisible(true);
-    }
-  };
+  // Camera capture option intentionally removed (requested: remove "Take Photo" UX).
+  // Only gallery selection via pickImage is supported now.
 
   // Upload image to Convex storage (online) or save locally (offline)
   const uploadImage = async (imageUri: string) => {
@@ -1094,28 +1062,7 @@ export default function AddHealthEntry() {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.photoButton,
-                      (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonDisabled,
-                    ]}
-                    onPress={takePhoto}
-                    disabled={uploading || photos.length + localPhotoUris.length >= 3}
-                  >
-                    <Ionicons
-                      name="camera-outline"
-                      size={20}
-                      color={uploading || photos.length + localPhotoUris.length >= 3 ? "#999" : "#2A7DE1"}
-                    />
-                    <Text
-                      style={[
-                        styles.photoButtonText,
-                        (uploading || photos.length + localPhotoUris.length >= 3) && styles.photoButtonTextDisabled,
-                      ]}
-                    >
-                      Take Photo
-                    </Text>
-                  </TouchableOpacity>
+                  {/* Camera (Take Photo) button removed per requirement */}
                 </View>
 
                 {/* Uploading Indicator */}

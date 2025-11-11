@@ -379,20 +379,121 @@
   - Better user engagement and feedback collection
   - Enhanced user experience with in-app documentation
 
-  ### Edit and Delete feature for Manual Entry
-  ## Edit Bug (Offline and Online)
-  ## Delete Bug (Offline and Online)
+### ✅ Bug #10: Edit and Delete feature for Manual Entry
+- **Reporter:** Developer Testing
+- **Test Case:** Manual Entry CRUD operations
+- **Description:** Edit and Delete operations for health tracker entries experiencing issues in both offline and online modes
+- **Priority:** P2
+- **Status:** ✅ **FIXED**
+
+#### Delete Bug (Offline and Online)
+- **Problem:** Offline deletions were not propagating to the server after reconnecting
+  - Entries deleted while offline would reappear after coming back online
+  - Tombstone registry (fallback deletion tracking) was never processed during sync
+  - Server entries remained active even though locally marked as deleted
+  - Missing local record handling could crash during offline delete attempts
+
+- **Root Cause Analysis:**
+  1. **Sync Hook Gap:** `useSyncOnOnline` filtered out tombstoned entries from sync but never executed server-side deletion
+  2. **Missing Tombstone Processing:** No mechanism to process accumulated tombstones when reconnecting
+  3. **Edge Case Vulnerability:** Offline delete failed when local WatermelonDB record was missing but convexId existed
+  4. **Incomplete Deletion Pipeline:** Offline delete → tombstone → [missing step] → server delete
+
+- **Solution Implemented:**
+  - **Enhanced Sync Pipeline (`app/hooks/useSyncOnOnline.ts`):**
+    - Added `processTombstones()` function that runs **before** syncing unsynced entries
+    - Classifies tombstoned IDs into convex-backed (server) vs local-only entries
+    - For convex IDs: calls `deleteHealthEntry` mutation to remove from server
+    - For convex IDs: mirrors deletion locally by marking all duplicates as `isDeleted=true, isSynced=true`
+    - For local-only IDs: purges records permanently from WatermelonDB
+    - Clears processed tombstones from AsyncStorage registry after successful deletion
+  
+  - **Hardened Offline Delete (`app/(tabs)/tracker/log-details.tsx`):**
+    - Added null-safe guard when local record missing during offline delete
+    - If `convexId` exists but local record absent: immediately tombstone the convexId
+    - Skips local mutation attempt to prevent errors
+    - Prevents duplicate deletion crashes when entry already removed
+  
+  - **Updated Documentation (`docs/offline-first/OFFLINE_IMPLEMENTATION_COMPLETE.md`):**
+    - Added "Tombstones (offline deletes) processing" section
+    - Documented complete deletion flow: offline soft delete → tombstone → reconnect → server delete → cleanup
+
+- **Technical Details:**
+  - Tombstone storage: `@health_entry_tombstones_v1` in AsyncStorage
+  - Tombstone format: Set of IDs (convexId preferred, fallback to local id)
+  - Server deletion: Uses existing `api.healthEntries.deleteHealthEntry` mutation
+  - Local mirror: Updates all duplicate entries with matching convexId
+  - Cleanup: `removeTombstones()` clears processed entries from registry
+
+#### Edit Bug Status
+- **Status:** ✅ **FIXED**
+- **Description:** Health entry edits made while offline now sync correctly to server when reconnecting
+
+- **Root Cause Analysis:**
+  1. **Missing Edit Detection:** Sync logic didn't differentiate between newly created entries and edited entries
+  2. **Duplicate Creation Risk:** Edited entries with `convexId` were creating duplicates on server instead of updating existing records
+  3. **Incomplete Sync Flow:** No mechanism to detect and sync offline edits (`isSynced=false` with existing `convexId`)
+
+- **Solution Implemented:**
+
+  **1. Smart Sync Logic (`app/hooks/useSyncOnOnline.ts`):**
+  - Enhanced sync to detect existing server entries via `convexId` field
+  - Branched sync path: entries WITH `convexId` → UPDATE operation, entries WITHOUT → INSERT operation
+  - Uses `updateHealthEntry` mutation for offline-edited entries (line ~302-315)
+  - Uses `logManualEntry` or `logAIAssessment` for new entries (line ~318-346)
+  - Prevents duplicate creation by checking `serverId` before choosing mutation
+
+  **2. Offline Edit Handling (`app/(tabs)/tracker/add-health-entry.tsx`):**
+  - Edit mode detects and loads existing entry by ID or `convexId` (line ~124-228)
+  - Offline edits update local WatermelonDB record with `isSynced=false` flag (line ~684, ~711, ~732)
+  - Preserves `convexId` link to server record during offline edits
+  - Multi-stage resilience: primary update → minimal fallback → duplicate rescue strategy
+  - Tracks edit metadata: `lastEditedAt` timestamp and `editCount` increment
+
+  **3. Edit Metadata Tracking:**
+  - `lastEditedAt`: Timestamp of most recent edit (used for conflict resolution)
+  - `editCount`: Number of edits made to entry (helps identify newest version)
+  - `isSynced`: Boolean flag marking entries needing server sync
+  - `convexId`: Server record ID preserved across edits
+
+- **Technical Flow:**
+  ```
+  User edits entry offline
+    ↓
+  Load entry from WatermelonDB by ID/convexId
+    ↓
+  Update local record with new data
+    ↓
+  Set isSynced=false, increment editCount, update lastEditedAt
+    ↓
+  Preserve convexId for server linkage
+    ↓
+  When online, useSyncOnOnline detects unsynced entries
+    ↓
+  Check if convexId exists:
+    - YES → Call updateHealthEntry (server UPDATE)
+    - NO → Call logManualEntry (server INSERT)
+    ↓
+  Mark isSynced=true after successful sync
+    ↓
+  Server and local database now consistent
+  ```
+
+- **Code Locations:**
+  - Sync logic: `app/hooks/useSyncOnOnline.ts` lines ~302-360
+  - Edit form: `app/(tabs)/tracker/add-health-entry.tsx` lines ~124-228 (loader), ~650-760 (offline save)
+  - Schema: `convex/schema.ts` (health_entries table with convexId, isSynced, editCount, lastEditedAt)
 
 ---
 
 ## Summary Statistics
 
-- **Total Bugs Reported:** 23
+- **Total Bugs Reported:** 24
 - **Critical (P1):** 2 fixed, 0 open ✅
-- **High (P2):** 4 fixed, 0 open ✅
+- **High (P2):** 5 fixed, 0 open ✅
 - **Medium/Low (P3-P4):** 5 fixed, 0 open ✅
 - **Additional Issues:** 6 closed (4 fixed, 2 working as designed, 1 added to FAQ), 3 open
-- **Fixed This Sprint:** 14
+- **Fixed This Sprint:** 15
 - **Closed as Expected Behavior:** 2
 - **Enhancements Completed:** 1
 
