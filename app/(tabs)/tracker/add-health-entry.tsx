@@ -1062,7 +1062,7 @@ export default function AddHealthEntry() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Camera (Take Photo) button removed per requirement */}
+                  {/* Camera (Take Photo) button removed*/}
                 </View>
 
                 {/* Uploading Indicator */}
