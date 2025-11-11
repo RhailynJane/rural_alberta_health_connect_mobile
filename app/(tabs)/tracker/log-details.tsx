@@ -8,9 +8,11 @@ import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { ensureHealthEntriesCoreColumns, ensureHealthEntriesV10Columns } from "../../../watermelon/database/selfHeal";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import HealthEntry from "../../../watermelon/models/HealthEntry";
 import { safeWrite } from "../../../watermelon/utils/safeWrite";
+import { addTombstone, isEntryTombstoned, listTombstones, shouldUseTombstoneFallback } from "../../../watermelon/utils/tombstones";
 import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -269,6 +271,7 @@ export default function LogDetails() {
         photos = [];
       }
 
+      const tombstoneSet = await listTombstones();
       setOfflineEntry({
         _id: localEntry.id,
         _creationTime: entryData.createdAt || Date.now(),
@@ -284,7 +287,7 @@ export default function LogDetails() {
         convexId: entryData.convexId || null,
         createdBy: entryData.createdBy || 'User',
         date: entryData.date || '',
-        isDeleted: entryData.isDeleted === true,
+        isDeleted: entryData.isDeleted === true || isEntryTombstoned({ convexId: entryData.convexId, _id: localEntry.id }, tombstoneSet),
         lastEditedAt: entryData.lastEditedAt || 0,
         editCount: entryData.editCount || 0,
       });
@@ -429,72 +432,109 @@ export default function LogDetails() {
   const { watermelonId, convexId } = entryMetadata;
 
       if (!isOnline) {
-        // OFFLINE MODE: Mark for deletion using rescue duplicate strategy
+        // OFFLINE MODE: Prefer soft delete, but if environment lacks mutation support use tombstone fallback
         const idToUse = watermelonId || resolvedEntry?._id;
         if (!idToUse) {
           throw new Error('Unable to identify entry for deletion');
         }
-        await safeWrite(
-          database,
-          async () => {
-            const healthCollection = database.get('health_entries');
-            const localEntry = await healthCollection.find(idToUse) as HealthEntry;
-            try {
-              await localEntry.update((e: any) => {
-                e.isDeleted = true;
-                e.isSynced = false;
-                e.lastEditedAt = Date.now();
-              });
-              console.log('📴 Entry soft-deleted offline');
-            } catch (primaryErr) {
-              console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
-              const now = Date.now();
-              const deletedDuplicate = await healthCollection.create((newRec: any) => {
-                newRec.userId = localEntry.userId;
-                newRec.convexId = localEntry.convexId;
-                newRec.date = localEntry.date;
-                newRec.timestamp = now;
-                newRec.symptoms = localEntry.symptoms;
-                newRec.severity = localEntry.severity;
-                newRec.notes = localEntry.notes || '';
-                newRec.photos = localEntry.photos;
-                newRec.type = localEntry.type || 'manual_entry';
-                newRec.isSynced = false;
-                newRec.createdBy = localEntry.createdBy;
-                newRec.lastEditedAt = now;
-                newRec.editCount = (localEntry.editCount || 0) + 1;
-                newRec.isDeleted = true;
-              });
-              console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
-            }
-
-            // Also mark all other local duplicates with the same convexId as deleted
-            const now2 = Date.now();
-            const cvx = localEntry.convexId || entryMetadata.convexId;
-            if (cvx) {
-              const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
-              let updated = 0;
-              for (const rec of dupes) {
-                const healthRec = rec as HealthEntry;
-                if (healthRec.id === localEntry.id) continue;
-                try {
-                  await healthRec.update((e2: any) => {
-                    e2.isDeleted = true;
-                    e2.isSynced = false;
-                    e2.lastEditedAt = now2;
-                  });
-                  updated++;
-                } catch (e) {
-                  console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', healthRec.id, e);
+        const fallback = shouldUseTombstoneFallback(database);
+        if (fallback) {
+          // Tombstone path – do NOT touch Watermelon rows (prevents TypeError crash)
+          const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Tombstoned entry (no mutation environment):', preferred);
+        } else {
+          // Attempt normal soft-delete (with rescue duplicate if needed)
+          try {
+            await ensureHealthEntriesCoreColumns(database as any);
+            await ensureHealthEntriesV10Columns(database as any);
+          } catch {}
+          let anyWriteSucceeded = false;
+          await safeWrite(
+            database,
+            async () => {
+              const healthCollection = database.get('health_entries');
+              let localEntry: HealthEntry | null = null;
+              try {
+                localEntry = await healthCollection.find(idToUse) as HealthEntry;
+              } catch (e) {
+                console.warn('⚠️ [OFFLINE DELETE] Local record not found by id, will use tombstone if possible:', idToUse);
+                if (convexId) {
+                  const preferred = convexId;
+                  await addTombstone(preferred);
+                  console.log('🪦 [OFFLINE DELETE] Added tombstone for missing local record:', preferred);
+                  anyWriteSucceeded = true; // treat as handled
+                  return; // skip the rest of the write block
                 }
+                // If no convexId either, nothing to mutate; let outer fallback handle
+                throw e;
               }
-              if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
-            }
-          },
-          10000,
-          'deleteHealthEntryOffline'
-        );
-        console.log('📴 Entry marked for deletion (will sync when online)');
+              try {
+                await localEntry.update((e: any) => {
+                  e.isDeleted = true;
+                  e.isSynced = false;
+                  e.lastEditedAt = Date.now();
+                });
+                console.log('📴 Entry soft-deleted offline');
+                anyWriteSucceeded = true;
+              } catch (primaryErr) {
+                console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
+                const now = Date.now();
+                const deletedDuplicate = await healthCollection.create((newRec: any) => {
+                  newRec.userId = localEntry.userId;
+                  newRec.convexId = localEntry.convexId;
+                  newRec.date = localEntry.date;
+                  newRec.timestamp = now;
+                  newRec.symptoms = localEntry.symptoms;
+                  newRec.severity = localEntry.severity;
+                  newRec.notes = localEntry.notes || '';
+                  newRec.photos = localEntry.photos;
+                  newRec.type = localEntry.type || 'manual_entry';
+                  newRec.isSynced = false;
+                  newRec.createdBy = localEntry.createdBy;
+                  newRec.lastEditedAt = now;
+                  newRec.editCount = (localEntry.editCount || 0) + 1;
+                  newRec.isDeleted = true;
+                });
+                console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
+                anyWriteSucceeded = true;
+              }
+
+              // Also mark duplicates
+              const now2 = Date.now();
+              const cvx = (localEntry as any)?.convexId || entryMetadata.convexId;
+              if (cvx) {
+                const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
+                let updated = 0;
+                for (const rec of dupes) {
+                  const healthRec = rec as HealthEntry;
+                  if (localEntry && healthRec.id === (localEntry as any).id) continue;
+                  try {
+                    await healthRec.update((e2: any) => {
+                      e2.isDeleted = true;
+                      e2.isSynced = false;
+                      e2.lastEditedAt = now2;
+                    });
+                    updated++;
+                    anyWriteSucceeded = true;
+                  } catch (e) {
+                    console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', healthRec.id, e);
+                  }
+                }
+                if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
+              }
+            },
+            10000,
+            'deleteHealthEntryOffline'
+          );
+          if (!anyWriteSucceeded) {
+            // Fall back to tombstone if everything failed
+            const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Fallback tombstone after failed mutations:', preferred);
+          }
+        }
+        console.log('📴 Entry marked for deletion (soft or tombstone) – will sync when online');
       } else {
         // ONLINE MODE
         if (convexId && currentUser) {

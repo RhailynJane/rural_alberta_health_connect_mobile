@@ -21,6 +21,8 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { analyzeDuplicates, dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../../watermelon/utils/filterActiveHealthEntries";
+import { listTombstones } from "../../../watermelon/utils/tombstones";
 import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -36,6 +38,7 @@ export default function History() {
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
   const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -82,7 +85,7 @@ export default function History() {
   );
 
   // Offline fetch function reused across focus & events
-  const fetchOfflineEntries = async () => {
+  const fetchOfflineEntries = React.useCallback(async () => {
     try {
       let uid: string | undefined = currentUser?._id as any;
       if (!uid) {
@@ -131,14 +134,17 @@ export default function History() {
         lastEditedAt: entry.lastEditedAt || 0,
         editCount: entry.editCount || 0,
       }));
-      setOfflineEntries(mapped);
+      const tombstoneSet = await listTombstones();
+      setTombstones(tombstoneSet);
+  const filtered = filterActiveHealthEntries(mapped, tombstoneSet);
+  setOfflineEntries(filtered);
     } catch (error) {
       console.error("Error fetching offline entries:", error);
       setOfflineEntries([]);
     }
-  };
+  }, [database, currentUser?._id]);
 
-  useEffect(() => { fetchOfflineEntries(); }, [database, currentUser?._id]);
+  useEffect(() => { fetchOfflineEntries(); }, [fetchOfflineEntries]);
 
   // Refresh when screen gains focus or entry changed
   useFocusEffect(
@@ -146,7 +152,7 @@ export default function History() {
       const unsub = healthEntriesEvents.subscribe(() => fetchOfflineEntries());
       fetchOfflineEntries();
       return () => unsub();
-    }, [currentUser?._id])
+    }, [fetchOfflineEntries])
   );
 
   // Choose between online and local caches similarly to Dashboard (prefer the larger, more up-to-date set)
@@ -177,7 +183,7 @@ export default function History() {
   if (!Array.isArray(base)) return base as any;
 
   // Never show locally or remotely deleted entries in History
-  const nonDeletedBase = (base as any[]).filter(e => e && e.isDeleted !== true);
+  const nonDeletedBase = filterActiveHealthEntries(base as any[], tombstones);
 
   const deduped = dedupeHealthEntries(nonDeletedBase as any);
     if (deduped.length !== base.length) {
@@ -188,7 +194,7 @@ export default function History() {
       }
     }
     return deduped;
-  }, [isOnline, allEntriesOnline, offlineEntries]);
+  }, [isOnline, allEntriesOnline, offlineEntries, tombstones]);
 
   // Status log to verify mode and counts
   useEffect(() => {

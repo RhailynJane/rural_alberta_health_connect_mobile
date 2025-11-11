@@ -17,6 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { analyzeDuplicates, dedupeHealthEntries } from "../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../watermelon/utils/filterActiveHealthEntries";
+import { listTombstones } from "../../watermelon/utils/tombstones";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -238,6 +240,8 @@ export default function Dashboard() {
     [user, cachedUser]
   );
   // Merge local and online results to avoid temporary regressions when coming online
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
+  useEffect(() => { (async () => { setTombstones(await listTombstones()); })(); }, [isOnline]);
   const displayedWeeklyEntries = useMemo(() => {
     const onlineRaw = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
     // Ensure online entries carry deletion metadata (fallbacks if missing)
@@ -258,8 +262,8 @@ export default function Dashboard() {
     }));
 
     // Filter out deleted entries before dedupe/merge for consistent counts
-    const filteredOnline = onlineArr.filter(e => !e.isDeleted);
-    const filteredLocal = localArr.filter(e => !e.isDeleted);
+  const filteredOnline = filterActiveHealthEntries(onlineArr as any, tombstones);
+  const filteredLocal = filterActiveHealthEntries(localArr as any, tombstones);
 
     console.log(`📊 [DASHBOARD MERGE] Online(raw): ${onlineArr.length} -> ${filteredOnline.length} active, Local(raw): ${localArr.length} -> ${filteredLocal.length} active, Cached(raw): ${cachedWeeklyEntries.length}`);
     
@@ -307,7 +311,7 @@ export default function Dashboard() {
       console.log(`🧹 [DASHBOARD DEDUPE] Local active entries reduced ${filteredLocal.length} -> ${dedupedLocal.length}`);
     }
     return dedupedLocal;
-  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries]);
+  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries, tombstones]);
 
 
 

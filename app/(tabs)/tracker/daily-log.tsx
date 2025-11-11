@@ -15,8 +15,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
+import { ensureHealthEntriesCoreColumns, ensureHealthEntriesV10Columns } from "../../../watermelon/database/selfHeal";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../../watermelon/utils/filterActiveHealthEntries";
+import { isEntryTombstoned, listTombstones, shouldUseTombstoneFallback } from "../../../watermelon/utils/tombstones";
 import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -195,6 +198,7 @@ export default function DailyLog() {
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const [searchQuery, setSearchQuery] = useState("");
   const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
 
   // Get today's date in local timezone - computed fresh on each render
   const now = new Date();
@@ -215,7 +219,7 @@ export default function DailyLog() {
   );
 
   // Local cache fetcher for reuse
-  const fetchOfflineEntries = async () => {
+  const fetchOfflineEntries = React.useCallback(async () => {
     const userId = currentUser?._id;
     if (!userId) { setOfflineEntries([]); return; }
     try {
@@ -241,20 +245,24 @@ export default function DailyLog() {
         editCount: entry.editCount || 0,
         isDeleted: entry.isDeleted === true,
       }));
-      setOfflineEntries(mapped);
+  const tombstoneSet = await listTombstones();
+  setTombstones(tombstoneSet);
+  // Filter out deleted or tombstoned entries
+  const filtered = filterActiveHealthEntries(mapped, tombstoneSet);
+  setOfflineEntries(filtered);
     } catch (error) {
       console.error("Error fetching local cache entries:", error);
       setOfflineEntries([]);
     }
-  };
-  useEffect(() => { fetchOfflineEntries(); }, [todayLocalDate, database, currentUser?._id]);
+  }, [database, currentUser?._id, todayLocalDate]);
+  useEffect(() => { fetchOfflineEntries(); }, [fetchOfflineEntries]);
   // Also refresh when screen regains focus or an edit/add/delete occurs
   useFocusEffect(
     React.useCallback(() => {
       const unsub = healthEntriesEvents.subscribe((_) => fetchOfflineEntries());
       fetchOfflineEntries();
       return () => unsub();
-    }, [currentUser?._id, todayLocalDate])
+    }, [fetchOfflineEntries])
   );
 
   // Prefer online data when available, but show local cache first for instant display
@@ -264,7 +272,7 @@ export default function DailyLog() {
     if (!Array.isArray(base)) return base;
 
     // Exclude any entries marked deleted (locally or from server)
-    const nonDeletedBase = (base as any[]).filter(e => e && e.isDeleted !== true);
+  const nonDeletedBase = filterActiveHealthEntries(base as any[], tombstones);
 
     // Apply deduplication using the centralized utility
     const deduped = dedupeHealthEntries(nonDeletedBase as any);
@@ -273,7 +281,7 @@ export default function DailyLog() {
     deduped.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
 
     return deduped;
-  }, [isOnline, todaysEntriesOnline, offlineEntries]);
+  }, [isOnline, todaysEntriesOnline, offlineEntries, tombstones]);
 
   // Status log to ensure we can see state regardless of offline branch
   useEffect(() => {
@@ -298,6 +306,11 @@ export default function DailyLog() {
     const hydrate = async () => {
       try {
         const collection = database.get('health_entries');
+        try {
+          await ensureHealthEntriesCoreColumns(database as any);
+          await ensureHealthEntriesV10Columns(database as any);
+        } catch {}
+        const limitedFields = shouldUseTombstoneFallback(database);
         for (const eRaw of (todaysEntriesOnline as any[]).filter(Boolean)) {
           const e = eRaw as any;
           if (!e || !e._id) {
@@ -323,12 +336,18 @@ export default function DailyLog() {
                 await match.update((entry: any) => {
                   entry.convexId = e._id;
                   entry.isSynced = true;
-                  entry.type = (e as any)?.type || entry.type || 'manual_entry';
-                  entry.category = (e as any)?.category || entry.category || '';
-                  entry.notes = (e as any)?.notes || entry.notes || '';
-                  entry.createdBy = (e as any)?.createdBy || entry.createdBy || 'User';
-                  if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
-                  if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                  if (!limitedFields) {
+                    entry.type = (e as any)?.type || entry.type || 'manual_entry';
+                    entry.category = (e as any)?.category || entry.category || '';
+                    entry.notes = (e as any)?.notes || entry.notes || '';
+                    entry.createdBy = (e as any)?.createdBy || entry.createdBy || 'User';
+                    if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
+                    if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                  }
+                  // Respect deletion if server entry is deleted or tombstoned locally
+                  if ((e as any)?.isDeleted === true || isEntryTombstoned({ convexId: e._id }, tombstones)) {
+                    entry.isDeleted = true;
+                  }
                 });
               });
               console.log('🔗 [HYDRATE] Linked existing offline entry to server id:', e._id, (e as any)?.type);
@@ -342,14 +361,19 @@ export default function DailyLog() {
                 entry.timestamp = (e as any)?.timestamp || Date.now();
                 entry.symptoms = (e as any)?.symptoms || '';
                 entry.severity = (e as any)?.severity ?? 0;
-                entry.category = (e as any)?.category || '';
-                entry.notes = (e as any)?.notes || '';
-                entry.createdBy = (e as any)?.createdBy || 'User';
-                entry.type = (e as any)?.type || 'manual_entry';
-                // photos and aiContext if available
-                if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
-                if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                if (!limitedFields) {
+                  entry.category = (e as any)?.category || '';
+                  entry.notes = (e as any)?.notes || '';
+                  entry.createdBy = (e as any)?.createdBy || 'User';
+                  entry.type = (e as any)?.type || 'manual_entry';
+                  // photos and aiContext if available
+                  if ((e as any)?.aiContext) entry.aiContext = (e as any).aiContext;
+                  if ((e as any)?.photos) entry.photos = JSON.stringify((e as any).photos);
+                }
                 entry.isSynced = true; // mirrors server state
+                if ((e as any)?.isDeleted === true || isEntryTombstoned({ convexId: e._id }, tombstones)) {
+                  entry.isDeleted = true;
+                }
               });
             });
             console.log('💾 [HYDRATE] Mirrored online entry into WatermelonDB:', e._id, (e as any)?.type);
@@ -363,7 +387,7 @@ export default function DailyLog() {
       }
     };
     hydrate();
-  }, [isOnline, currentUser?._id, todayLocalDate, todaysEntriesOnline, database]);
+  }, [isOnline, currentUser?._id, todayLocalDate, todaysEntriesOnline, database, tombstones]);
 
   // Filter entries based on search query (case-insensitive)
   const filteredEntries = todaysEntries?.filter((entry) => {

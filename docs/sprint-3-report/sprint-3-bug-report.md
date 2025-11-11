@@ -379,7 +379,9 @@
   - Better user engagement and feedback collection
   - Enhanced user experience with in-app documentation
 
-  ### Edit and Delete feature for Manual Entry (Yue)
+  ### Edit and Delete feature for Manual Entry
+  ## Edit Bug (Offline and Online)
+  ## Delete Bug (Offline and Online)
 
 ---
 

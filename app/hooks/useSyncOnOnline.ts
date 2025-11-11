@@ -4,6 +4,7 @@ import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
 import { useWatermelonDatabase } from '../../watermelon/hooks/useDatabase';
+import { getPreferredEntryId, listTombstones, removeTombstones } from '../../watermelon/utils/tombstones';
 import { getPhoneSecurely } from '../utils/securePhone';
 import { useNetworkStatus } from './useNetworkStatus';
 
@@ -26,6 +27,8 @@ export function useSyncOnOnline() {
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   // New: allow updating existing server entries when offline edits occurred
   const updateExistingEntry = useMutation(api.healthEntries.updateHealthEntry);
+  // New: process offline deletion tombstones when back online
+  const deleteHealthEntry = useMutation(api.healthEntries.deleteHealthEntry);
   const updatePhone = useMutation(api.users.updatePhone);
   const toggleLocationServices = useMutation(api.locationServices.toggleLocationServices);
   // Use the correct Convex mutation path for updating personal info
@@ -172,6 +175,22 @@ export function useSyncOnOnline() {
       });
 
       console.log(`📊 Found ${unsyncedEntries.length} unsynced health entries (including legacy is_synced=false)`);
+
+      // Load tombstone registry to filter out entries that were deleted offline
+      const tombstoneSet = await listTombstones();
+      const beforeTombstoneFilter = unsyncedEntries.length;
+      const unsyncedNonTombstoned = unsyncedEntries.filter((entry: any) => {
+        const pid = getPreferredEntryId(entry);
+        const isTombstoned = pid && tombstoneSet.has(pid);
+        if (isTombstoned) {
+          console.log(`🪦 [Sync Skip] Entry ${entry.id} (${pid}) is tombstoned - not syncing to server`);
+          return false;
+        }
+        return true;
+      });
+      if (unsyncedNonTombstoned.length !== beforeTombstoneFilter) {
+        console.log(`🧹 [Sync Tombstone Filter] Removed ${beforeTombstoneFilter - unsyncedNonTombstoned.length} tombstoned entries before sync`);
+      }
 
       // Group unsynced entries by convexId when present; pick the latest winner per group to avoid double-syncing
       const groupKey = (e: any) => (e.convexId || e._raw?.convexId || e._raw?.convex_id || null);
@@ -373,6 +392,8 @@ export function useSyncOnOnline() {
     }
   };
 
+  // Tombstones processing moved to shared util for reuse in debug screen
+
   const syncPersonalInfo = async () => {
     try {
       const authUserId = currentUser?._id ? String(currentUser._id) : '';
@@ -474,6 +495,94 @@ export function useSyncOnOnline() {
     }
   };
 
+  // Process offline deletion tombstones on reconnect
+  const processTombstones = async () => {
+    try {
+      const tombstoneSet = await listTombstones();
+      if (!tombstoneSet || tombstoneSet.size === 0) {
+        console.log('🪦 [Tombstones] None to process');
+        return;
+      }
+
+      if (!currentUser?._id) {
+        console.log('⏭️ [Tombstones] Skipping - no authenticated user');
+        return;
+      }
+
+      const ids = Array.from(tombstoneSet);
+      const convexIds: string[] = [];
+      const localIds: string[] = [];
+      for (const id of ids) {
+        if (typeof id === 'string' && id.length > 20 && /^[kj]/.test(id)) convexIds.push(id);
+        else localIds.push(id);
+      }
+
+      const processed: string[] = [];
+
+      // 1) Server-side deletions for convex-backed entries
+      for (const cid of convexIds) {
+        try {
+          await deleteHealthEntry({ entryId: cid as any, userId: currentUser._id as any });
+          console.log('✅ [Tombstones] Deleted on server:', cid);
+          // Mirror deletion locally for all duplicates
+          try {
+            const healthEntriesCollection = database.get('health_entries');
+            const dupes = await healthEntriesCollection.query().fetch();
+            const now = Date.now();
+            await database.write(async () => {
+              for (const rec of dupes as any[]) {
+                if ((rec as any).convexId === cid) {
+                  try {
+                    await (rec as any).update((e: any) => {
+                      e.isDeleted = true;
+                      e.isSynced = true;
+                      e.lastEditedAt = now;
+                    });
+                  } catch {}
+                }
+              }
+            });
+          } catch (e) {
+            console.warn('⚠️ [Tombstones] Local mirror delete failed:', e);
+          }
+          processed.push(cid);
+        } catch (e) {
+          console.error('❌ [Tombstones] Failed to delete on server for', cid, e);
+        }
+      }
+
+      // 2) Local-only IDs: purge local records
+      if (localIds.length > 0) {
+        try {
+          const healthEntriesCollection = database.get('health_entries');
+          await database.write(async () => {
+            for (const lid of localIds) {
+              try {
+                const rec = await healthEntriesCollection.find(lid);
+                await (rec as any).destroyPermanently();
+                processed.push(lid);
+                console.log('🧹 [Tombstones] Purged local-only entry:', lid);
+              } catch (e) {
+                console.warn('⚠️ [Tombstones] Could not purge local-only entry', lid, e);
+              }
+            }
+          });
+        } catch (e) {
+          console.warn('⚠️ [Tombstones] Local purge batch failed:', e);
+        }
+      }
+
+      if (processed.length > 0) {
+        try {
+          await removeTombstones(processed);
+          console.log(`🧽 [Tombstones] Cleared ${processed.length} processed tombstone(s)`);
+        } catch {}
+      }
+    } catch (e) {
+      console.error('❌ [Tombstones] Processing failed:', e);
+    }
+  };
+
   useEffect(() => {
     // Track if we just transitioned from offline to online
     const wasOffline = previousOnlineRef.current === false;
@@ -512,6 +621,9 @@ export function useSyncOnOnline() {
         if (currentUser?._id) {
           const uid = String(currentUser._id);
           
+          // First, process deletions recorded while offline
+          await processTombstones();
+
           // Sync health entries from WatermelonDB (still works)
           await syncHealthEntries();
           
