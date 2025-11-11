@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { safeWrite } from "../../../watermelon/utils/safeWrite";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -499,6 +500,9 @@ export default function AddHealthEntry() {
             throw remoteErr; // can't proceed if server update failed
           }
 
+          // Emit event so detail/history/daily log can refresh
+          healthEntriesEvents.emit({ type: 'edit', convexId: editConvexId || undefined, watermelonId: watermelonRecordId || undefined, timestamp: Date.now() });
+
           // Best-effort local WMDB update. Any failure here is non-fatal; UI will reflect server state while online,
           // and the hydration effect will reconcile the local cache shortly after.
           console.log('🔄 About to update WatermelonDB, watermelonRecordId:', watermelonRecordId);
@@ -755,12 +759,16 @@ export default function AddHealthEntry() {
             );
 
             console.log("📴 Entry updated offline, will sync when online");
+            // Emit event for real-time refresh
+            healthEntriesEvents.emit({ type: 'edit', convexId: editConvexId || undefined, watermelonId: watermelonRecordId || undefined, timestamp: Date.now() });
           } else {
             console.error("❌ watermelonRecordId is null - cannot update offline!");
             throw new Error("Cannot update: WatermelonDB record ID not found");
           }
         }
 
+        // Emit edit event for real-time refresh consumers
+        healthEntriesEvents.emit({ type: 'edit', convexId: editConvexId || undefined, watermelonId: watermelonRecordId || undefined, timestamp: Date.now() });
         // Navigate back to detail screen
         router.back();
         return;
@@ -783,10 +791,11 @@ export default function AddHealthEntry() {
 
           // Also save to WatermelonDB for offline access
           const healthEntriesCollection = database.collections.get('health_entries');
+          let createdLocalId: string | undefined;
           await safeWrite(
             database,
             async () => {
-              await healthEntriesCollection.create((entry: any) => {
+              const rec = await healthEntriesCollection.create((entry: any) => {
                 entry.userId = userId;
                 entry.date = dateString;
                 entry.timestamp = timestamp;
@@ -801,11 +810,14 @@ export default function AddHealthEntry() {
                 // tie local to server to avoid future hydration duplicates
                 entry.convexId = newId;
               });
+              createdLocalId = (rec as any)?.id;
             },
             10000,
             'createHealthEntryOnlineAdd'
           );
           console.log("✅ Entry also saved to WatermelonDB for offline access");
+          // Emit add event for real-time refresh
+          healthEntriesEvents.emit({ type: 'add', convexId: newId, watermelonId: createdLocalId, timestamp: Date.now() });
         } catch (error) {
           console.error("❌ Failed to save online:", error);
           throw error;
@@ -813,11 +825,11 @@ export default function AddHealthEntry() {
       } else if (!isOnline && userId) {
         // OFFLINE with valid userId: Save to WatermelonDB for later sync
         const healthEntriesCollection = database.collections.get('health_entries');
-
+        let createdLocalId: string | undefined;
         await safeWrite(
           database,
           async () => {
-            await healthEntriesCollection.create((entry: any) => {
+            const rec = await healthEntriesCollection.create((entry: any) => {
               entry.userId = userId;
               entry.date = dateString;
               entry.timestamp = timestamp;
@@ -830,12 +842,15 @@ export default function AddHealthEntry() {
               entry.isSynced = false; // Mark for sync when online
               entry.createdBy = currentUser?.firstName || 'User';
             });
+            createdLocalId = (rec as any)?.id;
           },
           10000,
           'createHealthEntryOfflineAdd'
         );
 
         console.log("📴 Entry saved offline, will sync when online");
+        // Emit add event for real-time refresh
+        healthEntriesEvents.emit({ type: 'add', convexId: undefined, watermelonId: createdLocalId, timestamp: Date.now() });
       } else {
         // No userId available - can't save
         console.error("❌ Cannot save entry: No user ID available");

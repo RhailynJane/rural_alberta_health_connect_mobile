@@ -1,5 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
+import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -8,7 +9,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import HealthEntry from "../../../watermelon/models/HealthEntry";
 import { safeWrite } from "../../../watermelon/utils/safeWrite";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -189,81 +192,141 @@ export default function LogDetails() {
   );
 
   // Offline query from WatermelonDB (always attempt so we can fallback or show deleted state)
-  useEffect(() => {
+  const loadOfflineEntry = React.useCallback(async () => {
     if (!(entryId || convexIdParam)) return;
-    const loadOfflineEntry = async () => {
-      try {
-        const healthCollection = database.get('health_entries');
-        let localEntry: any = null;
+    try {
+      const healthCollection = database.get('health_entries');
+      let localEntry: any = null;
 
-        // Try by WatermelonDB id first (when entryId is a local id)
-        if (entryId && !isConvexId) {
-          try {
-            localEntry = await healthCollection.find(entryId);
-          } catch {}
+      // Try by WatermelonDB id first (when entryId is a local id)
+      if (entryId && !isConvexId) {
+        try {
+          localEntry = await healthCollection.find(entryId);
+        } catch {}
+      }
+
+      // Fallback: lookup by convexId field
+      if (!localEntry) {
+        const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
+        if (convexLookup) {
+          const results = await healthCollection.query(Q.where('convexId', convexLookup)).fetch();
+          if (results.length > 0) {
+            // Choose best candidate if multiple (higher tuple wins lexicographically)
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const best = results.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked; // prefer larger value
+              }
+              return picked;
+            }, results[0]);
+            localEntry = best;
+          }
         }
+      }
 
-        // Fallback: lookup by convexId field
-        if (!localEntry) {
-          const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
-          if (convexLookup) {
-            const results = await healthCollection.query(Q.where('convexId', convexLookup)).fetch();
-            if (results.length > 0) {
-              localEntry = results[0];
+      // Even if we found localEntry directly by id, we may have newer duplicates for same convexId.
+      // Re-evaluate group to pick freshest version so edits made via duplicate strategy show instantly.
+      const groupConvexId = (localEntry?.convexId) || convexIdParam || (isConvexId ? entryId : undefined);
+      if (groupConvexId) {
+        try {
+          const group = await healthCollection.query(Q.where('convexId', groupConvexId)).fetch();
+          if (group.length > 0) {
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const freshest = group.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked;
+              }
+              return picked;
+            }, group[0]);
+            if (freshest && localEntry && freshest.id !== localEntry.id) {
+              console.log('🔄 [LOG-DETAILS] Replacing localEntry with fresher duplicate', { prev: localEntry.id, next: freshest.id });
+              localEntry = freshest;
             }
           }
+        } catch (e) {
+          console.warn('⚠️ [LOG-DETAILS] Failed duplicate group re-eval', e);
         }
-
-        if (!localEntry) {
-          console.warn(`🔎 [LOG-DETAILS] No local record found for localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
-          setOfflineEntry(null);
-          return;
-        }
-
-        // Map WatermelonDB entry to a Convex-like shape (include dedupe metadata)
-        const entryData = localEntry as any;
-        let photos: string[] = [];
-        try {
-          if (entryData.photos) {
-            photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
-          }
-        } catch {
-          photos = [];
-        }
-
-        setOfflineEntry({
-          _id: localEntry.id,
-          _creationTime: entryData.createdAt || Date.now(),
-          userId: entryData.userId,
-          timestamp: entryData.timestamp,
-          severity: entryData.severity,
-          type: entryData.type,
-          symptoms: entryData.symptoms || '',
-          category: entryData.category || '',
-          notes: entryData.notes || '',
-          photos,
-          aiContext: entryData.aiContext || null,
-          convexId: entryData.convexId || null,
-          createdBy: entryData.createdBy || 'User',
-          date: entryData.date || '',
-          isDeleted: entryData.isDeleted === true,
-          lastEditedAt: entryData.lastEditedAt || 0,
-          editCount: entryData.editCount || 0,
-        });
-
-        setEntryMetadata({
-          watermelonId: localEntry.id,
-          convexId: entryData.convexId || null,
-        });
-      } catch (error) {
-        console.error('Failed to load offline entry:', error);
-        setOfflineEntry(null);
-      } finally {
-        setOfflineTried(true);
       }
-    };
-    loadOfflineEntry();
+
+      if (!localEntry) {
+        console.warn(`🔎 [LOG-DETAILS] No local record found for localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
+        setOfflineEntry(null);
+        return;
+      }
+
+      // Map WatermelonDB entry to a Convex-like shape (include dedupe metadata)
+      const entryData = localEntry as any;
+      let photos: string[] = [];
+      try {
+        if (entryData.photos) {
+          photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
+        }
+      } catch {
+        photos = [];
+      }
+
+      setOfflineEntry({
+        _id: localEntry.id,
+        _creationTime: entryData.createdAt || Date.now(),
+        userId: entryData.userId,
+        timestamp: entryData.timestamp,
+        severity: entryData.severity,
+        type: entryData.type,
+        symptoms: entryData.symptoms || '',
+        category: entryData.category || '',
+        notes: entryData.notes || '',
+        photos,
+        aiContext: entryData.aiContext || null,
+        convexId: entryData.convexId || null,
+        createdBy: entryData.createdBy || 'User',
+        date: entryData.date || '',
+        isDeleted: entryData.isDeleted === true,
+        lastEditedAt: entryData.lastEditedAt || 0,
+        editCount: entryData.editCount || 0,
+      });
+
+      setEntryMetadata({
+        watermelonId: localEntry.id,
+        convexId: entryData.convexId || null,
+      });
+    } catch (error) {
+      console.error('Failed to load offline entry:', error);
+      setOfflineEntry(null);
+    } finally {
+      setOfflineTried(true);
+    }
   }, [entryId, convexIdParam, isConvexId, database]);
+
+  useEffect(() => {
+    loadOfflineEntry();
+  }, [loadOfflineEntry]);
+
+  // Subscribe to edit/delete events for this entry (always active, not just when focused)
+  useEffect(() => {
+    const unsub = healthEntriesEvents.subscribe((p) => {
+      if (!p) return;
+      const matchByConvex = (p.convexId && (p.convexId === (convexIdParam || (isConvexId ? entryId : undefined))));
+      const matchByLocal = (p.watermelonId && (p.watermelonId === entryId));
+      if (matchByConvex || matchByLocal) {
+        console.log('🔔 [LOG-DETAILS] Received event for this entry:', p.type, { convexId: p.convexId, watermelonId: p.watermelonId });
+        loadOfflineEntry();
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [entryId, convexIdParam, isConvexId, loadOfflineEntry]);
+
+  // Refresh when screen regains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadOfflineEntry();
+    }, [loadOfflineEntry])
+  );
 
   // Populate metadata when online entry is loaded
   useEffect(() => {
@@ -297,7 +360,28 @@ export default function LogDetails() {
   }, [entryOnline, isOnline, isConvexId, database]);
 
   // Prefer online entry when available, but fallback to offline if missing
-  const resolvedEntry = (entryOnline as any) || offlineEntry;
+  // Choose between online and offline variants: prefer the freshest (higher lastEditedAt/editCount) or deletion state.
+  let resolvedEntry: any = offlineEntry;
+  if (entryOnline) {
+    if (!offlineEntry) {
+      resolvedEntry = entryOnline;
+    } else if (offlineEntry.convexId && offlineEntry.convexId === entryOnline._id) {
+      const onlineLastEdited = (entryOnline as any).lastEditedAt || 0;
+      const onlineEditCount = (entryOnline as any).editCount || 0;
+      const offlineLastEdited = offlineEntry.lastEditedAt || 0;
+      const offlineEditCount = offlineEntry.editCount || 0;
+      const offlineDeleted = offlineEntry.isDeleted === true;
+      // Prefer offline if it reflects a deletion not yet synced, or has more recent edits.
+      if (offlineDeleted || offlineLastEdited > onlineLastEdited || offlineEditCount > onlineEditCount) {
+        resolvedEntry = offlineEntry;
+      } else {
+        resolvedEntry = entryOnline;
+      }
+    } else {
+      // Different convex linkage; default to online if available.
+      resolvedEntry = entryOnline;
+    }
+  }
   const isDeletedEntry = resolvedEntry?.isDeleted === true;
   const isLoadingOnline = isOnline && isConvexId && typeof entryOnline === 'undefined';
   const stillLoading = isLoadingOnline || (!offlineTried && offlineEntry === null);
@@ -354,7 +438,7 @@ export default function LogDetails() {
           database,
           async () => {
             const healthCollection = database.get('health_entries');
-            const localEntry = await healthCollection.find(idToUse);
+            const localEntry = await healthCollection.find(idToUse) as HealthEntry;
             try {
               await localEntry.update((e: any) => {
                 e.isDeleted = true;
@@ -366,19 +450,19 @@ export default function LogDetails() {
               console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
               const now = Date.now();
               const deletedDuplicate = await healthCollection.create((newRec: any) => {
-                newRec.userId = (localEntry as any).userId;
-                newRec.convexId = (localEntry as any).convexId;
-                newRec.date = (localEntry as any).date;
+                newRec.userId = localEntry.userId;
+                newRec.convexId = localEntry.convexId;
+                newRec.date = localEntry.date;
                 newRec.timestamp = now;
-                newRec.symptoms = (localEntry as any).symptoms;
-                newRec.severity = (localEntry as any).severity;
-                newRec.notes = (localEntry as any).notes || '';
-                newRec.photos = (localEntry as any).photos;
-                newRec.type = (localEntry as any).type || 'manual_entry';
+                newRec.symptoms = localEntry.symptoms;
+                newRec.severity = localEntry.severity;
+                newRec.notes = localEntry.notes || '';
+                newRec.photos = localEntry.photos;
+                newRec.type = localEntry.type || 'manual_entry';
                 newRec.isSynced = false;
-                newRec.createdBy = (localEntry as any).createdBy;
+                newRec.createdBy = localEntry.createdBy;
                 newRec.lastEditedAt = now;
-                newRec.editCount = ((localEntry as any).editCount || 0) + 1;
+                newRec.editCount = (localEntry.editCount || 0) + 1;
                 newRec.isDeleted = true;
               });
               console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
@@ -386,21 +470,22 @@ export default function LogDetails() {
 
             // Also mark all other local duplicates with the same convexId as deleted
             const now2 = Date.now();
-            const cvx = (localEntry as any).convexId || entryMetadata.convexId;
+            const cvx = localEntry.convexId || entryMetadata.convexId;
             if (cvx) {
               const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
               let updated = 0;
-              for (const rec of dupes as any[]) {
-                if ((rec as any).id === (localEntry as any).id) continue;
+              for (const rec of dupes) {
+                const healthRec = rec as HealthEntry;
+                if (healthRec.id === localEntry.id) continue;
                 try {
-                  await (rec as any).update((e2: any) => {
+                  await healthRec.update((e2: any) => {
                     e2.isDeleted = true;
                     e2.isSynced = false;
                     e2.lastEditedAt = now2;
                   });
                   updated++;
                 } catch (e) {
-                  console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', (rec as any)?.id, e);
+                  console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', healthRec.id, e);
                 }
               }
               if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
@@ -456,6 +541,8 @@ export default function LogDetails() {
         );
       }
       setDeleteSuccess(true);
+      // Emit delete event before navigating back
+      healthEntriesEvents.emit({ type: 'delete', convexId: entryMetadata.convexId, watermelonId: entryMetadata.watermelonId, timestamp: Date.now() });
       setTimeout(() => {
         setDeleteModalVisible(false);
         router.back();

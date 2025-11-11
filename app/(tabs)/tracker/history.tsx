@@ -2,9 +2,10 @@ import HealthEntry from "@/watermelon/models/HealthEntry";
 import { Q } from "@nozbe/watermelondb";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Modal,
     Platform,
@@ -20,6 +21,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { analyzeDuplicates, dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -79,81 +81,73 @@ export default function History() {
     currentUser && isOnline ? { userId: currentUser._id } : "skip"
   );
 
-  // Get offline entries from WatermelonDB
-  useEffect(() => {
-    const fetchOfflineEntries = async () => {
-      try {
-        // ALWAYS load from WatermelonDB first for instant display
-        // Then online data will replace it when loaded
-
-        // Determine user id
-        let uid: string | undefined = currentUser?._id as any;
-        if (!uid) {
-          try {
-            const raw = await AsyncStorage.getItem("@profile_user");
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              uid = parsed?._id || parsed?.id || uid;
-            }
-          } catch { }
-        }
-        if (!uid) {
-          // Try Watermelon users table
-          try {
-            const usersCol = database.get('users');
+  // Offline fetch function reused across focus & events
+  const fetchOfflineEntries = async () => {
+    try {
+      let uid: string | undefined = currentUser?._id as any;
+      if (!uid) {
+        try {
+          const raw = await AsyncStorage.getItem("@profile_user");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            uid = parsed?._id || parsed?.id || uid;
+          }
+        } catch { }
+      }
+      if (!uid) {
+        try {
+          const usersCol = database.get('users');
             const allUsers = await usersCol.query().fetch();
             const first = (allUsers as any[])[0];
             if (first) {
               const r = (first as any)._raw || {};
               uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
             }
-          } catch { }
-        }
-        if (!uid) {
-          console.log('⚠️ [OFFLINE HISTORY] No user id available');
-          setOfflineEntries([]);
-          return;
-        }
-
-        const collection = database.get<HealthEntry>("health_entries");
-        const entries = await collection
-          .query(
-            Q.where('userId', uid),
-            Q.sortBy("timestamp", Q.desc)
-          )
-          .fetch();
-
-        console.log(`🔍 [LOCAL HISTORY] Fetched ${entries.length} entries from WatermelonDB for user ${uid}`);
-
-        // Map WatermelonDB entries to match Convex format
-        const mapped = entries.map((entry: any) => {
-          return {
-            _id: entry.id,
-            symptoms: entry.symptoms || "",
-            severity: entry.severity || 0,
-            category: entry.category || "",
-            notes: entry.notes || "",
-            timestamp: entry.timestamp || Date.now(),
-            createdBy: entry.createdBy || "User",
-            type: entry.type || "manual_entry",
-            convexId: entry.convexId, // For de-duplication
-            // Include dedupe metadata so deleted/edited versions are handled correctly
-            isDeleted: entry.isDeleted === true,
-            lastEditedAt: entry.lastEditedAt || 0,
-            editCount: entry.editCount || 0,
-          };
-        });
-
-        console.log(`✅ [LOCAL HISTORY] Loaded ${mapped.length} entries instantly from local cache`);
-        setOfflineEntries(mapped);
-      } catch (error) {
-        console.error("Error fetching offline entries:", error);
-        setOfflineEntries([]);
+        } catch { }
       }
-    };
-    // Fetch immediately on mount for instant display
-    fetchOfflineEntries();
-  }, [database, currentUser?._id]); // Removed isOnline dependency - always load local cache
+      if (!uid) {
+        console.log('⚠️ [OFFLINE HISTORY] No user id available');
+        setOfflineEntries([]);
+        return;
+      }
+      const collection = database.get<HealthEntry>("health_entries");
+      const entries = await collection
+        .query(
+          Q.where('userId', uid),
+          Q.sortBy("timestamp", Q.desc)
+        )
+        .fetch();
+      const mapped = entries.map((entry: any) => ({
+        _id: entry.id,
+        symptoms: entry.symptoms || "",
+        severity: entry.severity || 0,
+        category: entry.category || "",
+        notes: entry.notes || "",
+        timestamp: entry.timestamp || Date.now(),
+        createdBy: entry.createdBy || "User",
+        type: entry.type || "manual_entry",
+        convexId: entry.convexId,
+        isDeleted: entry.isDeleted === true,
+        lastEditedAt: entry.lastEditedAt || 0,
+        editCount: entry.editCount || 0,
+      }));
+      setOfflineEntries(mapped);
+    } catch (error) {
+      console.error("Error fetching offline entries:", error);
+      setOfflineEntries([]);
+    }
+  };
+
+  useEffect(() => { fetchOfflineEntries(); }, [database, currentUser?._id]);
+
+  // Refresh when screen gains focus or entry changed
+  useFocusEffect(
+    useCallback(() => {
+      const unsub = healthEntriesEvents.subscribe(() => fetchOfflineEntries());
+      fetchOfflineEntries();
+      return () => unsub();
+    }, [currentUser?._id])
+  );
 
   // Choose between online and local caches similarly to Dashboard (prefer the larger, more up-to-date set)
   const allEntries = useMemo(() => {

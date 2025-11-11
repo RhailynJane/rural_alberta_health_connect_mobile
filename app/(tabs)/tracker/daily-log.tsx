@@ -1,21 +1,23 @@
  
 import { Q } from "@nozbe/watermelondb";
+import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -212,57 +214,48 @@ export default function DailyLog() {
       : "skip"
   );
 
-  // Load local cache from WatermelonDB FIRST for instant display
-  // Then online data will update the display when available
-  useEffect(() => {
+  // Local cache fetcher for reuse
+  const fetchOfflineEntries = async () => {
     const userId = currentUser?._id;
-    
-    if (userId) {
-      const fetchOfflineEntries = async () => {
-        try {
-          const collection = database.get("health_entries");
-          const entries = await collection
-            .query(
-              Q.where('userId', userId),
-              Q.where("date", todayLocalDate),
-              Q.sortBy("timestamp", Q.desc)
-            )
-            .fetch();
-
-          console.log(`🔍 [DAILY LOG LOCAL CACHE] Fetched ${entries.length} entries for date ${todayLocalDate}`);
-          
-          // Map WatermelonDB entries to match Convex format
-          const mapped = entries.map((entry: any) => {
-            console.log(`📝 [CACHED ENTRY] id: ${entry.id}, type: ${entry.type}, symptoms: ${entry.symptoms?.substring(0, 30)}`);
-            return {
-              _id: entry.id,
-              convexId: entry.convexId, // Add for de-duplication
-              symptoms: entry.symptoms || "",
-              severity: entry.severity || 0,
-              category: entry.category || "",
-              notes: entry.notes || "",
-              timestamp: entry.timestamp || Date.now(),
-              createdBy: entry.createdBy || "User",
-              type: entry.type || "manual_entry",
-              lastEditedAt: entry.lastEditedAt || 0,
-              editCount: entry.editCount || 0,
-              isDeleted: entry.isDeleted === true, // normalize to boolean
-            };
-          });
-          
-          console.log(`✅ [DAILY LOG LOCAL CACHE] Mapped entries:`, mapped.map(e => ({ id: e._id, type: e.type })));
-          setOfflineEntries(mapped);
-        } catch (error) {
-          console.error("Error fetching local cache entries:", error);
-          setOfflineEntries([]);
-        }
-      };
-      fetchOfflineEntries();
-    } else {
-      // If no user ID, show empty
+    if (!userId) { setOfflineEntries([]); return; }
+    try {
+      const collection = database.get("health_entries");
+      const entries = await collection
+        .query(
+          Q.where('userId', userId),
+          Q.where("date", todayLocalDate),
+          Q.sortBy("timestamp", Q.desc)
+        )
+        .fetch();
+      const mapped = entries.map((entry: any) => ({
+        _id: entry.id,
+        convexId: entry.convexId,
+        symptoms: entry.symptoms || "",
+        severity: entry.severity || 0,
+        category: entry.category || "",
+        notes: entry.notes || "",
+        timestamp: entry.timestamp || Date.now(),
+        createdBy: entry.createdBy || "User",
+        type: entry.type || "manual_entry",
+        lastEditedAt: entry.lastEditedAt || 0,
+        editCount: entry.editCount || 0,
+        isDeleted: entry.isDeleted === true,
+      }));
+      setOfflineEntries(mapped);
+    } catch (error) {
+      console.error("Error fetching local cache entries:", error);
       setOfflineEntries([]);
     }
-  }, [todayLocalDate, database, currentUser?._id]);
+  };
+  useEffect(() => { fetchOfflineEntries(); }, [todayLocalDate, database, currentUser?._id]);
+  // Also refresh when screen regains focus or an edit/add/delete occurs
+  useFocusEffect(
+    React.useCallback(() => {
+      const unsub = healthEntriesEvents.subscribe((_) => fetchOfflineEntries());
+      fetchOfflineEntries();
+      return () => unsub();
+    }, [currentUser?._id, todayLocalDate])
+  );
 
   // Prefer online data when available, but show local cache first for instant display
     // Use centralized deduplication utility for consistency
