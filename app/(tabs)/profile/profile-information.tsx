@@ -5,6 +5,8 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -1017,7 +1019,19 @@ export default function ProfileInformation() {
           }
         />
         <DueReminderBanner topOffset={120} />
-        <ScrollView style={styles.container}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          // Offset to account for curved header + reminder banner
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+        >
+        <ScrollView
+          style={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'}
+          contentInsetAdjustmentBehavior="always"
+          contentContainerStyle={{ paddingBottom: 200 }}
+        >
           {/* Personal Information */}
           <View style={styles.card}>
             <TouchableOpacity
@@ -1296,6 +1310,7 @@ export default function ProfileInformation() {
             <Text style={styles.backButtonText}>Back to Profile</Text>
           </TouchableOpacity>
         </ScrollView>
+        </KeyboardAvoidingView>
       </CurvedBackground>
 
       {/* StatusModal for success/error messages */}

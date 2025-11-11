@@ -484,6 +484,38 @@
   - Edit form: `app/(tabs)/tracker/add-health-entry.tsx` lines ~124-228 (loader), ~650-760 (offline save)
   - Schema: `convex/schema.ts` (health_entries table with convexId, isSynced, editCount, lastEditedAt)
 
+### 📷 Photo Capture Option Removed (Gallery-only uploads)
+- **Type:** Product/UX change 
+- **Status:** ✅ Completed
+- **Rationale:** Simplify the photo workflow, reduce permission prompts, and improve reliability across devices by supporting a single, predictable path for images (gallery selection). Camera capture often introduced permission friction and inconsistent device behavior.
+- **Scope:**
+  - Add Health Entry: Removed the “Take Photo” button and camera flow; gallery upload remains
+  - AI Assessment: Removed the “Take Photo” button and camera flow; gallery upload remains
+- **User Impact:**
+  - Users attach photos from the gallery only
+  - Offline behavior is unchanged — selected gallery images are cached locally and synced when online
+  - Fewer permission prompts (no camera permission requested)
+- **Code Locations:**
+  - `app/(tabs)/tracker/add-health-entry.tsx`: Removed `takePhoto` handler and camera button; kept `launchImageLibraryAsync`
+  - `app/(tabs)/ai-assess/index.tsx`: Removed camera permission request, `handleTakePhoto`, and camera button; kept gallery upload
+
+### 🧠 Medical Info Keyboard Visibility Fix
+- **Type:** Usability/UI improvement (not a reported bug, proactive enhancement)
+- **Status:** ✅ Completed
+- **Issue Observed:** When editing long Medical Information fields (Allergies, Current Medications, Medical Conditions), the on-screen keyboard overlapped the active multiline TextInput, forcing the user to manually scroll and sometimes hiding the caret and last typed lines.
+- **Root Cause:** Form content rendered directly inside a `ScrollView` without a `KeyboardAvoidingView` wrapper or sufficient bottom padding; multiline inputs had no guaranteed clearance under keyboard on iOS/Android.
+- **Solution Implemented:**
+  - Wrapped the entire scrollable form area in a `KeyboardAvoidingView` (`behavior='padding'` on iOS) with a calibrated `keyboardVerticalOffset` to account for curved header spacing.
+  - Added `keyboardShouldPersistTaps="handled"` and `keyboardDismissMode='on-drag'` (iOS) to improve scroll interaction while typing.
+  - Increased bottom padding (`contentContainerStyle={{ paddingBottom: 200 }}`) so the last medical field remains above the keyboard when focused.
+  - Ensures smooth vertical repositioning and keeps focus context visible during continuous typing.
+- **User Impact:**
+  - Medical fields remain visible while entering long text; no hidden caret or obstructed input.
+  - More predictable editing experience across devices and orientations.
+  - Drag-to-dismiss works on iOS; tap interactions no longer accidentally close or ignore inputs.
+- **Code Location:** `app/(tabs)/profile/profile-information.tsx` (added `KeyboardAvoidingView`, adjusted `ScrollView` props, and content padding).
+- **Follow-Up (Optional):** Could add auto-scroll on focus using refs and `scrollTo` for very long content or implement dynamic `minHeight` for multiline fields.
+
 ---
 
 ## Summary Statistics
