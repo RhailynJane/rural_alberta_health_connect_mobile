@@ -31,9 +31,11 @@ export default class HealthEntry extends Model {
   })
   photos?: string[];
   
-  @field('notes') notes?: string;
+  // Convex schema requires notes (string, non-null) and type (string, non-null)
+  // WatermelonDB column for notes is optional in schema, so we defensively coalesce at read/update time.
+  @field('notes') notes?: string; // will treat undefined as '' in accessors
   @field('createdBy') createdBy!: string;
-  @field('type') type?: string;
+  @field('type') type!: string; // make non-optional in model to match Convex; self-heal guarantees value
   @field('isSynced') isSynced!: boolean;
   @field('syncError') syncError?: string;
 
@@ -44,4 +46,15 @@ export default class HealthEntry extends Model {
 
   @readonly @date('createdAt') createdAt!: number;
   @readonly @date('updatedAt') updatedAt!: number;
+
+  // Helper getters to ensure safe consumption
+  get safeType(): string {
+    return this.type || 'manual_entry';
+  }
+  get safeNotes(): string {
+    return this.notes || '';
+  }
+  get safePhotos(): string[] {
+    return this.photos || [];
+  }
 }

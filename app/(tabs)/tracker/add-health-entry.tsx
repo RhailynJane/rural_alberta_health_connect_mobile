@@ -134,13 +134,30 @@ export default function AddHealthEntry() {
       if (isConvexId) {
         // Query by convexId field (Convex ID is stored as a field, not primary key)
         console.log('🔍 Querying WatermelonDB by convexId field:', id);
-        const results = await healthCollection.query(
-          Q.where('convexId', id)
-        ).fetch();
+        const results = await healthCollection
+          .query(Q.where('convexId', id))
+          .fetch();
 
         if (results.length > 0) {
-          entry = results[0];
-          console.log('✅ Found entry by convexId:', entry.id);
+          // Choose the best candidate when duplicates exist (e.g., rescue path created a new row)
+          const score = (x: any) => [
+            x.isDeleted ? 0 : 1, // prefer non-deleted
+            x.lastEditedAt || 0, // prefer most recently edited
+            x.editCount || 0,    // prefer more edits
+            x.timestamp || 0     // fallback to newer timestamp
+          ];
+          const better = (a: any, b: any) => {
+            const sa = score(a);
+            const sb = score(b);
+            for (let i = 0; i < sa.length; i++) {
+              if (sa[i] === sb[i]) continue;
+              return sa[i] > sb[i] ? a : b;
+            }
+            return a;
+          };
+          entry = results.reduce((best, cur) => better(best, cur));
+          const ids = results.map((r: any) => r.id);
+          console.log('✅ Found entries by convexId:', ids, '→ chosen:', entry.id);
         } else {
           throw new Error(`No entry found with convexId: ${id}`);
         }
@@ -462,7 +479,7 @@ export default function AddHealthEntry() {
         });
 
         if (isOnline && userId && editConvexId) {
-          // ONLINE EDIT: Update both Convex and WatermelonDB
+          // ONLINE EDIT: Update Convex first; local WMDB update becomes best-effort.
           try {
             await updateHealthEntry({
               entryId: editConvexId as any,
@@ -473,11 +490,16 @@ export default function AddHealthEntry() {
               photos: [...photos, ...localPhotoUris],
             });
             console.log("✅ Entry updated online (Convex)");
+          } catch (remoteErr) {
+            console.error("❌ Failed to update entry on server:", remoteErr);
+            throw remoteErr; // can't proceed if server update failed
+          }
 
-            // Update WatermelonDB too (use stored WatermelonDB ID, not Convex ID)
-            console.log('🔄 About to update WatermelonDB, watermelonRecordId:', watermelonRecordId);
-            if (watermelonRecordId) {
-              // if using writer here.
+          // Best-effort local WMDB update. Any failure here is non-fatal; UI will reflect server state while online,
+          // and the hydration effect will reconcile the local cache shortly after.
+          console.log('🔄 About to update WatermelonDB, watermelonRecordId:', watermelonRecordId);
+          if (watermelonRecordId) {
+            try {
               const healthCollection = database.get('health_entries');
 
               console.log('🔍 Finding entry with ID:', watermelonRecordId);
@@ -500,42 +522,116 @@ export default function AddHealthEntry() {
               console.log('🔍 Severity value:', severity, 'parsed:', parseInt(severity));
               console.log('🔍 Notes value:', notes, 'coalesced:', notes || '');
 
-              if (!entry) {
-                console.error("❌ updateHealthEntryOnlineEdit: entry is undefined before update!");
-                return;
-              }
+              console.log("🔍 About to update entry, entry type:", typeof entry);
+              console.log("🔍 Entry prototype:", Object.getPrototypeOf(entry)?.constructor?.name);
+              console.log("🔍 Entry keys:", Object.keys(entry || {}));
 
-              // Use safeWrite wrapper for proper timeout handling
               await safeWrite(
                 database,
                 async () => {
+                  const schemaColumns: Record<string, any> = (entry as any)?.collection?.schema?.columns || {};
+                  const columnNames = Object.keys(schemaColumns);
+                  console.log('🧪 [WMDB DEBUG] health_entries schema columns seen in JS:', columnNames);
+                  console.log('🧪 [WMDB DEBUG] Contains type?', 'type' in schemaColumns, 'lastEditedAt?', 'lastEditedAt' in schemaColumns, 'editCount?', 'editCount' in schemaColumns);
+                  const rawKeysBefore = Object.keys((entry as any)?._raw || {});
+                  console.log('🧪 [WMDB DEBUG] Raw entry keys BEFORE update:', rawKeysBefore);
+                  const unknownBefore = rawKeysBefore.filter(k => !schemaColumns[k]);
+                  if (unknownBefore.length > 0) {
+                    console.log('⚠️ [WMDB DEBUG] Unknown raw keys BEFORE update (not in schema):', unknownBefore);
+                  }
 
-                  console.log("🔍 Inside safeWrite wrapper, entry type:", typeof entry);
-                  console.log("🔍 Entry prototype:", Object.getPrototypeOf(entry)?.constructor?.name);
-                  console.log("🔍 Entry keys:", Object.keys(entry || {}));
-
-                  await (entry as any).update((e: any) => {
-                    console.log('🔄 Inside update callback, e:', e);
-                    console.log('🔄 e.type:', (e as any).type); // e undefined
-                    e.symptoms = symptoms;
-                    e.severity = parseInt(severity);
-                    e.notes = notes || '';
-                    // e.photos = JSON.stringify([...photos, ...localPhotoUris]); disable for testing
-                    // Preserve original timestamp (Option A)
-                    // Don't update e.timestamp
-                    console.log('✅ Fields updated successfully');
-                  });
+                  let primaryError: any = null;
+                  try {
+                    const updatedEntry = entry.prepareUpdate((record: any) => {
+                      console.log('🔄 Inside prepareUpdate callback (dynamic column assignment)');
+                      record.symptoms = symptoms;
+                      record.severity = parseInt(severity);
+                      record.notes = notes || '';
+                      // @json decorator handles serialization - pass array directly
+                      record.photos = [...photos, ...localPhotoUris];
+                      if ('type' in schemaColumns && !record.type) {
+                        record.type = 'manual_entry';
+                      }
+                      if ('lastEditedAt' in schemaColumns) {
+                        record.lastEditedAt = Date.now();
+                      }
+                      if ('editCount' in schemaColumns) {
+                        record.editCount = (record.editCount || 0) + 1;
+                      }
+                    });
+                    await database.batch(updatedEntry);
+                    console.log('✅ Fields updated successfully via prepareUpdate (full)');
+                  } catch (e) {
+                    primaryError = e;
+                    console.warn('⚠️ [WMDB DEBUG] Primary update failed, will attempt minimal fallback (non-fatal):', e);
+                    const rawKeysAfterPrimary = Object.keys((entry as any)?._raw || {});
+                    console.log('🧪 [WMDB DEBUG] Raw entry keys AFTER primary failure:', rawKeysAfterPrimary);
+                    const unknownAfterPrimary = rawKeysAfterPrimary.filter(k => !schemaColumns[k]);
+                    if (unknownAfterPrimary.length > 0) {
+                      console.log('⚠️ [WMDB DEBUG] Unknown raw keys AFTER primary failure:', unknownAfterPrimary);
+                    }
+                    try {
+                      const minimalEntry = entry.prepareUpdate((record: any) => {
+                        console.log('🔄 [WMDB DEBUG] Minimal fallback prepareUpdate executing');
+                        record.symptoms = symptoms;
+                        record.severity = parseInt(severity);
+                        record.notes = notes || '';
+                        if ('photos' in schemaColumns) {
+                          (record as any).photos = JSON.stringify([...photos, ...localPhotoUris]);
+                        }
+                      });
+                      await database.batch(minimalEntry);
+                      console.log('✅ [WMDB DEBUG] Minimal fallback update succeeded');
+                      primaryError = null;
+                    } catch (fallbackErr) {
+                      console.warn('⚠️ [WMDB DEBUG] Minimal fallback also failed. Attempting duplicate-record rescue strategy (non-fatal).', fallbackErr);
+                      try {
+                        const healthCollection = database.get('health_entries');
+                        const duplicate = await healthCollection.create((newRec: any) => {
+                          newRec.userId = (entry as any).userId;
+                          newRec.convexId = (entry as any).convexId; // maintain link
+                          newRec.date = (entry as any).date;
+                          newRec.timestamp = (entry as any).timestamp; // preserve original timestamp
+                          newRec.symptoms = symptoms;
+                          newRec.severity = parseInt(severity);
+                          newRec.notes = notes || '';
+                          newRec.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                          newRec.type = (entry as any).type || 'manual_entry';
+                          newRec.isSynced = (entry as any).isSynced; // preserve sync state
+                          newRec.createdBy = (entry as any).createdBy;
+                          if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = Date.now();
+                          if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
+                          if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
+                        });
+                        console.log('🛟 [WMDB DEBUG] Duplicate rescue record created with id:', duplicate.id);
+                        if ('isDeleted' in schemaColumns) {
+                          try {
+                            const softDelete = entry.prepareUpdate((r: any) => { r.isDeleted = true; });
+                            await database.batch(softDelete);
+                            console.log('🛟 [WMDB DEBUG] Original record soft-deleted');
+                          } catch (sdErr) {
+                            console.warn('⚠️ [WMDB DEBUG] Soft-delete failed, leaving original alongside duplicate (will be deduped in queries):', sdErr);
+                          }
+                        }
+                        console.log('🛟 [WMDB DEBUG] Rescue strategy completed. Duplicate will be treated as latest version.');
+                        primaryError = null;
+                      } catch (duplicateErr) {
+                        console.error('💥 [WMDB DEBUG] Rescue duplicate strategy failed:', duplicateErr);
+                        throw duplicateErr;
+                      }
+                    }
+                  }
                 },
                 10000,
                 'updateHealthEntryOnlineEdit'
               );
+
               console.log("✅ Entry also updated in WatermelonDB");
-            } else {
-              console.warn("⚠️ watermelonRecordId is null - WatermelonDB NOT updated!");
+            } catch (localErr) {
+              console.warn('⚠️ Skipping local WatermelonDB update due to error; relying on server + hydration:', (localErr as any)?.message || localErr);
             }
-          } catch (error) {
-            console.error("❌ Failed to update online:", error);
-            throw error;
+          } else {
+            console.warn("⚠️ watermelonRecordId is null - WatermelonDB NOT updated!");
           }
         } else {
           // OFFLINE EDIT: Update WatermelonDB only (use stored WatermelonDB ID)
@@ -558,26 +654,101 @@ export default function AddHealthEntry() {
             console.log('🔍 [OFFLINE] Photos array:', photos);
             console.log('🔍 [OFFLINE] LocalPhotoUris array:', localPhotoUris);
 
-            // Use safeWrite wrapper for proper timeout handling
-            console.log('🔄 [OFFLINE] About to call safeWrite wrapper');
+            console.log('🔄 [OFFLINE] About to update entry');
+            // Use same resilience strategy as online edit: multi-stage fallback + duplicate rescue
             await safeWrite(
               database,
               async () => {
-                await (entry as any).update((e: any) => {
-                  console.log('🔄 [OFFLINE] Inside update callback');
-                  e.symptoms = symptoms;
-                  e.severity = parseInt(severity);
-                  e.notes = notes || '';
-                  e.photos = JSON.stringify([...photos, ...localPhotoUris]);
-                  e.isSynced = false; // Mark for re-sync
-                  // Preserve original timestamp (Option A)
-                  // Don't update e.timestamp
-                  console.log('✅ [OFFLINE] Fields updated successfully');
-                });
+                const schemaColumns: Record<string, any> = (entry as any)?.collection?.schema?.columns || {};
+                const columnNames = Object.keys(schemaColumns);
+                console.log('🧪 [WMDB DEBUG] (offline) health_entries schema columns seen in JS:', columnNames);
+                console.log('🧪 [WMDB DEBUG] (offline) Contains type?', 'type' in schemaColumns, 'lastEditedAt?', 'lastEditedAt' in schemaColumns, 'editCount?', 'editCount' in schemaColumns);
+
+                let primaryError: any = null;
+                try {
+                  const updatedEntry = entry.prepareUpdate((e: any) => {
+                    console.log('🔄 [OFFLINE] Inside prepareUpdate callback (dynamic column assignment)');
+                    e.symptoms = symptoms;
+                    e.severity = parseInt(severity);
+                    e.notes = notes || '';
+                    // @json decorator handles serialization - pass array directly
+                    e.photos = [...photos, ...localPhotoUris];
+                    e.isSynced = false; // Mark for re-sync
+                    if ('type' in schemaColumns && !e.type) {
+                      e.type = 'manual_entry';
+                    }
+                    if ('lastEditedAt' in schemaColumns) {
+                      e.lastEditedAt = Date.now();
+                    }
+                    if ('editCount' in schemaColumns) {
+                      e.editCount = (e.editCount || 0) + 1;
+                    }
+                    // Preserve original timestamp (Option A) - Don't update e.timestamp
+                  });
+                  await database.batch(updatedEntry);
+                  console.log('✅ [OFFLINE] Fields updated successfully via prepareUpdate');
+                } catch (e) {
+                  primaryError = e;
+                  console.warn('⚠️ [WMDB DEBUG] (offline) Primary update failed, will attempt minimal fallback (non-fatal):', e);
+                  try {
+                    const minimalEntry = entry.prepareUpdate((record: any) => {
+                      console.log('🔄 [WMDB DEBUG] (offline) Minimal fallback prepareUpdate executing');
+                      record.symptoms = symptoms;
+                      record.severity = parseInt(severity);
+                      record.notes = notes || '';
+                      if ('photos' in schemaColumns) {
+                        (record as any).photos = JSON.stringify([...photos, ...localPhotoUris]);
+                      }
+                      if ('isSynced' in schemaColumns) {
+                        record.isSynced = false;
+                      }
+                    });
+                    await database.batch(minimalEntry);
+                    console.log('✅ [WMDB DEBUG] (offline) Minimal fallback update succeeded');
+                    primaryError = null;
+                  } catch (fallbackErr) {
+                    console.warn('⚠️ [WMDB DEBUG] (offline) Minimal fallback also failed. Attempting duplicate-record rescue strategy (non-fatal).', fallbackErr);
+                    try {
+                      const healthCollection = database.get('health_entries');
+                      const duplicate = await healthCollection.create((newRec: any) => {
+                        newRec.userId = (entry as any).userId;
+                        newRec.convexId = (entry as any).convexId; // maintain link
+                        newRec.date = (entry as any).date;
+                        newRec.timestamp = (entry as any).timestamp; // preserve original timestamp
+                        newRec.symptoms = symptoms;
+                        newRec.severity = parseInt(severity);
+                        newRec.notes = notes || '';
+                        newRec.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                        newRec.type = (entry as any).type || 'manual_entry';
+                        newRec.isSynced = false; // Offline edit means not synced
+                        newRec.createdBy = (entry as any).createdBy;
+                        if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = Date.now();
+                        if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
+                        if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
+                      });
+                      console.log('🛟 [WMDB DEBUG] (offline) Duplicate rescue record created with id:', duplicate.id);
+                      if ('isDeleted' in schemaColumns) {
+                        try {
+                          const softDelete = entry.prepareUpdate((r: any) => { r.isDeleted = true; });
+                          await database.batch(softDelete);
+                          console.log('🛟 [WMDB DEBUG] (offline) Original record soft-deleted');
+                        } catch (sdErr) {
+                          console.warn('⚠️ [WMDB DEBUG] (offline) Soft-delete failed, leaving original alongside duplicate (will be deduped in queries):', sdErr);
+                        }
+                      }
+                      console.log('🛟 [WMDB DEBUG] (offline) Rescue strategy completed. Duplicate will be treated as latest version.');
+                      primaryError = null;
+                    } catch (duplicateErr) {
+                      console.error('💥 [WMDB DEBUG] (offline) Rescue duplicate strategy failed:', duplicateErr);
+                      throw duplicateErr;
+                    }
+                  }
+                }
               },
               10000,
               'updateHealthEntryOfflineEdit'
             );
+
             console.log("📴 Entry updated offline, will sync when online");
           } else {
             console.error("❌ watermelonRecordId is null - cannot update offline!");
@@ -617,7 +788,8 @@ export default function AddHealthEntry() {
                 entry.symptoms = symptoms;
                 entry.severity = parseInt(severity);
                 entry.notes = notes || '';
-                entry.photos = JSON.stringify(photos);
+                // @json decorator handles serialization - pass array directly
+                entry.photos = photos;
                 entry.type = 'manual_entry';
                 entry.isSynced = true; // Already synced
                 entry.createdBy = currentUser?.firstName || 'User';
@@ -647,7 +819,8 @@ export default function AddHealthEntry() {
               entry.symptoms = symptoms;
               entry.severity = parseInt(severity);
               entry.notes = notes || '';
-              entry.photos = JSON.stringify([...photos, ...localPhotoUris]);
+              // @json decorator handles serialization - pass array directly
+              entry.photos = [...photos, ...localPhotoUris];
               entry.type = 'manual_entry';
               entry.isSynced = false; // Mark for sync when online
               entry.createdBy = currentUser?.firstName || 'User';

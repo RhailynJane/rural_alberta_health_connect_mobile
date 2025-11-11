@@ -4,12 +4,12 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -243,6 +243,9 @@ export default function DailyLog() {
               timestamp: entry.timestamp || Date.now(),
               createdBy: entry.createdBy || "User",
               type: entry.type || "manual_entry",
+              lastEditedAt: entry.lastEditedAt || 0,
+              editCount: entry.editCount || 0,
+              isDeleted: entry.isDeleted === true, // normalize to boolean
             };
           });
           
@@ -265,16 +268,38 @@ export default function DailyLog() {
   const todaysEntries = useMemo(() => {
     const base = (isOnline && todaysEntriesOnline) ? todaysEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const eRaw of base as any[]) {
-      const e = eRaw || {};
-      const key = (e as any).convexId || `${(e as any).timestamp || '0'}_${(e as any).type || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
+    const byKey: Record<string, any> = {};
+    for (const raw of base as any[]) {
+      if (!raw) continue;
+      const e = raw as any;
+      const key = e.convexId || `${e.timestamp || '0'}_${e.type || ''}`;
+      const existing = byKey[key];
+      if (!existing) {
+        byKey[key] = e;
+        continue;
+      }
+      // Choose better candidate among duplicates sharing same convexId/timestamp+type
+      const score = (x: any) => [
+        x.isDeleted ? 0 : 1, // prefer non-deleted
+        x.lastEditedAt || 0, // prefer most recently edited
+        x.editCount || 0,    // prefer higher edit count
+        x.timestamp || 0     // fallback to newer timestamp
+      ];
+      const better = (a: any, b: any) => {
+        const sa = score(a);
+        const sb = score(b);
+        for (let i = 0; i < sa.length; i++) {
+          if (sa[i] === sb[i]) continue;
+          return sa[i] > sb[i] ? a : b;
+        }
+        return a; // stable keep first if identical
+      };
+      byKey[key] = better(existing, e);
     }
-    return out;
+    const deduped = Object.values(byKey);
+    // Sort entries by timestamp desc (most recent first)
+    deduped.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+    return deduped;
   }, [isOnline, todaysEntriesOnline, offlineEntries]);
 
   // Status log to ensure we can see state regardless of offline branch

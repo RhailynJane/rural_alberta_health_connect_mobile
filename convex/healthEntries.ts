@@ -60,7 +60,8 @@ export const logManualEntry = mutation({
     severity: v.number(),
     notes: v.optional(v.string()),
     createdBy: v.string(),
-    photos: v.optional(v.array(v.string())), 
+    photos: v.optional(v.array(v.string())),
+    type: v.optional(v.string()), // allow client override but we'll still default
   },
   handler: async (ctx, args) => {
     // Idempotency guard: if an entry already exists for this user and timestamp (and date), return it
@@ -86,7 +87,8 @@ export const logManualEntry = mutation({
       severity: args.severity,
       notes: args.notes || "",
       createdBy: args.createdBy,
-      type: "manual_entry",
+      // Explicit server-side default: if client omitted or sent blank, coalesce to manual_entry
+      type: (args.type && args.type.trim()) ? args.type : "manual_entry",
       photos: args.photos || [], 
     });
 
@@ -196,6 +198,7 @@ export const updateHealthEntry = mutation({
     severity: v.optional(v.number()),
     notes: v.optional(v.string()),
     photos: v.optional(v.array(v.string())),
+    type: v.optional(v.string()), // allow updating the type explicitly if needed
   },
   handler: async (ctx, args) => {
     // Get the entry to verify ownership and type
@@ -220,6 +223,13 @@ export const updateHealthEntry = mutation({
       lastEditedAt: Date.now(),
       editCount: (entry.editCount || 0) + 1,
     };
+    // Optional type update, but maintain default if blank
+    if (args.type !== undefined) {
+      updates.type = (args.type && args.type.trim()) ? args.type : (entry.type || "manual_entry");
+    } else if (!entry.type) {
+      // Ensure legacy rows always get a default when first edited
+      updates.type = "manual_entry";
+    }
 
     if (args.symptoms !== undefined) {
       updates.symptoms = args.symptoms;
@@ -242,8 +252,8 @@ export const updateHealthEntry = mutation({
     }
 
 
-    // Update the entry
-    await ctx.db.patch(args.entryId, updates);
+  // Update the entry (patch only if we have at least one actual field change in addition to edit metadata)
+  await ctx.db.patch(args.entryId, updates);
 
     return args.entryId;
   },

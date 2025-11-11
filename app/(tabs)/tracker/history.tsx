@@ -1,3 +1,4 @@
+import HealthEntry from "@/watermelon/models/HealthEntry";
 import { Q } from "@nozbe/watermelondb";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -5,26 +6,26 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { analyzeDuplicates, dedupeHealthEntries } from "../../../watermelon/utils/dedupeHealthEntries";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
-import HealthEntry from "@/watermelon/models/HealthEntry";
 
 export default function History() {
   const database = useWatermelonDatabase();
@@ -152,20 +153,19 @@ export default function History() {
 
   // Use online or offline data with de-duplication (by convexId if present, else timestamp+type)
   const allEntries = useMemo(() => {
-    // If online and have server data, use that (it's fresher)
-    // Otherwise use local cache
+    // Prefer online if available; otherwise offline.
     const base = (isOnline && allEntriesOnline) ? allEntriesOnline : offlineEntries;
     if (!Array.isArray(base)) return base;
-    const seen = new Set<string>();
-    const out: any[] = [];
-    for (const eRaw of base as any[]) {
-      const e = eRaw || {};
-      const key = (e as any).convexId || `${(e as any).timestamp || '0'}_${(e as any).type || ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(e);
+    // Apply more robust dedupe that chooses best candidate among duplicates instead of first-seen.
+    const deduped = dedupeHealthEntries(base as any);
+    if (deduped.length !== base.length) {
+      console.log(`🧹 [HISTORY DEDUPE] Reduced entries ${base.length} -> ${deduped.length}`);
+      const dups = analyzeDuplicates(base as any);
+      if (dups.length) {
+        console.log(`🧪 [HISTORY DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+      }
     }
-    return out;
+    return deduped;
   }, [isOnline, allEntriesOnline, offlineEntries]);
 
   // Status log to verify mode and counts

@@ -37,7 +37,7 @@ export async function safeWrite<T>(
   try {
     return await Promise.race([database.write(operation), timeoutPromise]);
   } catch (err) {
-    console.error(`Failed: ${operationName}`, err);
+    console.warn(`Failed: ${operationName} (non-fatal in caller)`, err);
     throw err;
   }
 }

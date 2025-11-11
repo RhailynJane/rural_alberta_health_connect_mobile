@@ -6,16 +6,17 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
+import { analyzeDuplicates, dedupeHealthEntries } from "../../watermelon/utils/dedupeHealthEntries";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
@@ -239,21 +240,45 @@ export default function Dashboard() {
     if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
       if (localArr.length > onlineArr.length) {
         console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
-        return localArr;
+        const deduped = dedupeHealthEntries(localArr as any);
+        if (deduped.length !== localArr.length) {
+          console.log(`🧹 [DASHBOARD DEDUPE] Local entries reduced ${localArr.length} -> ${deduped.length}`);
+          const dups = analyzeDuplicates(localArr as any);
+          if (dups.length) {
+            console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+          }
+        }
+        return deduped;
       }
       console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+      const dedupedOnline = dedupeHealthEntries(onlineArr as any);
+      if (dedupedOnline.length !== onlineArr.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online entries reduced ${onlineArr.length} -> ${dedupedOnline.length}`);
+        const dups = analyzeDuplicates(onlineArr as any);
+        if (dups.length) {
+          console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+        }
+      }
+      return dedupedOnline;
     }
     
     // Fallback: prefer online if available, else local
     if (onlineArr.length > 0) {
       console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+      const dedupedOnline = dedupeHealthEntries(onlineArr as any);
+      if (dedupedOnline.length !== onlineArr.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online entries reduced ${onlineArr.length} -> ${dedupedOnline.length}`);
+      }
+      return dedupedOnline;
     }
     
     // Offline mode: use local entries
     console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries: ${localArr.length}`);
-    return localArr;
+    const dedupedLocal = dedupeHealthEntries(localArr as any);
+    if (dedupedLocal.length !== localArr.length) {
+      console.log(`🧹 [DASHBOARD DEDUPE] Local entries reduced ${localArr.length} -> ${dedupedLocal.length}`);
+    }
+    return dedupedLocal;
   }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries]);
 
 
