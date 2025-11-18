@@ -21,9 +21,15 @@ target_include_directories(ncnn-wrapper PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(dummy-detector ncnn-wrapper)
 
 # React Native required include paths.
-# Note: Adjust include paths if your RN folder is in a different location.
-get_filename_component(REACT_NATIVE_DIR "${CMAKE_SOURCE_DIR}/../../../../.." ABSOLUTE)
-include_directories(${REACT_NATIVE_DIR}/node_modules/react-native/ReactCommon/jsi)
+# CMAKE_SOURCE_DIR is the directory containing this CMakeLists.txt
+# From: native/dummy-detector/android/src/main/cpp/
+# To repo root: go up 6 levels
+get_filename_component(REPO_ROOT "${CMAKE_SOURCE_DIR}/../../../../.." ABSOLUTE)
+set(REACT_NATIVE_DIR "${REPO_ROOT}/node_modules/react-native")
+
+# Include JSI headers
+include_directories("${REACT_NATIVE_DIR}/ReactCommon/jsi")
+include_directories("${REACT_NATIVE_DIR}/ReactCommon")
 include_directories(${CMAKE_SOURCE_DIR})
 
 find_library(log-lib log)
