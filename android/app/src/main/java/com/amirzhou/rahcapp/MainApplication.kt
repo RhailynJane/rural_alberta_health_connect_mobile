@@ -53,9 +53,13 @@ class MainApplication : Application(), ReactApplication {
     if (ctx != null) {
       DummyDetectorInstaller.installJSI(ctx)
     } else {
-      reactNativeHost.reactInstanceManager.addReactInstanceEventListener { reactContext ->
-        DummyDetectorInstaller.installJSI(reactContext as ReactApplicationContext)
-      }
+      reactNativeHost.reactInstanceManager.addReactInstanceEventListener(
+        object : com.facebook.react.ReactInstanceEventListener {
+          override fun onReactContextInitialized(reactContext: com.facebook.react.ReactContext) {
+            DummyDetectorInstaller.installJSI(reactContext)
+          }
+        }
+      )
     }
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
