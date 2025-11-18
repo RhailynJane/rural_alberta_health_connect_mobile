@@ -98,8 +98,7 @@ packagingOptions {
     namespace = 'com.amirzhou.rahcapp'
     externalNativeBuild {
         cmake {
-            path file('../../native/dummy-detector/android/src/main/cpp/CMakeLists.txt')
-            version '3.10.2'
+            path = file('../../native/dummy-detector/android/src/main/cpp/CMakeLists.txt')
         }
     }
     defaultConfig {
@@ -114,8 +113,8 @@ packagingOptions {
         externalNativeBuild {
             cmake {
                 // Pass React Native directory to CMake
-                def rnDir = react.reactNativeDir.get().asFile.absolutePath
-                arguments "-DREACT_NATIVE_DIR=${rnDir}"
+                def reactNativeRoot = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath()
+                arguments "-DREACT_NATIVE_DIR=${reactNativeRoot}"
                 cppFlags "-std=c++17", "-fexceptions", "-frtti"
             }
         }
