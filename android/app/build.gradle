@@ -96,6 +96,11 @@ packagingOptions {
     compileSdk = rootProject.ext.compileSdkVersion
 
     namespace = 'com.amirzhou.rahcapp'
+    
+    buildFeatures {
+        prefab = true
+    }
+    
     externalNativeBuild {
         cmake {
             path = file('../../native/dummy-detector/android/src/main/cpp/CMakeLists.txt')

@@ -54,7 +54,18 @@ include_directories(${CMAKE_SOURCE_DIR})
 
 message(STATUS "JSI include directory: ${JSI_INCLUDE_DIR}")
 
+# Find React Native libraries
 find_library(log-lib log)
 find_library(jnilib jnigraphics)
 
-target_link_libraries(dummy-detector ${log-lib} ${jnilib})
+# Find React Native packages (prefab)
+find_package(ReactAndroid REQUIRED CONFIG)
+find_package(fbjni REQUIRED CONFIG)
+
+target_link_libraries(dummy-detector 
+    ReactAndroid::jsi          # JSI API
+    ReactAndroid::reactnative  # React Native library
+    fbjni::fbjni               # Facebook JNI helpers
+    ${log-lib} 
+    ${jnilib}
+)
