@@ -79,6 +79,17 @@ console.log(boxes);
 
 This PoC demonstrates how to register a JSI function `detectObjects` — the next step is to replace the mock in `DummyDetector.cpp` with actual inference code (ncnn/MNN), buffer conversion, and postprocessing.
 
+You can also load an NCNN-style model file (.param + .bin) at runtime using `loadDetectionModel` from JS (exposed as `loadModel` in the JS facade). Example:
+
+```ts
+import detectObjects, { loadModel } from '@rahc/dummy-detector/js/Detector';
+
+if (loadModel('/data/user/0/com.app/files/model.param', '/data/user/0/com.app/files/model.bin')) {
+  const results = detectObjects(640, 480, null);
+  console.log(results);
+}
+```
+
 Building the Android native library
 
 Run the Gradle task to build the app including the native C++ artifact (arm64-v8a ABI by default):
