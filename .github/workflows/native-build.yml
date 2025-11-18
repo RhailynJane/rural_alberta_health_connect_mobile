@@ -17,11 +17,19 @@ jobs:
           node-version: '20'
       - name: Install
         run: npm ci
+      - name: Clean native artifacts (react-native-reanimated)
+        run: |
+          rm -rf node_modules/react-native-reanimated/android/build || true
+          rm -rf node_modules/react-native-reanimated/android/.cxx || true
       - name: Build Android
         working-directory: android
+        env:
+          NODE_ENV: development
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -x lint --warning-mode all
+          ./gradlew clean --no-daemon --warning-mode all
+          ../node_modules/.bin/react-native config || true
+          ./gradlew assembleDebug -x lint --no-daemon --no-parallel --warning-mode all --stacktrace
       - name: Verify artifacts
         run: node ../../scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
 
