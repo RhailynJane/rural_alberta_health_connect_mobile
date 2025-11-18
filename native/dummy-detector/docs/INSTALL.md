@@ -68,12 +68,19 @@ extern "C" {
 
 Caveat: `RCTCxxBridge` internals may change and you must include proper headers from React Native's C++ headers. The above is a conceptual example; consult RN new architecture docs.
 
-JS usage
+JS usage & VisionCamera Frame Processor Example
 
 ```ts
 import detectObjects from "native/dummy-detector/js/Detector";
 const boxes = detectObjects(640, 480, null);
 console.log(boxes);
+
+// VisionCamera Frame Processor example (zero-copy requires native changes)
+// Import the plugin at app startup, then register the processor in your Camera
+// frameProcessor with name 'detectNativeObjects' (see example in the repo):
+// import './vision-camera-detection-plugin';
+// const frameProcessor = useFrameProcessor(frame => { 'worklet'; return detectNativeObjects(frame); }, []);
+
 ```
 
 
