@@ -55,7 +55,7 @@ class MainApplication : Application(), ReactApplication {
     } else {
       reactNativeHost.reactInstanceManager.addReactInstanceEventListener(
         object : com.facebook.react.ReactInstanceEventListener {
-          override fun onReactContextInitialized(reactContext: com.facebook.react.ReactContext) {
+          override fun onReactContextInitialized(reactContext: com.facebook.react.bridge.ReactContext) {
             DummyDetectorInstaller.installJSI(reactContext)
           }
         }
