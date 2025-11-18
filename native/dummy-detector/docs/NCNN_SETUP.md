@@ -18,7 +18,17 @@ This documents how to wire a minimal NCNN wrapper into the dummy JSI detector.
 
    -DUSE_NCNN=ON -DNCNN_LIB=/absolute/path/to/libncnn.a -DNCNN_INCLUDE=/absolute/path/to/ncnn/include
 
-   Example using Gradle: open `android/` and set `externalNativeBuild` style to pass CMake arguments in your Gradle tasks.
+   Example using Gradle: open `android/app/build.gradle` and add the following to your `defaultConfig` block or to the `cmake` block to pass CMake arguments:
+
+```
+externalNativeBuild {
+  cmake {
+    arguments '-DUSE_NCNN=ON', '-DNCNN_LIB=/absolute/path/to/libncnn.a', '-DNCNN_INCLUDE=/absolute/path/to/ncnn/include'
+  }
+}
+```
+
+This will instruct CMake to enable NCNN when building with Gradle. You may need to adapt the ABI and NDK options to your environment.
 
 3. Add model files (.param and .bin) to your app assets or set `param` and `bin` absolute paths before calling `detectObjects` with buffer.
 
