@@ -21,7 +21,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug -x lint
+          ./gradlew assembleDebug -x lint --warning-mode all
       - name: Verify artifacts
         run: node ../../scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
 
