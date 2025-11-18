@@ -16,3 +16,15 @@ export default function detectObjects(width?: number, height?: number, data?: Ui
   // Fallback mock
   return [{ x1: 0.1, y1: 0.15, x2: 0.5, y2: 0.6, score: 0.85, label: 'person' }];
 }
+
+export function loadModel(paramPath: string, binPath: string): boolean {
+  if (typeof (global as any).loadDetectionModel === 'function') {
+    try {
+      return !!(global as any).loadDetectionModel(paramPath, binPath);
+    } catch (e) {
+      console.warn('loadModel: native call failed', e);
+      return false;
+    }
+  }
+  return false;
+}

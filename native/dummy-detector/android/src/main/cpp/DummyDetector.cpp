@@ -78,6 +78,19 @@ static void install(facebook::jsi::Runtime &rt) {
     return detectObjects(rt, thisVal, args, count);
   });
   rt.global().setProperty(rt, name, fn);
+
+  // Add a helper to load a NCNN model: loadModel(paramPath, binPath)
+  auto loadName = facebook::jsi::PropNameID::forAscii(rt, "loadDetectionModel");
+  auto loadFn = facebook::jsi::Function::createFromHostFunction(rt, loadName, 2, [](facebook::jsi::Runtime &rt, const facebook::jsi::Value &thisVal, const facebook::jsi::Value *args, size_t count) -> facebook::jsi::Value {
+    if (count < 2 || !args[0].isString() || !args[1].isString()) {
+      return facebook::jsi::Value(false);
+    }
+    std::string param = args[0].asString(rt).utf8(rt);
+    std::string bin = args[1].asString(rt).utf8(rt);
+    bool ok = tryLoadModel(param.c_str(), bin.c_str());
+    return facebook::jsi::Value(ok);
+  });
+  rt.global().setProperty(rt, loadName, loadFn);
 }
 
 // JNI wrapper used by Java/Kotlin to pass the runtime pointer.
