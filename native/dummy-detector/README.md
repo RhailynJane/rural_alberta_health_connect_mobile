@@ -3,7 +3,12 @@
 This module implements a tiny JSI-native PoC to demonstrate how to expose a C++ function
 from native code into JavaScript for the React Native New Architecture.
 
-It is intentionally minimal: the native function returns a mocked bounding box.
+It is intentionally minimal: the native function returns a toy bounding box. It also features:
+
+- `loadDetectionModel(param, bin)` — a JSI global you can call from JS to load a ncnn `.param` and `.bin` file at runtime (stubs without NCNN).
+- `detectObjects(width,height,data)` — synchronous JSI function exposed to JS and used by VisionCamera frame processors.  
+
+Use this PoC to prototype the JSI binding before integrating a real engine (ncnn/MNN).
 
 Usage steps (Android/iOS):
 1. Build native library using CMake (Android) or add `DummyDetector.mm` to the iOS project.
