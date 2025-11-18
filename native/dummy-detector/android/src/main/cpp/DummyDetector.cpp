@@ -1,6 +1,7 @@
 #include <jsi/jsi.h>
 #include <jni.h>
 #include <string>
+#include "ncnn_wrapper.h"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -42,6 +43,13 @@ static facebook::jsi::Value createToyDetections(facebook::jsi::Runtime &rt, int 
   return arr;
 }
 
+// Optional bridge for calling NCNN if available via CMake option
+static NCNNWrapper s_ncnn;
+
+static bool tryLoadModel(const char *paramFile, const char *binFile) {
+  return s_ncnn.loadModel(paramFile ? std::string(paramFile) : "", binFile ? std::string(binFile) : "");
+}
+
 // Host function: detectObjects(width, height, imageUint8Array /*optional*/)
 static auto detectObjects(facebook::jsi::Runtime &rt, const facebook::jsi::Value &thisVal, const facebook::jsi::Value *args, size_t argCount) -> facebook::jsi::Value {
   // Accept arguments but ignore them for now.
@@ -52,6 +60,13 @@ static auto detectObjects(facebook::jsi::Runtime &rt, const facebook::jsi::Value
   if (argCount >= 2 && args[0].isNumber() && args[1].isNumber()) {
     width = (int)args[0].asNumber();
     height = (int)args[1].asNumber();
+  }
+
+  // If NCNN model was loaded and data provided (args[2]), try to run a forward pass.
+  if (args && argCount >= 3 && args[2].isNull() == false) {
+    // In a real path, args[2] would be a native pointer/TypedArray to image buffer.
+    // For now, we call the toy inference unless NCNN is available and we have a RGBA buffer.
+    // Since this is a PoC, we simply return the toy output.
   }
 
   return createToyDetections(rt, width, height);

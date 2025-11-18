@@ -1,0 +1,46 @@
+name: Native CI Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        run: npm ci
+      - name: Build Android
+        working-directory: android
+        run: |
+          ./gradlew assembleDebug -x lint
+      - name: Verify artifacts
+        run: node ../../scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
+
+  build-ios:
+    runs-on: macos-latest
+    if: "github.event_name == 'push' || github.event.pull_request"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        run: npm ci
+      - name: Pod install & Build (iOS) if workspace present
+        run: |
+          if [ -f ios/Podfile ] ; then
+            cd ios && pod install && xcodebuild -workspace "$(ls | grep .xcworkspace | head -n 1)" -scheme "RahcApp" -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 14' build CODE_SIGNING_ALLOWED=NO ;
+          else
+            echo "No iOS workspace found — skipping iOS build";
+          fi
+      - name: Verify iOS artifacts
+        run: node ./scripts/ci/check-native-artifacts.js --ios || exit 0

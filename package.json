@@ -11,6 +11,7 @@
     "lint": "expo lint",
     "eas-install": "npm install",
     "prebuild": "npm run eas-install"
+    ,"ci:check-native": "node ./scripts/ci/check-native-artifacts.js"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
