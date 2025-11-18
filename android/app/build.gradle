@@ -99,6 +99,7 @@ packagingOptions {
     externalNativeBuild {
         cmake {
             path file('../../native/dummy-detector/android/src/main/cpp/CMakeLists.txt')
+            version '3.10.2'
         }
     }
     defaultConfig {
@@ -109,6 +110,15 @@ packagingOptions {
         versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        
+        externalNativeBuild {
+            cmake {
+                // Pass React Native directory to CMake
+                def rnDir = react.reactNativeDir.get().asFile.absolutePath
+                arguments "-DREACT_NATIVE_DIR=${rnDir}"
+                cppFlags "-std=c++17", "-fexceptions", "-frtti"
+            }
+        }
     }
     signingConfigs {
         debug {
