@@ -96,6 +96,11 @@ packagingOptions {
     compileSdk = rootProject.ext.compileSdkVersion
 
     namespace = 'com.amirzhou.rahcapp'
+    externalNativeBuild {
+        cmake {
+            path file('../../native/dummy-detector/android/src/main/cpp/CMakeLists.txt')
+        }
+    }
     defaultConfig {
         applicationId 'com.amirzhou.rahcapp'
         minSdkVersion rootProject.ext.minSdkVersion

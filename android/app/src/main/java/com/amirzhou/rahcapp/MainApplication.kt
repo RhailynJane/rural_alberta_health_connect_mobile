@@ -15,6 +15,8 @@ import com.facebook.react.defaults.DefaultReactNativeHost
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
+import com.facebook.react.bridge.ReactApplicationContext
+import com.amirzhou.rahcapp.DummyDetectorInstaller
 
 class MainApplication : Application(), ReactApplication {
 
@@ -46,6 +48,15 @@ class MainApplication : Application(), ReactApplication {
       ReleaseLevel.STABLE
     }
     loadReactNative(this)
+    // Install dummy JSI detector when the RN runtime is available.
+    val ctx = reactNativeHost.reactInstanceManager.currentReactContext
+    if (ctx != null) {
+      DummyDetectorInstaller.installJSI(ctx)
+    } else {
+      reactNativeHost.reactInstanceManager.addReactInstanceEventListener { reactContext ->
+        DummyDetectorInstaller.installJSI(reactContext as ReactApplicationContext)
+      }
+    }
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
 

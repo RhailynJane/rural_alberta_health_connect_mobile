@@ -1,0 +1,6 @@
+{
+  "name": "@rahc/dummy-detector",
+  "version": "0.0.1",
+  "main": "./js/Detector.js",
+  "types": "./js/Detector.d.ts"
+}
