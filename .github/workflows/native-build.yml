@@ -36,7 +36,7 @@ jobs:
           ../node_modules/.bin/react-native config || true
           ./gradlew assembleDebug -x lint --no-daemon --no-parallel --warning-mode all --stacktrace
       - name: Verify artifacts
-        run: node ../../scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
+        run: node scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
 
   build-ios:
     runs-on: macos-latest
