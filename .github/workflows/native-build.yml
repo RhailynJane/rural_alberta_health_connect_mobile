@@ -53,6 +53,7 @@ jobs:
         env:
           NODE_ENV: development
           ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          ORG_GRADLE_PROJECT_newArchEnabled: "true"
         run: |
           chmod +x gradlew
           ./gradlew clean --warning-mode all
