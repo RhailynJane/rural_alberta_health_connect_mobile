@@ -47,20 +47,14 @@ class MainApplication : Application(), ReactApplication {
     } catch (e: IllegalArgumentException) {
       ReleaseLevel.STABLE
     }
-    loadReactNative(this)
-    // Install dummy JSI detector when the RN runtime is available.
-    val ctx = reactNativeHost.reactInstanceManager.currentReactContext
-    if (ctx != null) {
-      DummyDetectorInstaller.installJSI(ctx)
-    } else {
-      reactNativeHost.reactInstanceManager.addReactInstanceEventListener(
-        object : com.facebook.react.ReactInstanceEventListener {
-          override fun onReactContextInitialized(context: com.facebook.react.bridge.ReactContext) {
-            DummyDetectorInstaller.installJSI(context)
-          }
+    // Defer JSI installation until after React context is fully initialized
+    reactNativeHost.reactInstanceManager.addReactInstanceEventListener(
+      object : com.facebook.react.ReactInstanceEventListener {
+        override fun onReactContextInitialized(context: com.facebook.react.bridge.ReactContext) {
+          DummyDetectorInstaller.installJSI(context)
         }
-      )
-    }
+      }
+    )
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }
 
