@@ -12,6 +12,7 @@ import com.facebook.react.ReactHost
 import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
+import com.facebook.react.internal.featureflags.ReactNativeFeatureFlags
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
@@ -20,22 +21,27 @@ import com.amirzhou.rahcapp.DummyDetectorInstaller
 
 class MainApplication : Application(), ReactApplication {
 
-  override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
+  // Defer creation of ReactNativeHost until after we can tweak feature flags
+  private val _reactNativeHost: ReactNativeHost by lazy {
+    ReactNativeHostWrapper(
       this,
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
-            PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
-            }
+          PackageList(this).packages.apply {
+            // Manually add packages that cannot be autolinked here.
+          }
 
-          override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
+        override fun getJSMainModuleName(): String = ".expo/.virtual-metro-entry"
 
-          override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
+        override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
-          override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
+        override val isNewArchEnabled: Boolean = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED
       }
-  )
+    )
+  }
+
+  override val reactNativeHost: ReactNativeHost
+    get() = _reactNativeHost
 
   override val reactHost: ReactHost
     get() = ReactNativeHostWrapper.createReactHost(applicationContext, reactNativeHost)
@@ -47,6 +53,8 @@ class MainApplication : Application(), ReactApplication {
     } catch (e: IllegalArgumentException) {
       ReleaseLevel.STABLE
     }
+    // Disable Bridgeless architecture explicitly to avoid missing libreact_featureflagsjni.so until environment is aligned
+    ReactNativeFeatureFlags.enableBridgelessArchitecture(false)
     // Defer JSI installation until after React context is fully initialized
     reactNativeHost.reactInstanceManager.addReactInstanceEventListener(
       object : com.facebook.react.ReactInstanceEventListener {
