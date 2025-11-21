@@ -61,6 +61,21 @@ jobs:
       
       - name: Verify artifacts
         run: node scripts/ci/check-native-artifacts.js || (ls android/app/build/outputs/apk/debug && exit 0)
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+      - name: Upload Proguard/R8 mapping (if present)
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-mapping
+          path: |
+            android/app/build/outputs/mapping/debug/mapping.txt
+            android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   build-ios:
     runs-on: macos-latest
@@ -76,9 +91,16 @@ jobs:
       - name: Pod install & Build (iOS) if workspace present
         run: |
           if [ -f ios/Podfile ] ; then
-            cd ios && pod install && xcodebuild -workspace "$(ls | grep .xcworkspace | head -n 1)" -scheme "RahcApp" -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 14' build CODE_SIGNING_ALLOWED=NO ;
+            cd ios && pod install && xcodebuild -workspace "$(ls | grep .xcworkspace | head -n 1)" -scheme "RahcApp" -configuration Debug -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 14' -derivedDataPath build/DerivedData build CODE_SIGNING_ALLOWED=NO ;
           else
             echo "No iOS workspace found — skipping iOS build";
           fi
       - name: Verify iOS artifacts
         run: node ./scripts/ci/check-native-artifacts.js --ios || exit 0
+      - name: Upload iOS simulator build products (if present)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-build
+          path: ios/build/DerivedData/Build/Products
+          if-no-files-found: ignore
+          retention-days: 7
