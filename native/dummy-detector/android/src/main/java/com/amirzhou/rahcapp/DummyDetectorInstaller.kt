@@ -7,8 +7,8 @@ object DummyDetectorInstaller {
     init {
         try {
             System.loadLibrary("dummy-detector")
-        } catch (_: UnsatisfiedLinkError) {
-            // Library may not be present in some build variants; ignore to avoid hard crash
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("DummyDetector", "native lib missing: ${e.message}")
         }
     }
 
@@ -24,11 +24,17 @@ object DummyDetectorInstaller {
         } catch (_: Throwable) {
             0L
         }
-        if (ptr == 0L) return
+        if (ptr == 0L) {
+            android.util.Log.w("DummyDetector", "JSI runtime pointer unavailable; skipping install")
+            return
+        }
         try {
             install(ptr)
-        } catch (_: UnsatisfiedLinkError) {
-            // Native symbol missing; likely no native lib in this build type
+            android.util.Log.i("DummyDetector", "JSI detector installed (ptr=$ptr)")
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w("DummyDetector", "native symbol missing: ${e.message}")
+        } catch (e: Throwable) {
+            android.util.Log.e("DummyDetector", "install failed: ${e.message}", e)
         }
     }
 }
