@@ -52,7 +52,8 @@ npx convex deploy      # Deploy backend to production
 - **Camera**: React Native Vision Camera (v4.7.2) for symptom image capture
 - **Maps**: @rnmapbox/maps (v10.2.6) for location-based services
 - **Notifications**: Expo Notifications with local scheduling and reminder management
-- **ML/AI**: Vision camera integration with worklets for real-time processing
+- **ML/AI**: ONNX Runtime for on-device inference, Vision Camera with worklets for real-time processing
+- **Computer Vision**: react-native-fast-opencv for image preprocessing
 
 ### Backend (Convex)
 
