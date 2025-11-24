@@ -1,0 +1,191 @@
+/**
+ * YOLO Detection Module
+ *
+ * A modular, testable YOLO object detection pipeline for React Native.
+ *
+ * Architecture:
+ * ┌─────────────────────────────────────────────────────────────┐
+ * │  index.ts - Public API                                      │
+ * ├─────────────────────────────────────────────────────────────┤
+ * │  preprocessing.ts - Pure math functions (testable)          │
+ * │  opencv-bridge.ts - OpenCV wrapper (device-tested)          │
+ * │  inference.ts - ONNX Runtime wrapper                        │
+ * │  postprocessing.ts - Output parsing + NMS (testable)        │
+ * │  visualization.ts - Bounding box drawing (OpenCV)           │
+ * │  types.ts - TypeScript interfaces                           │
+ * │  constants.ts - Configuration                               │
+ * └─────────────────────────────────────────────────────────────┘
+ *
+ * Usage:
+ * ```typescript
+ * import { YoloInference, preprocessImage, postprocess, MODEL_CONFIG } from '@/utils/yolo';
+ *
+ * // Initialize
+ * const yolo = new YoloInference();
+ * await yolo.loadModel(modelUri);
+ *
+ * // Run detection
+ * const preprocess = await preprocessImage(imageUri);
+ * const output = await yolo.runInference(preprocess.tensor);
+ * const detections = postprocess(output, preprocess, MODEL_CONFIG);
+ * ```
+ */
+
+// Import test functions for local use in runAllYoloTests
+import { runAllPreprocessingTests as _runPreprocessTests } from "./preprocessing";
+import { runAllTests as _runPostprocessTests } from "./postprocessing";
+import { testVisualizationPure as _testVizPure } from "./visualization";
+
+// ============================================================
+// TYPES
+// ============================================================
+
+export type {
+  BoundingBox,
+  BoundingBoxCorners,
+  Detection,
+  PreprocessResult,
+  ModelConfig,
+  YoloOutputInfo,
+  InferenceTiming,
+  DetectionResult,
+} from "./types";
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+export {
+  MODEL_CONFIG,
+  YOLO_OUTPUT_INFO,
+  FEATURE_INDICES,
+  LOG_PREFIX,
+} from "./constants";
+
+// ============================================================
+// PREPROCESSING
+// ============================================================
+
+export {
+  // Main pipeline
+  preprocessImage,
+  createDummyPreprocessResult,
+  // Pure functions (testable)
+  calculateLetterboxParams,
+  normalizePixels,
+  hwcToChw,
+  // Tests
+  runAllPreprocessingTests,
+  testLetterboxCalculation,
+  testNormalizePixels,
+  testHwcToChw,
+  testPreprocessingWithImage,
+} from "./preprocessing";
+
+// ============================================================
+// OPENCV BRIDGE
+// ============================================================
+
+export {
+  // Core functions
+  loadImagePixels,
+  resizeImage,
+  applyPadding,
+  // Tests
+  testOpenCVBridge,
+  testOpenCVBasic,
+  // Types
+  type RawImage,
+} from "./opencv-bridge";
+
+// ============================================================
+// POSTPROCESSING
+// ============================================================
+
+export {
+  // Main functions
+  parseYoloOutput,
+  applyNMS,
+  calculateIoU,
+  centerToCorners,
+  scaleDetections,
+  postprocess,
+  // Tests
+  runAllTests as runAllPostprocessingTests,
+  testCalculateIoU,
+  testCenterToCorners,
+  testParseYoloOutput,
+} from "./postprocessing";
+
+// ============================================================
+// INFERENCE
+// ============================================================
+
+export {
+  YoloInference,
+  getDefaultYoloInference,
+  testInference,
+} from "./inference";
+
+// ============================================================
+// VISUALIZATION
+// ============================================================
+
+export {
+  // Main function
+  annotateImage,
+  // Drawing functions
+  drawBoundingBox,
+  drawAllDetections,
+  // Pure functions (testable)
+  getClassColor,
+  formatLabel,
+  calculateLabelBackground,
+  // Configuration
+  CLASS_COLORS,
+  DEFAULT_COLOR,
+  DRAW_CONFIG,
+  // Tests
+  testVisualizationPure,
+  testAnnotation,
+  // Types
+  type AnnotationResult,
+} from "./visualization";
+
+// ============================================================
+// COMBINED TEST RUNNER
+// ============================================================
+
+/**
+ * Run all module tests (pure function tests only)
+ * Call this to verify all functions work correctly
+ */
+export function runAllYoloTests(): void {
+  console.log("\n");
+  console.log(
+    "╔════════════════════════════════════════════════════════════╗"
+  );
+  console.log(
+    "║                   YOLO MODULE TESTS                        ║"
+  );
+  console.log(
+    "╚════════════════════════════════════════════════════════════╝"
+  );
+  console.log("\n");
+
+  _runPreprocessTests();
+  _runPostprocessTests();
+  _testVizPure();
+
+  console.log("\n");
+  console.log(
+    "╔════════════════════════════════════════════════════════════╗"
+  );
+  console.log(
+    "║                 ALL TESTS COMPLETE                          ║"
+  );
+  console.log(
+    "╚════════════════════════════════════════════════════════════╝"
+  );
+  console.log("\n");
+}
