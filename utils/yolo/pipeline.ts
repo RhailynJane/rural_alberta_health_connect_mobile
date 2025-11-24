@@ -46,6 +46,9 @@
 
 import { Asset } from 'expo-asset';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const MODEL_ASSET = require('@/assets/weights.onnx');
+
 import { MODEL_CONFIG, LOG_PREFIX, PIPELINE_CONFIG } from './constants';
 import { YoloInference } from './inference';
 import { postprocess } from './postprocessing';
