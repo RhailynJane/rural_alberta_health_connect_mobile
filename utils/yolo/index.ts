@@ -7,6 +7,7 @@
  * ┌─────────────────────────────────────────────────────────────┐
  * │  index.ts - Public API                                      │
  * ├─────────────────────────────────────────────────────────────┤
+ * │  pipeline.ts - Multi-image orchestrator (main entry point)  │
  * │  preprocessing.ts - Pure math functions (testable)          │
  * │  opencv-bridge.ts - OpenCV wrapper (device-tested)          │
  * │  inference.ts - ONNX Runtime wrapper                        │
@@ -16,7 +17,23 @@
  * │  constants.ts - Configuration                               │
  * └─────────────────────────────────────────────────────────────┘
  *
- * Usage:
+ * RECOMMENDED USAGE (via Pipeline):
+ * ```typescript
+ * import { runPipeline, processImage } from '@/utils/yolo';
+ *
+ * // Process multiple images
+ * const result = await runPipeline(['file://photo1.jpg', 'file://photo2.jpg']);
+ * console.log(`Found ${result.totalDetections} detections`);
+ * result.results.forEach(r => {
+ *   // r.annotatedImageBase64 - image with bounding boxes
+ *   // r.detections - array of Detection objects
+ * });
+ *
+ * // Process single image
+ * const singleResult = await processImage('file://photo.jpg');
+ * ```
+ *
+ * ADVANCED USAGE (manual control):
  * ```typescript
  * import { YoloInference, preprocessImage, postprocess, MODEL_CONFIG } from '@/utils/yolo';
  *
