@@ -313,6 +313,12 @@ export default function AssessmentResults() {
   const [isLogged, setIsLogged] = useState(false);
   const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
+  // YOLO Detection State
+  const [yoloResult, setYoloResult] = useState<PipelineResult | null>(null);
+  const [isYoloProcessing, setIsYoloProcessing] = useState(false);
+  const [yoloError, setYoloError] = useState<string | null>(null);
+  const [yoloProgress, setYoloProgress] = useState<string>("");
+
   // Use ref to track if we're currently fetching to prevent multiple calls
   const isFetchingRef = useRef(false);
 
