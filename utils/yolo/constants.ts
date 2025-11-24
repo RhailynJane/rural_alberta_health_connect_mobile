@@ -57,4 +57,28 @@ export const LOG_PREFIX = {
   POSTPROCESS: "[YOLO:Postprocess]",
   NMS: "[YOLO:NMS]",
   PIPELINE: "[YOLO:Pipeline]",
+  VISUALIZATION: "[YOLO:Viz]",
+  MODEL: "[YOLO:Model]",
+} as const;
+
+/**
+ * Pipeline configuration defaults
+ */
+export const PIPELINE_CONFIG = {
+  /** Default timeout for single image processing (ms) */
+  IMAGE_TIMEOUT_MS: 30000,
+  /** Maximum number of images to process in a single pipeline run */
+  MAX_IMAGES: 10,
+  /** Whether to continue processing if one image fails */
+  CONTINUE_ON_ERROR: true,
+} as const;
+
+/**
+ * Box styling for different severity levels
+ * Used to color boxes based on detection confidence
+ */
+export const CONFIDENCE_COLORS = {
+  HIGH: [0, 255, 0],    // Green (BGR) for confidence >= 0.8
+  MEDIUM: [0, 165, 255], // Orange (BGR) for confidence >= 0.5
+  LOW: [0, 0, 255],      // Red (BGR) for confidence < 0.5
 } as const;
