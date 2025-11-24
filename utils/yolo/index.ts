@@ -234,3 +234,52 @@ export function runAllYoloTests(): void {
   );
   console.log("\n");
 }
+
+/**
+ * Run all tests including pipeline tests with real images
+ * Requires device/emulator with model asset available
+ *
+ * @param testImageUris - Image URIs to test with
+ */
+export async function runAllYoloTestsWithImages(testImageUris: string[]): Promise<void> {
+  console.log("\n");
+  console.log(
+    "╔════════════════════════════════════════════════════════════╗"
+  );
+  console.log(
+    "║             YOLO MODULE TESTS (WITH IMAGES)                ║"
+  );
+  console.log(
+    "╚════════════════════════════════════════════════════════════╝"
+  );
+  console.log("\n");
+
+  // Pure function tests
+  _runPreprocessTests();
+  _runPostprocessTests();
+  _testVizPure();
+
+  // Model load test
+  console.log("\n🧪 Testing model load...\n");
+  const modelOk = await _testModelLoad();
+
+  if (modelOk && testImageUris.length > 0) {
+    // Pipeline test with images
+    console.log("\n🧪 Testing pipeline with images...\n");
+    await _testPipeline(testImageUris);
+  } else if (testImageUris.length === 0) {
+    console.log("\n⚠️ No test images provided, skipping pipeline test\n");
+  }
+
+  console.log("\n");
+  console.log(
+    "╔════════════════════════════════════════════════════════════╗"
+  );
+  console.log(
+    "║             ALL TESTS COMPLETE (WITH IMAGES)               ║"
+  );
+  console.log(
+    "╚════════════════════════════════════════════════════════════╝"
+  );
+  console.log("\n");
+}
