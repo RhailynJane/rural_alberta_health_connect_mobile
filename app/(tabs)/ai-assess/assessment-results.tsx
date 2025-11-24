@@ -21,6 +21,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 
+// YOLO Pipeline for wound detection
+import { runPipeline, type PipelineResult } from "../../../utils/yolo";
+
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
