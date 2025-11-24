@@ -603,8 +603,53 @@ export default function AssessmentResults() {
     
     const processImagesAndFetchAssessment = async () => {
       let base64Images: string[] = [];
+
+      // Step 1: Run YOLO detection on images (if any)
+      if (displayPhotos.length > 0) {
+        console.log(`🔬 [YOLO] Starting wound detection on ${displayPhotos.length} image(s)...`);
+        setIsYoloProcessing(true);
+        setYoloError(null);
+        setYoloProgress("Loading wound detection model...");
+
+        try {
+          const pipelineResult = await runPipeline(
+            displayPhotos,
+            { continueOnError: true },
+            (progress) => {
+              console.log(`🔬 [YOLO] Progress: ${progress.percentComplete}% - ${progress.message}`);
+              setYoloProgress(progress.message);
+            }
+          );
+
+          setYoloResult(pipelineResult);
+          console.log(`✅ [YOLO] Detection complete:`, {
+            totalDetections: pipelineResult.totalDetections,
+            successfulImages: pipelineResult.successfulImages,
+            failedImages: pipelineResult.failedImages,
+            summary: pipelineResult.summary.byClass,
+          });
+
+          // Log individual results
+          pipelineResult.results.forEach((result, idx) => {
+            console.log(`🔬 [YOLO] Image ${idx + 1}:`, {
+              success: result.success,
+              detections: result.detections.length,
+              classes: result.detections.map(d => `${d.className} (${(d.confidence * 100).toFixed(0)}%)`),
+              hasAnnotatedImage: result.annotatedImageBase64.length > 0,
+            });
+          });
+        } catch (error) {
+          console.error(`❌ [YOLO] Detection failed:`, error);
+          setYoloError(String(error));
+        } finally {
+          setIsYoloProcessing(false);
+          setYoloProgress("");
+        }
+      }
+
+      // Step 2: Convert images to base64 for Gemini (if online)
       if (displayPhotos.length > 0 && aiContext) {
-        console.log(`📸 Processing ${displayPhotos.length} images in background...`);
+        console.log(`📸 Processing ${displayPhotos.length} images for Gemini...`);
         try {
           base64Images = await convertImagesToBase64(displayPhotos);
           console.log(`✅ Successfully converted ${base64Images.length} images to base64`);
@@ -614,7 +659,8 @@ export default function AssessmentResults() {
           aiContext.uploadedPhotos = [];
         }
       }
-      // Trigger Gemini request after images are ready (or immediately if no images)
+
+      // Step 3: Trigger Gemini request after images are ready (or immediately if no images)
       fetchAIAssessment(base64Images);
     };
 
