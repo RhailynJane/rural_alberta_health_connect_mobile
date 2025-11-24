@@ -251,6 +251,56 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 - **Image Support**: Base64 photo upload with size checking (~800KB limit)
 - **Fallback**: Rule-based assessment when AI unavailable or image too large
 
+## YOLO Object Detection (utils/yolo/)
+
+On-device wound/injury detection using ONNX Runtime with a custom YOLOv8 model.
+
+### Architecture
+
+```
+utils/yolo/
+├── index.ts           # Public API - exports all modules
+├── types.ts           # TypeScript interfaces (Detection, BoundingBox, etc.)
+├── constants.ts       # Model config (640x640 input, 3 classes, thresholds)
+├── preprocessing.ts   # Image → tensor conversion with letterboxing
+├── opencv-bridge.ts   # OpenCV wrapper for image loading/resizing
+├── inference.ts       # ONNX Runtime session management
+├── postprocessing.ts  # Parse output, NMS, scale to original coords
+└── visualization.ts   # Draw bounding boxes on images
+```
+
+### Usage
+
+```typescript
+import { YoloInference, preprocessImage, postprocess, MODEL_CONFIG } from '@/utils/yolo';
+import { Asset } from 'expo-asset';
+
+// Initialize
+const yolo = new YoloInference();
+const assets = await Asset.loadAsync(require('@/assets/weights.onnx'));
+await yolo.loadModel(assets[0].localUri!);
+
+// Run detection
+const preprocess = await preprocessImage(imageUri);
+const output = await yolo.runInference(preprocess.tensor);
+const detections = postprocess(output, preprocess, MODEL_CONFIG);
+```
+
+### Model Details
+
+- **Input**: 640x640 RGB image (letterboxed)
+- **Output**: [1, 7, 8400] tensor - 8400 predictions × 7 features (x, y, w, h, 3 class probs)
+- **Classes**: abrasion, bruise, cut (configurable in constants.ts)
+- **Thresholds**: confidence 0.25, IoU 0.45 (default)
+
+### Testing
+
+Pure functions in preprocessing and postprocessing have built-in tests:
+```typescript
+import { runAllYoloTests } from '@/utils/yolo';
+runAllYoloTests(); // Runs all unit tests in console
+```
+
 ## Health Tracking System
 
 ### Data Models
