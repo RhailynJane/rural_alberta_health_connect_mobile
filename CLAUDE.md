@@ -184,8 +184,8 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 
 ### Metro Config (metro.config.js)
 
-- Custom asset extension: `.tflite` added for TensorFlow Lite models
-- Models stored in `assets/models/`
+- Custom asset extensions: `.tflite` (TensorFlow Lite) and `.onnx` (ONNX Runtime) for ML models
+- Models stored in `assets/` (e.g., `assets/weights.onnx`)
 
 ### TypeScript (tsconfig.json)
 
