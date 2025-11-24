@@ -1513,4 +1513,98 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E9ECEF",
   },
+  // YOLO Detection Styles
+  yoloProcessingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  yoloProcessingText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#2A7DE1",
+  },
+  yoloErrorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#DC3545",
+  },
+  yoloErrorText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#DC3545",
+    flex: 1,
+  },
+  yoloSummaryContainer: {
+    backgroundColor: "#F8F9FA",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  yoloSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  yoloSummaryTitle: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  yoloClassList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  yoloClassItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  yoloClassBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  yoloClassBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  yoloClassCount: {
+    marginLeft: 4,
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  yoloConfidenceText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#666",
+    fontStyle: "italic",
+  },
+  photoLabelContainer: {
+    alignItems: "center",
+    marginTop: 4,
+  },
+  detectionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  detectionBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
+  },
 });
