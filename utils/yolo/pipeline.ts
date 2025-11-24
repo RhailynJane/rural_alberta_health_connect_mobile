@@ -161,7 +161,7 @@ async function ensureModelLoaded(runId: string): Promise<number> {
     try {
       // Load model asset
       console.log(`${P} [${runId}] Loading model asset from @/assets/weights.onnx...`);
-      const assets = await Asset.loadAsync(require('@/assets/weights.onnx'));
+      const assets = await Asset.loadAsync(MODEL_ASSET);
 
       if (!assets[0]?.localUri) {
         throw new Error('Failed to load model asset - localUri is null');
