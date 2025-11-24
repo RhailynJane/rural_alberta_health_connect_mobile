@@ -10,8 +10,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "eas-install": "npm install",
-    "prebuild": "npm run eas-install"
-    ,"ci:check-native": "node ./scripts/ci/check-native-artifacts.js"
+    "prebuild": "npm run eas-install",
+    "ci:check-native": "node ./scripts/ci/check-native-artifacts.js",
+    "rn:start": "react-native start"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
@@ -38,12 +39,10 @@
     "expo-build-properties": "~1.0.9",
     "expo-camera": "~17.0.8",
     "expo-constants": "~18.0.10",
-    "expo-dev-client": "~6.0.16",
     "expo-file-system": "~19.0.17",
     "expo-font": "~14.0.9",
     "expo-haptics": "~15.0.7",
     "expo-image": "~3.0.10",
-    "expo-image-manipulator": "^14.0.7",
     "expo-image-picker": "~17.0.8",
     "expo-linear-gradient": "^15.0.7",
     "expo-linking": "~8.0.8",
@@ -64,8 +63,8 @@
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-picker-select": "^9.3.1",
-    "react-native-reanimated": "~4.1.1",
     "react-native-quick-sqlite": "latest",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",

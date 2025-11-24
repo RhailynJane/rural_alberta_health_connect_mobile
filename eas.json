@@ -6,18 +6,14 @@
   },
   "build": {
     "development": {
-      "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
-      "ios": {
-        "simulator": true
-      },
       "env": {
         "EXPO_PUBLIC_ENV": "development",
         "EXPO_PUBLIC_CONVEX_URL": "https://judicious-pony-253.convex.cloud",
-        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a,x86_64"
       }
     },
     "preview": {

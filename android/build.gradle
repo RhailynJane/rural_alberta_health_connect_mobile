@@ -16,7 +16,7 @@ allprojects {
   repositories {
     google()
     mavenCentral()
-    maven { url = 'https://www.jitpack.io' }
+    maven { url 'https://www.jitpack.io' }
   }
 }
 
@@ -27,7 +27,7 @@ apply plugin: "com.facebook.react.rootproject"
 allprojects {
   repositories {
     maven {
-      url = 'https://api.mapbox.com/downloads/v2/releases/maven'
+      url 'https://api.mapbox.com/downloads/v2/releases/maven'
       // Authentication is no longer required as per Mapbox's removal of download token requirement
       // See: https://github.com/mapbox/mapbox-maps-flutter/issues/775
       // Keeping this as optional for backward compatibility
