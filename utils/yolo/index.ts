@@ -52,12 +52,14 @@
 import { runAllPreprocessingTests as _runPreprocessTests } from "./preprocessing";
 import { runAllTests as _runPostprocessTests } from "./postprocessing";
 import { testVisualizationPure as _testVizPure } from "./visualization";
+import { testPipeline as _testPipeline, testModelLoad as _testModelLoad } from "./pipeline";
 
 // ============================================================
 // TYPES
 // ============================================================
 
 export type {
+  // Core detection types
   BoundingBox,
   BoundingBoxCorners,
   Detection,
@@ -66,6 +68,13 @@ export type {
   YoloOutputInfo,
   InferenceTiming,
   DetectionResult,
+  // Pipeline types (multi-image processing)
+  ImageDetectionResult,
+  DetectionSummary,
+  PipelineResult,
+  PipelineOptions,
+  PipelineProgress,
+  PipelineProgressCallback,
 } from "./types";
 
 // ============================================================
