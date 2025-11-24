@@ -86,7 +86,26 @@ export {
   YOLO_OUTPUT_INFO,
   FEATURE_INDICES,
   LOG_PREFIX,
+  PIPELINE_CONFIG,
+  CONFIDENCE_COLORS,
 } from "./constants";
+
+// ============================================================
+// PIPELINE (Main entry point for multi-image processing)
+// ============================================================
+
+export {
+  // Main pipeline functions
+  runPipeline,
+  processImage,
+  hasDetections,
+  // Model management
+  isModelReady,
+  unloadModel,
+  // Testing
+  testPipeline,
+  testModelLoad,
+} from "./pipeline";
 
 // ============================================================
 // PREPROCESSING
