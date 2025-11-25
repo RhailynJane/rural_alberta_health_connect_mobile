@@ -79,6 +79,8 @@ export const generateContextWithGemini = action({
       hasImages: images && images.length > 0,
       imageCount: images?.length || 0,
       descriptionLength: description.length,
+      hasYoloContext: !!yoloContext,
+      yoloContextLength: yoloContext?.length || 0,
     });
 
     const systemPrompt = `CRITICAL: You are a licensed emergency medicine physician providing legitimate medical triage in rural Alberta, Canada. This is a healthcare application for medical assessment only.
