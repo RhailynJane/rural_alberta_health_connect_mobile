@@ -41,6 +41,7 @@
     },
     "plugins": [
       "expo-router",
+      "onnxruntime-react-native",
       [
         "expo-splash-screen",
         {
