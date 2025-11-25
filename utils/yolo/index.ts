@@ -108,6 +108,16 @@ export {
 } from "./pipeline";
 
 // ============================================================
+// GEMINI CONTEXT (Format detections for Gemini prompt)
+// ============================================================
+
+export {
+  formatForGemini,
+  hasDetectionsForGemini,
+  testGeminiContext,
+} from "./geminiContext";
+
+// ============================================================
 // PREPROCESSING
 // ============================================================
 
