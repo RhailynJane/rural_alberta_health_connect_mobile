@@ -11,14 +11,29 @@
  * 3. Color space conversion (BGR → RGB)
  */
 
-import {
-  OpenCV,
-  ObjectType,
-  DataTypes,
-  ColorConversionCodes,
-  InterpolationFlags,
-} from "react-native-fast-opencv";
-import { readAsStringAsync, EncodingType } from "expo-file-system/legacy";
+// Lazy load OpenCV to prevent crashes if native module not available
+let OpenCV: any = null;
+let ObjectType: any = null;
+let DataTypes: any = null;
+let ColorConversionCodes: any = null;
+let InterpolationFlags: any = null;
+let opencvAvailable = false;
+
+try {
+  const opencv = require("react-native-fast-opencv");
+  OpenCV = opencv.OpenCV;
+  ObjectType = opencv.ObjectType;
+  DataTypes = opencv.DataTypes;
+  ColorConversionCodes = opencv.ColorConversionCodes;
+  InterpolationFlags = opencv.InterpolationFlags;
+  opencvAvailable = true;
+  console.log('✅ OpenCV loaded successfully');
+} catch (error) {
+  console.warn('⚠️ OpenCV not available - image processing features will be disabled', error);
+  opencvAvailable = false;
+}
+
+import { EncodingType, readAsStringAsync } from "expo-file-system/legacy";
 
 // ============================================================
 // Types
@@ -58,6 +73,10 @@ const LOG_PREFIX = "[OpenCV:Bridge]";
  * @returns RawImage with RGB pixel data
  */
 export async function loadImagePixels(uri: string): Promise<RawImage> {
+  if (!opencvAvailable || !OpenCV) {
+    throw new Error('OpenCV is not available. Please rebuild the app with native dependencies.');
+  }
+  
   console.log(`${LOG_PREFIX} ========================================`);
   console.log(`${LOG_PREFIX} Loading image from URI`);
   console.log(`${LOG_PREFIX} ========================================`);

@@ -5,9 +5,24 @@
  * Handles tensor creation and output extraction.
  */
 
-import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+// Lazy load ONNX runtime to prevent crashes if native module not available
+let InferenceSession: any = null;
+let Tensor: any = null;
+let onnxAvailable = false;
+
+try {
+  const onnx = require('onnxruntime-react-native');
+  InferenceSession = onnx.InferenceSession;
+  Tensor = onnx.Tensor;
+  onnxAvailable = true;
+  console.log('✅ ONNX Runtime loaded successfully');
+} catch (error) {
+  console.warn('⚠️ ONNX Runtime not available - AI features will be disabled', error);
+  onnxAvailable = false;
+}
+
+import { LOG_PREFIX, MODEL_CONFIG, YOLO_OUTPUT_INFO } from './constants';
 import type { ModelConfig } from './types';
-import { MODEL_CONFIG, YOLO_OUTPUT_INFO, LOG_PREFIX } from './constants';
 
 /**
  * YOLO Inference Session Manager
@@ -27,6 +42,12 @@ export class YoloInference {
 
   constructor(config: ModelConfig = MODEL_CONFIG) {
     this.config = config;
+    
+    if (!onnxAvailable) {
+      console.error(`${LOG_PREFIX.INFERENCE} ONNX Runtime not available - YoloInference will not function`);
+      return;
+    }
+    
     console.log(`${LOG_PREFIX.INFERENCE} YoloInference instance created`);
     console.log(`${LOG_PREFIX.INFERENCE}   Input size: ${config.inputWidth}x${config.inputHeight}`);
     console.log(`${LOG_PREFIX.INFERENCE}   Classes: ${config.classNames.join(', ')}`);
@@ -64,6 +85,10 @@ export class YoloInference {
    * await yolo.loadModel(assets[0].localUri);
    */
   async loadModel(modelUri: string): Promise<void> {
+    if (!onnxAvailable || !InferenceSession) {
+      throw new Error('ONNX Runtime is not available. Please rebuild the app with native dependencies.');
+    }
+    
     console.log(`${LOG_PREFIX.INFERENCE} ========================================`);
     console.log(`${LOG_PREFIX.INFERENCE} Loading ONNX model`);
     console.log(`${LOG_PREFIX.INFERENCE} ========================================`);
