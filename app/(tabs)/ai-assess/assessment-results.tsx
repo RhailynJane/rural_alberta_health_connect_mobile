@@ -612,6 +612,7 @@ export default function AssessmentResults() {
     
     const processImagesAndFetchAssessment = async () => {
       let base64Images: string[] = [];
+      let yoloPipelineResult: PipelineResult | null = null;
 
       // Step 1: Run YOLO detection on images (if any)
       if (displayPhotos.length > 0) {
@@ -621,7 +622,7 @@ export default function AssessmentResults() {
         setYoloProgress("Loading wound detection model...");
 
         try {
-          const pipelineResult = await runPipeline(
+          yoloPipelineResult = await runPipeline(
             displayPhotos,
             { continueOnError: true },
             (progress) => {
@@ -630,16 +631,16 @@ export default function AssessmentResults() {
             }
           );
 
-          setYoloResult(pipelineResult);
+          setYoloResult(yoloPipelineResult);
           console.log(`✅ [YOLO] Detection complete:`, {
-            totalDetections: pipelineResult.totalDetections,
-            successfulImages: pipelineResult.successfulImages,
-            failedImages: pipelineResult.failedImages,
-            summary: pipelineResult.summary.byClass,
+            totalDetections: yoloPipelineResult.totalDetections,
+            successfulImages: yoloPipelineResult.successfulImages,
+            failedImages: yoloPipelineResult.failedImages,
+            summary: yoloPipelineResult.summary.byClass,
           });
 
           // Log individual results
-          pipelineResult.results.forEach((result, idx) => {
+          yoloPipelineResult.results.forEach((result, idx) => {
             console.log(`🔬 [YOLO] Image ${idx + 1}:`, {
               success: result.success,
               detections: result.detections.length,
@@ -670,7 +671,8 @@ export default function AssessmentResults() {
       }
 
       // Step 3: Trigger Gemini request after images are ready (or immediately if no images)
-      fetchAIAssessment(base64Images);
+      // Pass YOLO results directly to avoid state timing issues
+      fetchAIAssessment(base64Images, yoloPipelineResult);
     };
 
     processImagesAndFetchAssessment();
