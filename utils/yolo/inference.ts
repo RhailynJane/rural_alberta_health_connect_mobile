@@ -5,24 +5,25 @@
  * Handles tensor creation and output extraction.
  */
 
+import { LOG_PREFIX, MODEL_CONFIG, YOLO_OUTPUT_INFO } from './constants';
+import type { ModelConfig } from './types';
+
 // Lazy load ONNX runtime to prevent crashes if native module not available
-let InferenceSession: any = null;
-let Tensor: any = null;
+let InferenceSessionClass: any = null;
+let TensorClass: any = null;
 let onnxAvailable = false;
 
 try {
+  // eslint-disable-next-line
   const onnx = require('onnxruntime-react-native');
-  InferenceSession = onnx.InferenceSession;
-  Tensor = onnx.Tensor;
+  InferenceSessionClass = onnx.InferenceSession;
+  TensorClass = onnx.Tensor;
   onnxAvailable = true;
   console.log('✅ ONNX Runtime loaded successfully');
 } catch (error) {
   console.warn('⚠️ ONNX Runtime not available - AI features will be disabled', error);
   onnxAvailable = false;
 }
-
-import { LOG_PREFIX, MODEL_CONFIG, YOLO_OUTPUT_INFO } from './constants';
-import type { ModelConfig } from './types';
 
 /**
  * YOLO Inference Session Manager
@@ -35,7 +36,7 @@ import type { ModelConfig } from './types';
  * ```
  */
 export class YoloInference {
-  private session: InferenceSession | null = null;
+  private session: any | null = null;
   private config: ModelConfig;
   private inputName: string = '';
   private outputName: string = '';
@@ -85,7 +86,7 @@ export class YoloInference {
    * await yolo.loadModel(assets[0].localUri);
    */
   async loadModel(modelUri: string): Promise<void> {
-    if (!onnxAvailable || !InferenceSession) {
+    if (!onnxAvailable || !InferenceSessionClass) {
       throw new Error('ONNX Runtime is not available. Please rebuild the app with native dependencies.');
     }
     
@@ -97,7 +98,7 @@ export class YoloInference {
     const startTime = Date.now();
 
     try {
-      this.session = await InferenceSession.create(modelUri);
+      this.session = await InferenceSessionClass.create(modelUri);
 
       const loadTime = Date.now() - startTime;
       console.log(`${LOG_PREFIX.INFERENCE} ✅ Model loaded in ${loadTime}ms`);
@@ -167,10 +168,10 @@ export class YoloInference {
 
     // Create ONNX tensor
     console.log(`${LOG_PREFIX.INFERENCE} Creating ONNX tensor with shape [1, 3, ${inputHeight}, ${inputWidth}]`);
-    const tensor = new Tensor(inputTensor, [1, 3, inputHeight, inputWidth]);
+    const tensor = new TensorClass(inputTensor, [1, 3, inputHeight, inputWidth]);
 
     // Prepare feeds
-    const feeds: Record<string, Tensor> = {};
+    const feeds: Record<string, any> = {};
     feeds[this.inputName] = tensor;
 
     // Run inference
