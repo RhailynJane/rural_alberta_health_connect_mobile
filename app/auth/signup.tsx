@@ -62,6 +62,8 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState("");
   const [pendingAgreement, setPendingAgreement] = useState(false);
   const [pendingSetFieldValue, setPendingSetFieldValue] = useState<
     ((field: string, value: any) => void) | null
@@ -75,27 +77,65 @@ export default function SignUp() {
     const { password, confirmPassword, ...safeValues } = values;
     console.log("Sign up attempted with:", safeValues);
     setSubmitError(null);
+    
+    // Check if passwords match
+    if (password !== confirmPassword) {
+      setErrorModalMessage("Passwords do not match. Please make sure both password fields are identical.");
+      setShowErrorModal(true);
+      return;
+    }
     try {
-      await signIn("password", {
-        email: values.email,
-        password: values.password,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        hasCompletedOnboarding: false,
-        flow: "signUp",
+      // Log what we're sending
+      console.log("📤 Signup params:", {
+        email: values.email.toLowerCase().trim(),
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        passwordLength: values.password.length
       });
+
+      // Sign up with password provider - pass custom fields for profile function
+      const result = await signIn("password", {
+        flow: "signUp",
+        email: values.email.toLowerCase().trim(),
+        password: values.password,
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        hasCompletedOnboarding: false,
+      } as any); // Type assertion to bypass TS validation
+      
+      console.log("✅ Signup result:", result);
+      
       // Ensure profile exists in Convex
       await ensureProfileExists();
       router.push("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
+      console.error("📊 Error name:", error instanceof Error ? error.name : 'unknown');
+      console.error("📊 Error message:", error instanceof Error ? error.message : 'unknown');
 
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Signup failed. Please try again.";
+      let errorMessage = "Signup failed. Please try again.";
+      
+      if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        
+        // Check for specific error patterns
+        if (msg.includes("invalid password")) {
+          errorMessage = "This email is already registered. Please sign in instead or use a different email.";
+        } else if (msg.includes("account already exists") || msg.includes("user already exists")) {
+          errorMessage = "An account with this email already exists. Please sign in.";
+        } else if (msg.includes("password")) {
+          errorMessage = "Password must be at least 6 characters long.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      // Show error in both text and modal
       setSubmitError(errorMessage);
+      setErrorModalMessage(errorMessage);
+      setShowErrorModal(true);
+      console.log("🔴 Setting error modal:", { errorMessage, showErrorModal: true });
     }
   };
 
@@ -386,26 +426,6 @@ export default function SignUp() {
                           />
                         </TouchableOpacity>
                       </View>
-                      {/* Real-time password matching feedback */}
-                      {values.confirmPassword.length > 0 && (
-                        <View style={styles.passwordMatchContainer}>
-                          {values.password === values.confirmPassword ? (
-                            <View style={styles.passwordMatchRow}>
-                              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                              <Text style={[styles.passwordMatchText, styles.passwordMatchSuccess]}>
-                                Passwords match
-                              </Text>
-                            </View>
-                          ) : (
-                            <View style={styles.passwordMatchRow}>
-                              <Ionicons name="close-circle" size={16} color="#ff3b30" />
-                              <Text style={[styles.passwordMatchText, styles.passwordMatchError]}>
-                                Passwords do not match
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
                       {errors.confirmPassword && touched.confirmPassword && (
                         <Text style={styles.errorText}>
                           {errors.confirmPassword}
@@ -464,7 +484,21 @@ export default function SignUp() {
 
                       <TouchableOpacity
                         style={styles.signUpButton}
-                        onPress={() => handleSubmit()}
+                        onPress={() => {
+                          console.log("🔵 Sign Up button pressed");
+                          console.log("🔵 Form errors:", errors);
+                          console.log("🔵 Form touched:", touched);
+                          console.log("🔵 Form values:", { ...values, password: '***', confirmPassword: '***' });
+                          
+                          // Check for password mismatch before Formik validation
+                          if (values.password !== values.confirmPassword) {
+                            setErrorModalMessage("Passwords do not match. Please make sure both password fields are identical.");
+                            setShowErrorModal(true);
+                            return;
+                          }
+                          
+                          handleSubmit();
+                        }}
                       >
                         <Text
                           style={[
@@ -512,7 +546,7 @@ export default function SignUp() {
         type="confirm"
         title="Agreement Required"
         message="Do you agree to our Terms of Service and Privacy Policy? By agreeing, you acknowledge that you have read and understood both documents."
-        icon="document-text"
+        icon="description"
         onClose={() => {
           setShowAgreementModal(false);
           setPendingSetFieldValue(null);
@@ -535,6 +569,30 @@ export default function SignUp() {
               setPendingSetFieldValue(null);
             },
             variant: "secondary"
+          }
+        ]}
+      />
+      {/* Error Modal */}
+      <StatusModal
+        visible={showErrorModal}
+        type="error"
+        title="Sign Up Failed"
+        message={errorModalMessage || "An error occurred"}
+        icon="error"
+        onClose={() => {
+          console.log("🔴 Error modal onClose called");
+          setShowErrorModal(false);
+          setErrorModalMessage("");
+        }}
+        buttons={[
+          {
+            label: "OK",
+            onPress: () => {
+              console.log("🔴 Error modal OK button pressed");
+              setShowErrorModal(false);
+              setErrorModalMessage("");
+            },
+            variant: "primary"
           }
         ]}
       />
