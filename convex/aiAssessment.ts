@@ -123,6 +123,9 @@ Symptom Duration: ${durationContext}
 Associated Medical Symptoms: ${symptoms.length > 0 ? symptoms.join(", ") : "See description"}
 Relevant Exposure Factors: ${environmentalFactors.length > 0 ? environmentalFactors.join(", ") : "None reported"}
 
+${yoloContext ? `
+${yoloContext}
+` : ''}
 ${
   images && images.length > 0
     ? `
