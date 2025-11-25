@@ -58,6 +58,8 @@ export const generateContextWithGemini = action({
     category: v.string(),
     symptoms: v.array(v.string()),
     images: v.optional(v.array(v.string())),
+    // YOLO detection context - formatted text from on-device wound detection
+    yoloContext: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const {
