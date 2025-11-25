@@ -70,6 +70,7 @@ export const generateContextWithGemini = action({
       category,
       symptoms,
       images,
+      yoloContext,
     } = args;
 
     console.log("🔍 Gemini Medical Assessment Request:", {
