@@ -337,7 +337,7 @@ export default function AssessmentResults() {
     : null;
 
   // Define fetchAIAssessment first so it is in scope and can be called after images are processed
-  const fetchAIAssessment = async (imagesArg: string[] = []) => {
+  const fetchAIAssessment = async (imagesArg: string[] = [], yoloPipelineResult?: PipelineResult | null) => {
     // Prevent multiple simultaneous requests and re-fetches
     if (isFetchingRef.current || hasAttemptedFetch) {
       return;
