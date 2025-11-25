@@ -22,7 +22,7 @@ import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 
 // YOLO Pipeline for wound detection
-import { runPipeline, type PipelineResult } from "../../../utils/yolo";
+import { runPipeline, formatForGemini, type PipelineResult } from "../../../utils/yolo";
 
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
