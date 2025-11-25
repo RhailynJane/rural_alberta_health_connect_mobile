@@ -455,6 +455,13 @@ export default function AssessmentResults() {
         hasImages: imagesToSend.length > 0,
       });
 
+      // Format YOLO detection results for Gemini (if available)
+      const yoloContextForGemini = yoloResult ? formatForGemini(yoloResult) : undefined;
+
+      if (yoloContextForGemini) {
+        console.log(`🔬 [YOLO→Gemini] Sending detection context to Gemini (${yoloContextForGemini.length} chars)`);
+      }
+
       const res = await generateContext({
         description,
         severity,
@@ -463,6 +470,7 @@ export default function AssessmentResults() {
         category,
         symptoms: aiContext?.symptoms || [],
         images: imagesToSend,
+        yoloContext: yoloContextForGemini,
       });
 
       const cleanedContext = cleanGeminiResponse(res.context);
