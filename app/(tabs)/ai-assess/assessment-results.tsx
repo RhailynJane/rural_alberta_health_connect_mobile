@@ -456,7 +456,8 @@ export default function AssessmentResults() {
       });
 
       // Format YOLO detection results for Gemini (if available)
-      const yoloContextForGemini = yoloResult ? formatForGemini(yoloResult) : undefined;
+      // Use the passed parameter (not state) to avoid timing issues
+      const yoloContextForGemini = yoloPipelineResult ? formatForGemini(yoloPipelineResult) : undefined;
 
       if (yoloContextForGemini) {
         console.log(`🔬 [YOLO→Gemini] Sending detection context to Gemini (${yoloContextForGemini.length} chars)`);
