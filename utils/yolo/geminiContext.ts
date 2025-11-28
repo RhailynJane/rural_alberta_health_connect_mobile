@@ -88,7 +88,7 @@ export function formatForGemini(result: PipelineResult): string {
 
   // If no detections at all
   if (result.totalDetections === 0) {
-    lines.push('The wound detection model analyzed the provided image(s) but did not detect any wounds (cuts, bruises, or abrasions).');
+    lines.push('The wound detection model analyzed the provided image(s) but did not detect any injuries (burns, rashes, abrasions, bruises, cuts, or frostbite).');
     lines.push('');
     lines.push('This does not mean no injury exists - it means the model did not identify any with sufficient confidence.');
     lines.push('Please assess the images clinically.');
@@ -99,7 +99,7 @@ export function formatForGemini(result: PipelineResult): string {
 
   // We have detections - format them
   lines.push('An automated wound detection model has analyzed the patient\'s photos.');
-  lines.push('The model detects: cuts, bruises, and abrasions.');
+  lines.push('The model detects: 1st/2nd/3rd degree burns, rashes, abrasions, bruises, cuts, and frostbite.');
   lines.push('');
 
   // Per-image results
@@ -193,7 +193,7 @@ export function testGeminiContext(): void {
       startedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
       inputImageCount: 1,
-      modelConfig: { inputSize: 640, confidenceThreshold: 0.5, iouThreshold: 0.45, classes: ['abrasion', 'bruise', 'cut'] },
+      modelConfig: { inputSize: 640, confidenceThreshold: 0.5, iouThreshold: 0.45, classes: ['1st degree burn', '2nd degree burn', '3rd degree burn', 'Rashes', 'abrasion', 'bruise', 'cut', 'frostbite'] },
     },
   };
 

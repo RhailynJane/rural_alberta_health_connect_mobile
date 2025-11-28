@@ -53,8 +53,8 @@ export interface PreprocessResult {
 export interface ModelConfig {
   inputWidth: number;           // Model input width (640)
   inputHeight: number;          // Model input height (640)
-  numClasses: number;           // Number of classes (3)
-  classNames: string[];         // Class names ['abrasion', 'bruise', 'cut']
+  numClasses: number;           // Number of classes (8)
+  classNames: string[];         // Class names for wound detection model
   confidenceThreshold: number;  // Min confidence to keep detection
   iouThreshold: number;         // IoU threshold for NMS
 }
@@ -64,7 +64,7 @@ export interface ModelConfig {
  */
 export interface YoloOutputInfo {
   batchSize: number;      // Always 1
-  numFeatures: number;    // 7 (4 box + 3 classes)
+  numFeatures: number;    // 12 (4 box coords + 8 classes)
   numPredictions: number; // 8400 anchor boxes
 }
 

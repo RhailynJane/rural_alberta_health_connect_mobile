@@ -12,33 +12,42 @@ import type { ModelConfig, YoloOutputInfo } from "./types";
 export const MODEL_CONFIG: ModelConfig = {
   inputWidth: 640,
   inputHeight: 640,
-  numClasses: 3,
-  classNames: ["abrasion", "bruise", "cut"],
+  numClasses: 8,
+  classNames: [
+    "1st degree burn",
+    "2nd degree burn",
+    "3rd degree burn",
+    "Rashes",
+    "abrasion",
+    "bruise",
+    "cut",
+    "frostbite",
+  ],
   confidenceThreshold: 0.5, // Production threshold
   iouThreshold: 0.45,
 };
 
 /**
  * Expected YOLO output shape info
- * Output: [1, 7, 8400]
+ * Output: [1, 12, 8400]
  * - 1: batch size
- * - 7: features (x, y, w, h, class1_prob, class2_prob, class3_prob)
+ * - 12: features (x, y, w, h, + 8 class probabilities)
  * - 8400: total predictions (80*80 + 40*40 + 20*20 = 8400)
  */
 export const YOLO_OUTPUT_INFO: YoloOutputInfo = {
   batchSize: 1,
-  numFeatures: 4 + MODEL_CONFIG.numClasses, // 4 box coords + num classes = 7
+  numFeatures: 4 + MODEL_CONFIG.numClasses, // 4 box coords + num classes = 12
   numPredictions: 8400,
 };
 
 /**
  * Feature indices in the YOLO output
- * For output shape [1, 7, 8400]:
+ * For output shape [1, 12, 8400]:
  * - Index 0: x_center
  * - Index 1: y_center
  * - Index 2: width
  * - Index 3: height
- * - Index 4+: class probabilities
+ * - Index 4-11: class probabilities (8 classes)
  */
 export const FEATURE_INDICES = {
   X_CENTER: 0,

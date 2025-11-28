@@ -882,9 +882,16 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                             {Object.entries(yoloResult.summary.byClass).map(([className, count]) => (
                               <View key={className} style={styles.yoloClassItem}>
                                 <View style={[styles.yoloClassBadge, {
-                                  backgroundColor: className === 'cut' ? '#28A745' :
-                                                   className === 'bruise' ? '#6f42c1' :
-                                                   className === 'abrasion' ? '#DC3545' : '#6c757d'
+                                  backgroundColor:
+                                    className === '1st degree burn' ? '#FF8C00' :    // Orange - mild burn
+                                    className === '2nd degree burn' ? '#FF4500' :    // Red-Orange - moderate burn
+                                    className === '3rd degree burn' ? '#C80000' :    // Dark Red - severe burn
+                                    className === 'Rashes' ? '#FFB6C1' :             // Pink
+                                    className === 'abrasion' ? '#DC3545' :           // Red
+                                    className === 'bruise' ? '#6f42c1' :             // Purple
+                                    className === 'cut' ? '#28A745' :                // Green
+                                    className === 'frostbite' ? '#00CED1' :          // Cyan - cold injury
+                                    '#6c757d'                                        // Default gray
                                 }]}>
                                   <Text style={[styles.yoloClassBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                                     {className.toUpperCase()}

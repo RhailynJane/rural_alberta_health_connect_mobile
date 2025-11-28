@@ -24,14 +24,17 @@ const LOG_PREFIX = "[YOLO:Viz]";
 
 /**
  * Colors for each class (BGR format for OpenCV)
- * - abrasion: Red
- * - bruise: Purple
- * - cut: Green
+ * 8 classes: burns (3 degrees), rashes, abrasion, bruise, cut, frostbite
  */
 export const CLASS_COLORS: Record<string, [number, number, number]> = {
-  abrasion: [0, 0, 255], // Red (BGR)
-  bruise: [255, 0, 128], // Purple (BGR)
-  cut: [0, 255, 0], // Green (BGR)
+  "1st degree burn": [0, 128, 255],   // Orange (BGR) - mild burn
+  "2nd degree burn": [0, 69, 255],    // Red-Orange (BGR) - moderate burn
+  "3rd degree burn": [0, 0, 200],     // Dark Red (BGR) - severe burn
+  "Rashes": [203, 192, 255],          // Pink (BGR)
+  abrasion: [0, 0, 255],              // Red (BGR)
+  bruise: [255, 0, 128],              // Purple (BGR)
+  cut: [0, 255, 0],                   // Green (BGR)
+  frostbite: [255, 255, 0],           // Cyan (BGR) - cold injury
 };
 
 /**
