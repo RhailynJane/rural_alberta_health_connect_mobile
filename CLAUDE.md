@@ -261,15 +261,34 @@ On-device wound/injury detection using ONNX Runtime with a custom YOLOv8 model.
 utils/yolo/
 ├── index.ts           # Public API - exports all modules
 ├── types.ts           # TypeScript interfaces (Detection, BoundingBox, etc.)
-├── constants.ts       # Model config (640x640 input, 3 classes, thresholds)
+├── constants.ts       # Model config (640x640 input, 8 classes, thresholds)
 ├── preprocessing.ts   # Image → tensor conversion with letterboxing
 ├── opencv-bridge.ts   # OpenCV wrapper for image loading/resizing
 ├── inference.ts       # ONNX Runtime session management
 ├── postprocessing.ts  # Parse output, NMS, scale to original coords
-└── visualization.ts   # Draw bounding boxes on images
+├── visualization.ts   # Draw bounding boxes on images
+├── pipeline.ts        # Multi-image orchestrator (main entry point)
+└── geminiContext.ts   # Format detections for Gemini AI prompt
 ```
 
-### Usage
+### Usage (Recommended - Pipeline API)
+
+```typescript
+import { runPipeline, processImage } from '@/utils/yolo';
+
+// Process multiple images
+const result = await runPipeline(['file://photo1.jpg', 'file://photo2.jpg']);
+console.log(`Found ${result.totalDetections} detections`);
+result.results.forEach(r => {
+  // r.annotatedImageBase64 - image with bounding boxes
+  // r.detections - array of Detection objects
+});
+
+// Process single image
+const singleResult = await processImage('file://photo.jpg');
+```
+
+### Advanced Usage (Manual Control)
 
 ```typescript
 import { YoloInference, preprocessImage, postprocess, MODEL_CONFIG } from '@/utils/yolo';
@@ -289,16 +308,21 @@ const detections = postprocess(output, preprocess, MODEL_CONFIG);
 ### Model Details
 
 - **Input**: 640x640 RGB image (letterboxed)
-- **Output**: [1, 7, 8400] tensor - 8400 predictions × 7 features (x, y, w, h, 3 class probs)
-- **Classes**: abrasion, bruise, cut (configurable in constants.ts)
-- **Thresholds**: confidence 0.25, IoU 0.45 (default)
+- **Output**: [1, 12, 8400] tensor - 8400 predictions × 12 features (x, y, w, h, 8 class probs)
+- **Classes**: 1st degree burn, 2nd degree burn, 3rd degree burn, Rashes, abrasion, bruise, cut, frostbite
+- **Thresholds**: confidence 0.5, IoU 0.45 (configurable in constants.ts)
 
 ### Testing
 
 Pure functions in preprocessing and postprocessing have built-in tests:
 ```typescript
-import { runAllYoloTests } from '@/utils/yolo';
-runAllYoloTests(); // Runs all unit tests in console
+import { runAllYoloTests, runAllYoloTestsWithImages } from '@/utils/yolo';
+
+// Pure function tests (no device required)
+runAllYoloTests();
+
+// Full pipeline test with real images (requires device/emulator)
+await runAllYoloTestsWithImages(['file://test-image.jpg']);
 ```
 
 ## Health Tracking System
