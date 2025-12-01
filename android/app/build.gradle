@@ -88,6 +88,8 @@ packagingOptions {
         pickFirst 'lib/x86_64/libc++_shared.so'
         pickFirst 'lib/arm64-v8a/libc++_shared.so'
         pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+        pickFirst 'META-INF/*'
+        exclude 'META-INF/androidx.localbroadcastmanager_localbroadcastmanager.version'
     }
 // @generated end @rnmapbox/maps-libcpp
     ndkVersion rootProject.ext.ndkVersion
