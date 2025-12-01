@@ -551,7 +551,7 @@ Currently no automated testing framework configured. Future considerations:
 
 ### WatermelonDB Schema Migrations
 
-- Current version: 9
+- Current version: 10
 - Schema uses both snake_case (legacy) and camelCase (Convex alignment)
 - Migration files in watermelon/database/migrations.ts
 - **Critical**: Always add new migration when changing schema, never modify existing ones
