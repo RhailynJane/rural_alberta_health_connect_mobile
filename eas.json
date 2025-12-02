@@ -41,6 +41,18 @@
         "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNoeHp0MDlncG84bzk1ZWxjZ2djMCJ9.b8JeDGu7Abnp2Kcxp78ztQ",
         "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNtem1wMTd0cTJrcTExYW9mYnB3OSJ9.4KVa9l2b1lR2Xoi5v8sL6A"
       }
+    },
+    "production-apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_CONVEX_URL": "https://energized-cormorant-495.convex.cloud",
+        "EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN": "pk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNoeHp0MDlncG84bzk1ZWxjZ2djMCJ9.b8JeDGu7Abnp2Kcxp78ztQ",
+        "RNMAPBOX_MAPS_DOWNLOAD_TOKEN": "sk.eyJ1IjoiamFuZWNvbmEiLCJhIjoiY21nenNtem1wMTd0cTJrcTExYW9mYnB3OSJ9.4KVa9l2b1lR2Xoi5v8sL6A"
+      }
     }
   },
   "submit": {
