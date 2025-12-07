@@ -3,26 +3,51 @@
  *
  * Wraps ONNX Runtime for model loading and inference.
  * Handles tensor creation and output extraction.
+ *
+ * IMPORTANT: Uses lazy loading pattern to prevent "Cannot read property 'install' of null"
+ * error caused by Expo Router evaluating imports before native modules are ready.
+ *
+ * See ONNX_RUNTIME_ISSUE.md for full explanation.
  */
 
 import { LOG_PREFIX, MODEL_CONFIG, YOLO_OUTPUT_INFO } from './constants';
 import type { ModelConfig } from './types';
 
-// Lazy load ONNX runtime to prevent crashes if native module not available
-let InferenceSessionClass: any = null;
-let TensorClass: any = null;
-let onnxAvailable = false;
+// Type-only import - erased at compile time, provides full type safety
+import type { InferenceSession, Tensor } from 'onnxruntime-react-native';
 
-try {
-  // eslint-disable-next-line
-  const onnx = require('onnxruntime-react-native');
-  InferenceSessionClass = onnx.InferenceSession;
-  TensorClass = onnx.Tensor;
-  onnxAvailable = true;
-  console.log('✅ ONNX Runtime loaded successfully');
-} catch (error) {
-  console.warn('⚠️ ONNX Runtime not available - AI features will be disabled', error);
-  onnxAvailable = false;
+// Lazy runtime loader - only loads when called, not at bundle time
+type OnnxRuntime = typeof import('onnxruntime-react-native');
+let _ort: OnnxRuntime | null = null;
+let _loadError: Error | null = null;
+
+/**
+ * Lazily load ONNX Runtime module
+ * This prevents the native module from being accessed during Expo Router's
+ * route evaluation phase, which happens before the native bridge is ready.
+ */
+async function getOnnxRuntime(): Promise<OnnxRuntime> {
+  if (_loadError) {
+    throw _loadError;
+  }
+  if (!_ort) {
+    try {
+      _ort = await import('onnxruntime-react-native');
+      console.log(`${LOG_PREFIX.INFERENCE} ONNX Runtime loaded successfully`);
+    } catch (error) {
+      _loadError = error instanceof Error ? error : new Error(String(error));
+      console.error(`${LOG_PREFIX.INFERENCE} Failed to load ONNX Runtime:`, error);
+      throw _loadError;
+    }
+  }
+  return _ort;
+}
+
+/**
+ * Check if ONNX Runtime is available (has been successfully loaded)
+ */
+export function isOnnxAvailable(): boolean {
+  return _ort !== null && _loadError === null;
 }
 
 /**
@@ -36,19 +61,13 @@ try {
  * ```
  */
 export class YoloInference {
-  private session: any | null = null;
+  private session: InferenceSession | null = null;
   private config: ModelConfig;
   private inputName: string = '';
   private outputName: string = '';
 
   constructor(config: ModelConfig = MODEL_CONFIG) {
     this.config = config;
-    
-    if (!onnxAvailable) {
-      console.error(`${LOG_PREFIX.INFERENCE} ONNX Runtime not available - YoloInference will not function`);
-      return;
-    }
-    
     console.log(`${LOG_PREFIX.INFERENCE} YoloInference instance created`);
     console.log(`${LOG_PREFIX.INFERENCE}   Input size: ${config.inputWidth}x${config.inputHeight}`);
     console.log(`${LOG_PREFIX.INFERENCE}   Classes: ${config.classNames.join(', ')}`);
@@ -86,10 +105,6 @@ export class YoloInference {
    * await yolo.loadModel(assets[0].localUri);
    */
   async loadModel(modelUri: string): Promise<void> {
-    if (!onnxAvailable || !InferenceSessionClass) {
-      throw new Error('ONNX Runtime is not available. Please rebuild the app with native dependencies.');
-    }
-    
     console.log(`${LOG_PREFIX.INFERENCE} ========================================`);
     console.log(`${LOG_PREFIX.INFERENCE} Loading ONNX model`);
     console.log(`${LOG_PREFIX.INFERENCE} ========================================`);
@@ -98,7 +113,10 @@ export class YoloInference {
     const startTime = Date.now();
 
     try {
-      this.session = await InferenceSessionClass.create(modelUri);
+      // Lazy load ONNX Runtime - this is the key fix!
+      // Native module is loaded here (after user interaction), not at app startup
+      const ort = await getOnnxRuntime();
+      this.session = await ort.InferenceSession.create(modelUri);
 
       const loadTime = Date.now() - startTime;
       console.log(`${LOG_PREFIX.INFERENCE} ✅ Model loaded in ${loadTime}ms`);
@@ -166,9 +184,10 @@ export class YoloInference {
     console.log(`${LOG_PREFIX.INFERENCE}   Mean: ${mean.toFixed(4)}`);
     console.log(`${LOG_PREFIX.INFERENCE}   First 5 values: [${Array.from(inputTensor.slice(0, 5)).map(v => v.toFixed(4)).join(', ')}]`);
 
-    // Create ONNX tensor
+    // Create ONNX tensor using lazy-loaded runtime
+    const ort = await getOnnxRuntime();
     console.log(`${LOG_PREFIX.INFERENCE} Creating ONNX tensor with shape [1, 3, ${inputHeight}, ${inputWidth}]`);
-    const tensor = new TensorClass(inputTensor, [1, 3, inputHeight, inputWidth]);
+    const tensor = new ort.Tensor(inputTensor, [1, 3, inputHeight, inputWidth]);
 
     // Prepare feeds
     const feeds: Record<string, any> = {};

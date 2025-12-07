@@ -1,3 +1,4 @@
+import { FloatingDevTools } from "@react-buoy/core";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { ConvexReactClient } from "convex/react";
@@ -148,6 +149,14 @@ export default function RootLayout() {
                       <Stack.Screen name="(tabs)" />
                     </Stack>
                   </View>
+                  {/* React Buoy DevTools - only in development */}
+                  {__DEV__ && (
+                    <FloatingDevTools
+                      environment="local"
+                      userRole="admin"
+                      disableHints
+                    />
+                  )}
                 </SafeAreaProvider>
               </SignUpFormProvider>
             </NotificationProvider>

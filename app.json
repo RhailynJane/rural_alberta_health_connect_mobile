@@ -93,7 +93,10 @@
           "color": "#0B6EFE",
           "mode": "default"
         }
-      ]
+      ],
+      "onnxruntime-react-native",
+      "./plugins/withOnnxRuntime",
+      "./plugins/withAndroidXFix"
     ],
     "experiments": {
       "typedRoutes": true,
