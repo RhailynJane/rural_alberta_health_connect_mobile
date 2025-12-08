@@ -124,13 +124,13 @@ export async function initializeFirebaseNotifications(
  * Setup Firebase message handler
  * This receives notifications when app is in foreground
  */
-export function setupFirebaseNotificationHandler(
+export async function setupFirebaseNotificationHandler(
   onNotification?: (notification: {
     title?: string;
     body?: string;
     data?: Record<string, string>;
   }) => void
-): (() => void) | null {
+): Promise<(() => void) | null> {
   return setupFirebaseMessageListener((payload: any) => {
     const notification = {
       title: payload.notification?.title,
