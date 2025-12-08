@@ -1,7 +1,8 @@
+import { api } from "@/convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { FloatingDevTools } from "@react-buoy/core";
-import { ConvexReactClient } from "convex/react";
+import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -16,6 +17,8 @@ import { NotificationProvider } from "./components/NotificationContext";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SyncProvider } from "./components/SyncProvider";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
+import { initializeFirebase, registerForFirebaseMessaging } from "./utils/firebase";
+import { storeFirebaseToken } from "./utils/firebaseNotifications";
 import {
     configureForegroundNotifications,
     setupNotificationListeners,
@@ -66,6 +69,7 @@ export const useSessionRefresh = () => {
 
 /**
  * Component to handle Firebase FCM token registration when user logs in
+ * Must be inside ConvexAuthProvider to access useConvexAuth
  */
 function FirebaseTokenRegistration() {
   const { isLoading, isAuthenticated, user } = useConvexAuth();
