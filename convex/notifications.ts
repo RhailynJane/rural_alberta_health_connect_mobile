@@ -259,3 +259,115 @@ export const deleteNotification = mutation({
     await ctx.db.delete(args.notificationId);
   },
 });
+
+/**
+ * Register Firebase Cloud Messaging (FCM) token
+ * Similar to registerPushToken but specifically for Firebase
+ */
+export const registerFirebaseFCMToken = mutation({
+  args: {
+    fcmToken: v.string(),
+    platform: v.string(), // "ios", "android", "web"
+    deviceName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Check if FCM token already exists for this user
+    const existing = await ctx.db
+      .query("pushTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.fcmToken))
+      .first();
+
+    if (existing) {
+      // Update timestamp and device info
+      await ctx.db.patch(existing._id, {
+        updatedAt: Date.now(),
+        ...(args.deviceName && { platform: `${args.platform}-firebase` }),
+      });
+      console.log("✅ Firebase FCM token updated for user:", userId);
+      return existing._id;
+    }
+
+    // Create new FCM token entry
+    const tokenId = await ctx.db.insert("pushTokens", {
+      userId,
+      token: args.fcmToken,
+      platform: `${args.platform}-firebase`, // Distinguish Firebase from Expo
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    console.log("✅ Firebase FCM token registered for user:", userId);
+    return tokenId;
+  },
+});
+
+/**
+ * Get user's push tokens (both Expo and Firebase)
+ */
+export const getUserPushTokens = query({
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    return await ctx.db
+      .query("pushTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+  },
+});
+
+/**
+ * Send notification via Firebase Cloud Messaging
+ * For server-side use only - should be called from backend
+ */
+export async function sendFirebaseNotification(
+  ctx: any,
+  args: {
+    userId: string;
+    title: string;
+    body: string;
+    data?: Record<string, string>;
+  }
+) {
+  const { userId, title, body, data } = args;
+
+  try {
+    // Get user's Firebase tokens
+    const tokens = await ctx.db
+      .query("pushTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const fcmTokens = tokens.filter((t) => t.platform.includes("firebase"));
+
+    if (fcmTokens.length === 0) {
+      console.log("ℹ️ No Firebase tokens found for user:", userId);
+      return;
+    }
+
+    // Send via Firebase Admin SDK
+    // This requires firebase-admin setup on the backend
+    // For now, we'll create a helper that can be called with the Admin SDK
+    console.log(`📤 Firebase notification ready to send to ${fcmTokens.length} device(s):`, {
+      title,
+      body,
+      tokens: fcmTokens.map((t) => t.token.substring(0, 20) + "..."),
+    });
+
+    // In production, call Firebase Admin SDK here:
+    // await admin.messaging().sendMulticast({
+    //   tokens: fcmTokens.map(t => t.token),
+    //   notification: { title, body },
+    //   data: data || {},
+    // });
+  } catch (error) {
+    console.error("❌ Failed to send Firebase notification:", error);
+  }
+}
