@@ -30,13 +30,19 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files - CRITICAL: Never commit API keys or tokens
 .env
 .env*.local
-# Ignore all env variants (development, production, etc.)
+.env.development
+.env.production
+.env.*.local
+# Ignore all env variants
 .env.*
-!
+
+# Explicitly track only examples
 !.env.example
+!.env.example.development
+!.env.example.production
 
 # typescript
 *.tsbuildinfo

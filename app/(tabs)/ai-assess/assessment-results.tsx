@@ -374,6 +374,16 @@ export default function AssessmentResults() {
           : (params.category as string)) ||
         "General Symptoms";
 
+      console.log("📋 [AI Assessment Params]", {
+        description: description || "(empty)",
+        descriptionLength: description.length,
+        severity,
+        duration: duration || "(empty)",
+        category,
+        hasAiContext: !!aiContext,
+        isOnline
+      });
+
       // Use imagesArg if provided; otherwise fallback to any already-processed photos in aiContext
       const imagesToSend = imagesArg && imagesArg.length > 0
         ? imagesArg
