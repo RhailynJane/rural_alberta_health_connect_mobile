@@ -2,7 +2,7 @@
 
 ## Summary
 
-Your Rural Alberta Health Connect app now has **Firebase Cloud Messaging (FCM)** fully integrated for reliable push notifications.
+Your Rural Alberta Health Connect app now has **Firebase Cloud Messaging (FCM)** fully integrated for Android push notifications using React Native Firebase.
 
 ### What Was Implemented
 
@@ -13,15 +13,22 @@ Your Rural Alberta Health Connect app now has **Firebase Cloud Messaging (FCM)**
 - `google-services.json` placed in `android/app/`
 - Environment variables configured in `.env.development`
 
-#### 2. **Client-Side Components** ✅
+#### 2. **React Native Firebase** ✅
+- Package: `@react-native-firebase/app` - Core Firebase module
+- Package: `@react-native-firebase/messaging` - FCM messaging
+- Dynamic imports to avoid bundling issues
+- Platform-aware implementation (mobile vs web)
+
+#### 3. **Client-Side Components** ✅
 
 | File | Purpose |
 |------|---------|
-| `app/utils/firebase.ts` | Firebase initialization and setup |
+| `app/utils/firebase.ts` | React Native Firebase initialization and setup |
 | `app/utils/firebaseNotifications.ts` | Token management, secure storage, listeners |
 | `app/utils/pushNotifications.ts` | Existing Expo notifications (still works) |
+| `app/_layout.tsx` | Firebase initialization on app load, token registration on login |
 
-#### 3. **Backend Integration** ✅
+#### 4. **Backend Integration** ✅
 
 | Function | Purpose |
 |----------|---------|
@@ -30,7 +37,7 @@ Your Rural Alberta Health Connect app now has **Firebase Cloud Messaging (FCM)**
 | `sendFirebaseNotification()` | Send notifications via Firebase |
 | `registerPushToken()` | Register Expo tokens (existing) |
 
-#### 4. **Documentation** ✅
+#### 5. **Documentation** ✅
 
 | Document | Content |
 |----------|---------|
@@ -42,6 +49,8 @@ Your Rural Alberta Health Connect app now has **Firebase Cloud Messaging (FCM)**
 ### Git Commits
 
 ```
+0ee496b feat: implement React Native Firebase for Android push notifications
+7b7412f fix: simplify firebase.ts to avoid bundling issues
 0bfe867 fix: add TypeScript type annotations to sendFirebaseNotification
 3c8a062 docs: add Firebase FCM quick start guide
 5a45c4f feat: implement Firebase Cloud Messaging (FCM) for push notifications
