@@ -1,6 +1,6 @@
-import { FloatingDevTools } from "@react-buoy/core";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
+import { FloatingDevTools } from "@react-buoy/core";
 import { ConvexReactClient } from "convex/react";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname } from "expo-router";
@@ -64,6 +64,42 @@ export const useSessionRefresh = () => {
   return context;
 };
 
+/**
+ * Component to handle Firebase FCM token registration when user logs in
+ */
+function FirebaseTokenRegistration() {
+  const { isLoading, isAuthenticated, user } = useConvexAuth();
+  const registerFCMToken = useMutation(api.notifications.registerFirebaseFCMToken);
+  const [hasRegistered, setHasRegistered] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || isLoading || hasRegistered) return;
+
+    const registerToken = async () => {
+      try {
+        const token = await registerForFirebaseMessaging(user._id);
+        if (token) {
+          await storeFirebaseToken(token);
+          // Register with Convex backend
+          await registerFCMToken({
+            fcmToken: token,
+            platform: "android",
+            deviceName: "mobile",
+          });
+          console.log("✅ FCM token registered with backend");
+          setHasRegistered(true);
+        }
+      } catch (error) {
+        console.error("❌ Failed to register FCM token:", error);
+      }
+    };
+
+    registerToken();
+  }, [isAuthenticated, user, isLoading, hasRegistered, registerFCMToken]);
+
+  return null; // This component doesn't render anything
+}
+
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -95,6 +131,11 @@ export default function RootLayout() {
     // Configure foreground notification behavior
     configureForegroundNotifications();
 
+    // Initialize Firebase for push notifications
+    initializeFirebase().catch((error) => {
+      console.warn("Firebase initialization skipped or failed:", error);
+    });
+
     // Setup notification listeners
     const cleanup = setupNotificationListeners(
       // On notification received in foreground
@@ -119,6 +160,7 @@ export default function RootLayout() {
     <DatabaseProvider database={database}>
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+          <FirebaseTokenRegistration />
           <SyncProvider>
             <NotificationProvider>
               <SignUpFormProvider>

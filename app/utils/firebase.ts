@@ -1,56 +1,169 @@
 /**
  * Firebase Cloud Messaging (FCM) Configuration
  * 
- * IMPORTANT: Firebase web SDK does not work with React Native/Expo bundling.
- * 
- * For mobile (iOS/Android): Use @react-native-firebase instead
- * For web: Firebase SDK can be used with proper configuration
- * 
- * This module is disabled for mobile and provides stub functions only.
+ * Uses @react-native-firebase for Android/iOS push notifications
+ * Integrates with expo-notifications for unified notification handling
  */
 
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
-// Firebase is not bundled into the React Native app
-// Use @react-native-firebase for mobile platforms
+// Lazy-load React Native Firebase to avoid bundling issues
+let firebaseApp: any = null;
+let firebaseMessaging: any = null;
+let isInitialized = false;
 
+/**
+ * Dynamically import React Native Firebase modules
+ */
+async function loadFirebaseModules() {
+  if (isInitialized) return { app: firebaseApp, messaging: firebaseMessaging };
+
+  try {
+    if (Platform.OS !== "web") {
+      const firebase = await import("@react-native-firebase/app").then((m) => m.default);
+      const messaging = await import("@react-native-firebase/messaging").then((m) => m.default);
+
+      firebaseApp = firebase;
+      firebaseMessaging = messaging;
+      isInitialized = true;
+
+      return { app: firebase, messaging };
+    }
+  } catch (error) {
+    console.warn("❌ React Native Firebase modules not available:", error);
+  }
+
+  return { app: null, messaging: null };
+}
+
+/**
+ * Initialize Firebase for push notifications
+ */
 export async function initializeFirebase(): Promise<any | null> {
-  console.log(
-    "ℹ️ Firebase initialization disabled for React Native. Use @react-native-firebase for mobile."
-  );
-  return null;
+  try {
+    const { app } = await loadFirebaseModules();
+
+    if (!app) {
+      console.log("ℹ️ React Native Firebase not available on this platform");
+      return null;
+    }
+
+    console.log("✅ Firebase initialized for push notifications");
+    return app;
+  } catch (error) {
+    console.error("❌ Firebase initialization failed:", error);
+    return null;
+  }
 }
 
+/**
+ * Get Firebase Messaging instance
+ */
 export async function getFirebaseMessaging(): Promise<any | null> {
-  console.log(
-    "ℹ️ Firebase Messaging not available. Use @react-native-firebase/messaging for mobile."
-  );
-  return null;
+  const { messaging } = await loadFirebaseModules();
+  return messaging;
 }
 
+/**
+ * Register device for Firebase Cloud Messaging
+ * Gets FCM token and stores it for later use
+ */
 export async function registerForFirebaseMessaging(
   userId: string,
   onTokenReceived?: (token: string) => void
 ): Promise<string | null> {
-  console.log(
-    "ℹ️ Firebase registration disabled for React Native. Use @react-native-firebase for mobile."
-  );
-  console.log("   Install: npm install @react-native-firebase/app @react-native-firebase/messaging");
-  return null;
+  try {
+    const { messaging } = await loadFirebaseModules();
+
+    if (!messaging) {
+      console.log("ℹ️ Firebase Messaging not available");
+      return null;
+    }
+
+    // Get FCM token
+    const token = await messaging.getToken();
+
+    if (token) {
+      console.log("✅ FCM token received:", token.substring(0, 20) + "...");
+      onTokenReceived?.(token);
+      return token;
+    } else {
+      console.warn("⚠️ No FCM token available");
+      return null;
+    }
+  } catch (error) {
+    console.error("❌ Firebase registration failed:", error);
+    return null;
+  }
 }
 
+/**
+ * Setup listener for incoming FCM messages
+ * Handles both foreground and background messages
+ */
 export async function setupFirebaseMessageListener(
   onMessageHandler?: (payload: any) => void
 ): Promise<(() => void) | null> {
-  console.log(
-    "ℹ️ Firebase message listener only works on web. Use @react-native-firebase for mobile."
-  );
-  return null;
+  try {
+    const { messaging } = await loadFirebaseModules();
+
+    if (!messaging) {
+      console.log("ℹ️ Firebase Messaging not available");
+      return null;
+    }
+
+    // Handle messages in foreground
+    const unsubscribeForeground = messaging.onMessage(async (remoteMessage: any) => {
+      console.log("📬 FCM message received in foreground:", {
+        title: remoteMessage.notification?.title,
+        body: remoteMessage.notification?.body,
+        data: remoteMessage.data,
+      });
+
+      // Display notification using expo-notifications
+      if (remoteMessage.notification) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: remoteMessage.notification.title || "Notification",
+            body: remoteMessage.notification.body || "",
+            data: remoteMessage.data || {},
+          },
+          trigger: null, // immediate
+        });
+      }
+
+      onMessageHandler?.(remoteMessage);
+    });
+
+    // Handle background/quit state messages
+    const unsubscribeBackground = messaging.onNotificationOpenedApp((remoteMessage: any) => {
+      console.log("📬 FCM message opened app:", remoteMessage);
+      onMessageHandler?.(remoteMessage);
+    });
+
+    return () => {
+      unsubscribeForeground();
+      unsubscribeBackground();
+    };
+  } catch (error) {
+    console.error("❌ Failed to setup Firebase message listener:", error);
+    return null;
+  }
 }
 
+/**
+ * Check if Firebase Messaging is available
+ */
 export async function isFirebaseMessagingAvailable(): Promise<boolean> {
-  return false;
+  const { messaging } = await loadFirebaseModules();
+  return messaging !== null;
 }
 
+/**
+ * Get Firebase app instance
+ */
 export async function getFirebaseApp(): Promise<any | null> {
-  return null;
+  const { app } = await loadFirebaseModules();
+  return app;
 }
