@@ -1,4 +1,3 @@
-import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -12,15 +11,20 @@ import {
     DEFAULT_MAP_CONFIG,
     MAPBOX_ACCESS_TOKEN,
 } from '../_config/mapbox.config';
+import Mapbox from '../_utils/mapboxFix';
 import { COLORS, FONTS } from '../constants/constants';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
-// Initialize Mapbox
-if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== 'YOUR_MAPBOX_PUBLIC_TOKEN') {
-  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
-  console.log('✅ Mapbox access token configured');
-} else {
-  console.error('❌ Mapbox access token not configured properly');
+// Initialize Mapbox - wrapped in try-catch to prevent crashes
+try {
+  if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== 'YOUR_MAPBOX_PUBLIC_TOKEN') {
+    Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+    console.log('✅ Mapbox access token configured');
+  } else {
+    console.error('❌ Mapbox access token not configured properly');
+  }
+} catch (error) {
+  console.error('❌ Failed to initialize Mapbox:', error);
 }
 
 interface Clinic {

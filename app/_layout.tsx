@@ -2,7 +2,7 @@ import { api } from "@/convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
 import { FloatingDevTools } from "@react-buoy/core";
-import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
+import { ConvexReactClient, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
