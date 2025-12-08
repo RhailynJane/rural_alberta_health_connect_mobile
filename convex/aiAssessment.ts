@@ -323,6 +323,14 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
       };
 
       console.log("📤 Sending medical assessment request to Gemini...");
+      console.log("📤 Request details:", {
+        modelName,
+        hasImages: contentParts.length > 1,
+        imageCount: contentParts.length - 1,
+        totalParts: contentParts.length,
+        temperature: body.generationConfig.temperature,
+        maxTokens: body.generationConfig.maxOutputTokens
+      });
 
       const response = await fetch(url, {
         method: "POST",
@@ -335,6 +343,11 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
       const responseText = await response.text();
       console.log("📥 Gemini response status:", response.status);
       console.log("📊 Response length:", responseText.length, "characters");
+      
+      if (response.status !== 200) {
+        console.error("❌ Non-200 status code:", response.status);
+        console.error("❌ Response preview:", responseText.substring(0, 500));
+      }
 
       if (!response.ok) {
         console.error("❌ Gemini API error:", responseText);
@@ -433,6 +446,17 @@ For all burns: Do not apply ice, butter, or ointments. Seek professional medical
 
       if (!context) {
         console.warn("❌ No medical assessment generated");
+        console.warn("❌ Candidates data:", JSON.stringify(data.candidates, null, 2));
+        console.warn("❌ Full response structure:", JSON.stringify({
+          hasCandidates: !!data.candidates,
+          candidatesLength: data.candidates?.length,
+          firstCandidate: data.candidates?.[0] ? {
+            hasContent: !!data.candidates[0].content,
+            hasParts: !!data.candidates[0].content?.parts,
+            partsLength: data.candidates[0].content?.parts?.length,
+            finishReason: data.candidates[0].finishReason
+          } : null
+        }, null, 2));
         return getDetailedFallbackAssessment(
           category,
           severity,
@@ -442,6 +466,8 @@ For all burns: Do not apply ice, butter, or ointments. Seek professional medical
       }
 
       console.log("✅ Medical assessment completed successfully");
+      console.log("✅ Assessment preview:", context.substring(0, 200) + "...");
+      console.log("✅ Assessment length:", context.length, "characters");
       return { context };
     } catch (error: any) {
       console.error("❌ Medical assessment error:", error);

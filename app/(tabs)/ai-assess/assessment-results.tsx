@@ -8,21 +8,22 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 
 // YOLO Pipeline for wound detection
-import { runPipeline, formatForGemini, type PipelineResult } from "../../../utils/yolo";
+import { formatForGemini, runPipeline, type PipelineResult } from "../../../utils/yolo";
 
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -415,8 +416,9 @@ export default function AssessmentResults() {
           }
 
           const collection = database.get("health_entries");
+          let wmEntryId: string | undefined;
           await database.write(async () => {
-            await collection.create((entry: any) => {
+            const newEntry = await collection.create((entry: any) => {
               entry.userId = uid || "offline_user";
               entry.symptoms = description;
               entry.severity = severity;
@@ -428,9 +430,19 @@ export default function AssessmentResults() {
               entry.createdBy = "AI Assessment";
               entry.isSynced = false;
             });
+            wmEntryId = newEntry.id;
           });
 
           console.log("✅ AI assessment saved offline successfully");
+          
+          // Emit event to notify tracker/daily-log that a new entry was added (offline)
+          healthEntriesEvents.emit({
+            type: 'add',
+            watermelonId: wmEntryId,
+            timestamp
+          });
+          console.log("📡 Emitted healthEntriesEvents.add event for offline AI assessment");
+          
           setIsLogged(true);
           
           // Show offline success message instead of error
@@ -474,7 +486,18 @@ export default function AssessmentResults() {
         yoloContext: yoloContextForGemini,
       });
 
+      console.log("📥 Gemini response received:", {
+        contextLength: res.context?.length || 0,
+        contextPreview: res.context?.substring(0, 150) + "...",
+        hasContext: !!res.context
+      });
+
       const cleanedContext = cleanGeminiResponse(res.context);
+      console.log("✨ Cleaned context:", {
+        cleanedLength: cleanedContext.length,
+        cleanedPreview: cleanedContext.substring(0, 150) + "..."
+      });
+      
       setSymptomContext(cleanedContext);
 
       // Automatically log the AI assessment (online only - offline is handled above)
@@ -545,6 +568,15 @@ export default function AssessmentResults() {
           } catch (wmError) {
             console.warn("⚠️ Failed to write AI assessment to WatermelonDB (online mirror)", wmError);
           }
+          
+          // Emit event to notify tracker/daily-log that a new entry was added
+          healthEntriesEvents.emit({
+            type: 'add',
+            convexId: newId,
+            timestamp
+          });
+          console.log("📡 Emitted healthEntriesEvents.add event for AI assessment");
+          
           setIsLogged(true);
         } catch (logError) {
           console.error("❌ Failed to log AI assessment:", logError);
