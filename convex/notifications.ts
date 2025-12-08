@@ -342,10 +342,10 @@ export async function sendFirebaseNotification(
     // Get user's Firebase tokens
     const tokens = await ctx.db
       .query("pushTokens")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
       .collect();
 
-    const fcmTokens = tokens.filter((t) => t.platform.includes("firebase"));
+    const fcmTokens = tokens.filter((t: any) => t.platform.includes("firebase"));
 
     if (fcmTokens.length === 0) {
       console.log("ℹ️ No Firebase tokens found for user:", userId);
@@ -358,7 +358,7 @@ export async function sendFirebaseNotification(
     console.log(`📤 Firebase notification ready to send to ${fcmTokens.length} device(s):`, {
       title,
       body,
-      tokens: fcmTokens.map((t) => t.token.substring(0, 20) + "..."),
+      tokens: fcmTokens.map((t: any) => t.token.substring(0, 20) + "..."),
     });
 
     // In production, call Firebase Admin SDK here:
