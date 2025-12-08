@@ -36,6 +36,7 @@
     "@react-navigation/native": "^7.1.8",
     "@rnmapbox/maps": "^10.2.6",
     "@shopify/react-native-skia": "2.2.12",
+    "@tanstack/react-query": "^5.90.12",
     "babel-plugin-react-compiler": "^19.0.0-beta-ebf51a3-20250411",
     "bcryptjs": "^3.0.2",
     "convex": "^1.27.3",
