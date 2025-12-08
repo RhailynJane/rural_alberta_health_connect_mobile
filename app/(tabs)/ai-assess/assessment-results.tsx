@@ -8,18 +8,22 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Image,
+    Linking,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
+
+// YOLO Pipeline for wound detection
+import { formatForGemini, runPipeline, type PipelineResult } from "../../../utils/yolo";
 
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -310,6 +314,12 @@ export default function AssessmentResults() {
   const [isLogged, setIsLogged] = useState(false);
   const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
 
+  // YOLO Detection State
+  const [yoloResult, setYoloResult] = useState<PipelineResult | null>(null);
+  const [isYoloProcessing, setIsYoloProcessing] = useState(false);
+  const [yoloError, setYoloError] = useState<string | null>(null);
+  const [yoloProgress, setYoloProgress] = useState<string>("");
+
   // Use ref to track if we're currently fetching to prevent multiple calls
   const isFetchingRef = useRef(false);
 
@@ -328,7 +338,7 @@ export default function AssessmentResults() {
     : null;
 
   // Define fetchAIAssessment first so it is in scope and can be called after images are processed
-  const fetchAIAssessment = async (imagesArg: string[] = []) => {
+  const fetchAIAssessment = async (imagesArg: string[] = [], yoloPipelineResult?: PipelineResult | null) => {
     // Prevent multiple simultaneous requests and re-fetches
     if (isFetchingRef.current || hasAttemptedFetch) {
       return;
@@ -363,6 +373,16 @@ export default function AssessmentResults() {
           ? params.category[0]
           : (params.category as string)) ||
         "General Symptoms";
+
+      console.log("📋 [AI Assessment Params]", {
+        description: description || "(empty)",
+        descriptionLength: description.length,
+        severity,
+        duration: duration || "(empty)",
+        category,
+        hasAiContext: !!aiContext,
+        isOnline
+      });
 
       // Use imagesArg if provided; otherwise fallback to any already-processed photos in aiContext
       const imagesToSend = imagesArg && imagesArg.length > 0
@@ -406,8 +426,9 @@ export default function AssessmentResults() {
           }
 
           const collection = database.get("health_entries");
+          let wmEntryId: string | undefined;
           await database.write(async () => {
-            await collection.create((entry: any) => {
+            const newEntry = await collection.create((entry: any) => {
               entry.userId = uid || "offline_user";
               entry.symptoms = description;
               entry.severity = severity;
@@ -419,9 +440,19 @@ export default function AssessmentResults() {
               entry.createdBy = "AI Assessment";
               entry.isSynced = false;
             });
+            wmEntryId = newEntry.id;
           });
 
           console.log("✅ AI assessment saved offline successfully");
+          
+          // Emit event to notify tracker/daily-log that a new entry was added (offline)
+          healthEntriesEvents.emit({
+            type: 'add',
+            watermelonId: wmEntryId,
+            timestamp
+          });
+          console.log("📡 Emitted healthEntriesEvents.add event for offline AI assessment");
+          
           setIsLogged(true);
           
           // Show offline success message instead of error
@@ -446,6 +477,14 @@ export default function AssessmentResults() {
         hasImages: imagesToSend.length > 0,
       });
 
+      // Format YOLO detection results for Gemini (if available)
+      // Use the passed parameter (not state) to avoid timing issues
+      const yoloContextForGemini = yoloPipelineResult ? formatForGemini(yoloPipelineResult) : undefined;
+
+      if (yoloContextForGemini) {
+        console.log(`🔬 [YOLO→Gemini] Sending detection context to Gemini (${yoloContextForGemini.length} chars)`);
+      }
+
       const res = await generateContext({
         description,
         severity,
@@ -454,9 +493,21 @@ export default function AssessmentResults() {
         category,
         symptoms: aiContext?.symptoms || [],
         images: imagesToSend,
+        yoloContext: yoloContextForGemini,
+      });
+
+      console.log("📥 Gemini response received:", {
+        contextLength: res.context?.length || 0,
+        contextPreview: res.context?.substring(0, 150) + "...",
+        hasContext: !!res.context
       });
 
       const cleanedContext = cleanGeminiResponse(res.context);
+      console.log("✨ Cleaned context:", {
+        cleanedLength: cleanedContext.length,
+        cleanedPreview: cleanedContext.substring(0, 150) + "..."
+      });
+      
       setSymptomContext(cleanedContext);
 
       // Automatically log the AI assessment (online only - offline is handled above)
@@ -527,6 +578,15 @@ export default function AssessmentResults() {
           } catch (wmError) {
             console.warn("⚠️ Failed to write AI assessment to WatermelonDB (online mirror)", wmError);
           }
+          
+          // Emit event to notify tracker/daily-log that a new entry was added
+          healthEntriesEvents.emit({
+            type: 'add',
+            convexId: newId,
+            timestamp
+          });
+          console.log("📡 Emitted healthEntriesEvents.add event for AI assessment");
+          
           setIsLogged(true);
         } catch (logError) {
           console.error("❌ Failed to log AI assessment:", logError);
@@ -594,8 +654,54 @@ export default function AssessmentResults() {
     
     const processImagesAndFetchAssessment = async () => {
       let base64Images: string[] = [];
+      let yoloPipelineResult: PipelineResult | null = null;
+
+      // Step 1: Run YOLO detection on images (if any)
+      if (displayPhotos.length > 0) {
+        console.log(`🔬 [YOLO] Starting wound detection on ${displayPhotos.length} image(s)...`);
+        setIsYoloProcessing(true);
+        setYoloError(null);
+        setYoloProgress("Loading wound detection model...");
+
+        try {
+          yoloPipelineResult = await runPipeline(
+            displayPhotos,
+            { continueOnError: true },
+            (progress) => {
+              console.log(`🔬 [YOLO] Progress: ${progress.percentComplete}% - ${progress.message}`);
+              setYoloProgress(progress.message);
+            }
+          );
+
+          setYoloResult(yoloPipelineResult);
+          console.log(`✅ [YOLO] Detection complete:`, {
+            totalDetections: yoloPipelineResult.totalDetections,
+            successfulImages: yoloPipelineResult.successfulImages,
+            failedImages: yoloPipelineResult.failedImages,
+            summary: yoloPipelineResult.summary.byClass,
+          });
+
+          // Log individual results
+          yoloPipelineResult.results.forEach((result, idx) => {
+            console.log(`🔬 [YOLO] Image ${idx + 1}:`, {
+              success: result.success,
+              detections: result.detections.length,
+              classes: result.detections.map(d => `${d.className} (${(d.confidence * 100).toFixed(0)}%)`),
+              hasAnnotatedImage: result.annotatedImageBase64.length > 0,
+            });
+          });
+        } catch (error) {
+          console.error(`❌ [YOLO] Detection failed:`, error);
+          setYoloError(String(error));
+        } finally {
+          setIsYoloProcessing(false);
+          setYoloProgress("");
+        }
+      }
+
+      // Step 2: Convert images to base64 for Gemini (if online)
       if (displayPhotos.length > 0 && aiContext) {
-        console.log(`📸 Processing ${displayPhotos.length} images in background...`);
+        console.log(`📸 Processing ${displayPhotos.length} images for Gemini...`);
         try {
           base64Images = await convertImagesToBase64(displayPhotos);
           console.log(`✅ Successfully converted ${base64Images.length} images to base64`);
@@ -605,8 +711,10 @@ export default function AssessmentResults() {
           aiContext.uploadedPhotos = [];
         }
       }
-      // Trigger Gemini request after images are ready (or immediately if no images)
-      fetchAIAssessment(base64Images);
+
+      // Step 3: Trigger Gemini request after images are ready (or immediately if no images)
+      // Pass YOLO results directly to avoid state timing issues
+      fetchAIAssessment(base64Images, yoloPipelineResult);
     };
 
     processImagesAndFetchAssessment();
@@ -778,6 +886,137 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                 </View>
               </View>
 
+              {/* YOLO Wound Detection Results - SHOWN FIRST for immediate value */}
+              {displayPhotos.length > 0 && (
+                <ResultCard title="Wound Detection Analysis" icon="scan">
+                  {/* Processing State */}
+                  {isYoloProcessing && (
+                    <View style={styles.yoloProcessingContainer}>
+                      <ActivityIndicator size="small" color="#2A7DE1" />
+                      <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        {yoloProgress || "Analyzing images..."}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Error State */}
+                  {yoloError && (
+                    <View style={styles.yoloErrorContainer}>
+                      <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                      <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Detection failed: {yoloError}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Detection Summary */}
+                  {yoloResult && !isYoloProcessing && (
+                    <View style={styles.yoloSummaryContainer}>
+                      {yoloResult.totalDetections > 0 ? (
+                        <>
+                          <View style={styles.yoloSummaryHeader}>
+                            <Ionicons name="checkmark-circle" size={20} color="#28A745" />
+                            <Text style={[styles.yoloSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                              {yoloResult.totalDetections} wound(s) detected
+                            </Text>
+                          </View>
+                          <View style={styles.yoloClassList}>
+                            {Object.entries(yoloResult.summary.byClass).map(([className, count]) => (
+                              <View key={className} style={styles.yoloClassItem}>
+                                <View style={[styles.yoloClassBadge, {
+                                  backgroundColor:
+                                    className === '1st degree burn' ? '#FF8C00' :    // Orange - mild burn
+                                    className === '2nd degree burn' ? '#FF4500' :    // Red-Orange - moderate burn
+                                    className === '3rd degree burn' ? '#C80000' :    // Dark Red - severe burn
+                                    className === 'Rashes' ? '#FFB6C1' :             // Pink
+                                    className === 'abrasion' ? '#DC3545' :           // Red
+                                    className === 'bruise' ? '#6f42c1' :             // Purple
+                                    className === 'cut' ? '#28A745' :                // Green
+                                    className === 'frostbite' ? '#00CED1' :          // Cyan - cold injury
+                                    '#6c757d'                                        // Default gray
+                                }]}>
+                                  <Text style={[styles.yoloClassBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                    {className.toUpperCase()}
+                                  </Text>
+                                </View>
+                                <Text style={[styles.yoloClassCount, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  × {count}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                          {yoloResult.summary.highestConfidence && (
+                            <Text style={[styles.yoloConfidenceText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                              Highest confidence: {(yoloResult.summary.highestConfidence.confidence * 100).toFixed(0)}%
+                            </Text>
+                          )}
+                        </>
+                      ) : (
+                        <View style={styles.yoloSummaryHeader}>
+                          <Ionicons name="information-circle" size={20} color="#6c757d" />
+                          <Text style={[styles.yoloSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed, color: '#6c757d' }]}>
+                            No wounds detected in images
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Annotated Images (with bounding boxes) */}
+                  <Text
+                    style={[
+                      styles.cardText,
+                      {
+                        fontFamily: FONTS.BarlowSemiCondensed,
+                        marginTop: 12,
+                        marginBottom: 8,
+                      },
+                    ]}
+                  >
+                    {displayPhotos.length} photo(s) analyzed
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {displayPhotos.map((photo: string, index: number) => {
+                      // Use annotated image if available, otherwise fall back to original
+                      const yoloImageResult = yoloResult?.results[index];
+                      const hasAnnotatedImage = yoloImageResult?.annotatedImageBase64 && yoloImageResult.annotatedImageBase64.length > 0;
+                      const imageSource = hasAnnotatedImage
+                        ? { uri: `data:image/jpeg;base64,${yoloImageResult.annotatedImageBase64}` }
+                        : { uri: photo };
+                      const detectionsInImage = yoloImageResult?.detections.length || 0;
+
+                      return (
+                        <View key={index} style={styles.photoContainer}>
+                          <Image
+                            source={imageSource}
+                            style={styles.assessmentPhoto}
+                          />
+                          <View style={styles.photoLabelContainer}>
+                            <Text
+                              style={[
+                                styles.photoLabel,
+                                { fontFamily: FONTS.BarlowSemiCondensed },
+                              ]}
+                            >
+                              Photo {index + 1}
+                            </Text>
+                            {yoloResult && !isYoloProcessing && (
+                              <View style={[styles.detectionBadge, {
+                                backgroundColor: detectionsInImage > 0 ? '#28A745' : '#6c757d'
+                              }]}>
+                                <Text style={[styles.detectionBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  {detectionsInImage} found
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </ScrollView>
+                </ResultCard>
+              )}
+
               {/* Medical Triage Assessment - Separated into Cards */}
               <Text
                 style={[
@@ -908,40 +1147,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                       </View>
                     )}
                   </View>
-                </ResultCard>
-              )}
-
-              {displayPhotos.length > 0 && (
-                <ResultCard title="Medical Photos" icon="camera">
-                  <Text
-                    style={[
-                      styles.cardText,
-                      {
-                        fontFamily: FONTS.BarlowSemiCondensed,
-                        marginBottom: 12,
-                      },
-                    ]}
-                  >
-                    {displayPhotos.length} photo(s) included in assessment
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {displayPhotos.map((photo: string, index: number) => (
-                      <View key={index} style={styles.photoContainer}>
-                        <Image
-                          source={{ uri: photo }}
-                          style={styles.assessmentPhoto}
-                        />
-                        <Text
-                          style={[
-                            styles.photoLabel,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Photo {index + 1}
-                        </Text>
-                      </View>
-                    ))}
-                  </ScrollView>
                 </ResultCard>
               )}
 
@@ -1367,5 +1572,99 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E9ECEF",
+  },
+  // YOLO Detection Styles
+  yoloProcessingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  yoloProcessingText: {
+    marginLeft: 12,
+    fontSize: 14,
+    color: "#2A7DE1",
+  },
+  yoloErrorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#DC3545",
+  },
+  yoloErrorText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#DC3545",
+    flex: 1,
+  },
+  yoloSummaryContainer: {
+    backgroundColor: "#F8F9FA",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  yoloSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  yoloSummaryTitle: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  yoloClassList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  yoloClassItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  yoloClassBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  yoloClassBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  yoloClassCount: {
+    marginLeft: 4,
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  yoloConfidenceText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#666",
+    fontStyle: "italic",
+  },
+  photoLabelContainer: {
+    alignItems: "center",
+    marginTop: 4,
+  },
+  detectionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  detectionBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "600",
   },
 });

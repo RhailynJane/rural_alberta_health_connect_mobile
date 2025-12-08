@@ -1,6 +1,8 @@
+import { api } from "@/convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { DatabaseProvider } from '@nozbe/watermelondb/DatabaseProvider';
-import { ConvexReactClient } from "convex/react";
+import { FloatingDevTools } from "@react-buoy/core";
+import { ConvexReactClient, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -15,6 +17,8 @@ import { NotificationProvider } from "./components/NotificationContext";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SyncProvider } from "./components/SyncProvider";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
+import { initializeFirebase, registerForFirebaseMessaging } from "./utils/firebase";
+import { storeFirebaseToken } from "./utils/firebaseNotifications";
 import {
     configureForegroundNotifications,
     setupNotificationListeners,
@@ -63,6 +67,44 @@ export const useSessionRefresh = () => {
   return context;
 };
 
+/**
+ * Component to handle Firebase FCM token registration when user logs in
+ * Must be inside ConvexAuthProvider to access useConvexAuth
+ */
+function FirebaseTokenRegistration() {
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const user = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
+  const registerFCMToken = useMutation(api.notifications.registerFirebaseFCMToken);
+  const [hasRegistered, setHasRegistered] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || isLoading || hasRegistered) return;
+
+    const registerToken = async () => {
+      try {
+        const token = await registerForFirebaseMessaging(user._id);
+        if (token) {
+          await storeFirebaseToken(token);
+          // Register with Convex backend
+          await registerFCMToken({
+            fcmToken: token,
+            platform: "android",
+            deviceName: "mobile",
+          });
+          console.log("✅ FCM token registered with backend");
+          setHasRegistered(true);
+        }
+      } catch (error) {
+        console.error("❌ Failed to register FCM token:", error);
+      }
+    };
+
+    registerToken();
+  }, [isAuthenticated, user, isLoading, hasRegistered, registerFCMToken]);
+
+  return null; // This component doesn't render anything
+}
+
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -94,6 +136,11 @@ export default function RootLayout() {
     // Configure foreground notification behavior
     configureForegroundNotifications();
 
+    // Initialize Firebase for push notifications
+    initializeFirebase().catch((error) => {
+      console.warn("Firebase initialization skipped or failed:", error);
+    });
+
     // Setup notification listeners
     const cleanup = setupNotificationListeners(
       // On notification received in foreground
@@ -118,6 +165,7 @@ export default function RootLayout() {
     <DatabaseProvider database={database}>
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
+          <FirebaseTokenRegistration />
           <SyncProvider>
             <NotificationProvider>
               <SignUpFormProvider>
@@ -148,6 +196,14 @@ export default function RootLayout() {
                       <Stack.Screen name="(tabs)" />
                     </Stack>
                   </View>
+                  {/* React Buoy DevTools - only in development */}
+                  {__DEV__ && (
+                    <FloatingDevTools
+                      environment="local"
+                      userRole="admin"
+                      disableHints
+                    />
+                  )}
                 </SafeAreaProvider>
               </SignUpFormProvider>
             </NotificationProvider>

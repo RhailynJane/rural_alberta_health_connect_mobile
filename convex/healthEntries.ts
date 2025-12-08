@@ -42,7 +42,7 @@ export const logAIAssessment = mutation({
       aiContext: args.aiContext,
       photos: args.photos || [],
       notes: args.notes || "",
-      createdBy: "System AI",
+      createdBy: "AI Assessment",
       type: "ai_assessment",
     });
 
