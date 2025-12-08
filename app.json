@@ -94,7 +94,6 @@
           "mode": "default"
         }
       ],
-      "onnxruntime-react-native",
       "./plugins/withOnnxRuntime",
       "./plugins/withAndroidXFix"
     ],

@@ -72,7 +72,8 @@ export const useSessionRefresh = () => {
  * Must be inside ConvexAuthProvider to access useConvexAuth
  */
 function FirebaseTokenRegistration() {
-  const { isLoading, isAuthenticated, user } = useConvexAuth();
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const user = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const registerFCMToken = useMutation(api.notifications.registerFirebaseFCMToken);
   const [hasRegistered, setHasRegistered] = useState(false);
 
