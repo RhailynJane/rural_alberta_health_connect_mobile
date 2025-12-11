@@ -9,13 +9,12 @@ import {
   Image,
   Keyboard,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -374,14 +373,14 @@ export default function SymptomAssessment() {
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
-          <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss} accessible={false}>
-            <ScrollView
-              contentContainerStyle={styles.contentContainer}
-              showsVerticalScrollIndicator={false}
-              keyboardDismissMode="on-drag"
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.contentSection}>
+          <ScrollView
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={() => Keyboard.dismiss()}
+          >
+            <View style={styles.contentSection}>
               <Text
                 style={[
                   styles.sectionTitle,
@@ -742,7 +741,6 @@ export default function SymptomAssessment() {
               </View>
               </View>
             </ScrollView>
-          </Pressable>
         </View>
 
         {/* Error Modal */}
