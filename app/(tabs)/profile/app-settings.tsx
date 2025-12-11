@@ -164,25 +164,24 @@ export default function AppSettings() {
     }
   }, [saveAllReminders, isOnline]);
 
-  // Load reminders only once on mount (not every time currentUser reference changes)
+  // Load reminders once per user (remount-safe, avoids reference-change reloads)
   useEffect(() => {
     if (!currentUser?._id) return;
-    
-    // Only load once - don't reload if currentUser object reference changes
-    if (loadedRef.current) return;
-    
+
     const uid = String(currentUser._id);
+    // Only load if this is a different user than last time
+    if (uid === loadedUserId) return;
+
     setReminderUserKey(uid);
 
     (async () => {
       const stored = await getReminders();
       setReminders(stored);
-      // Mark as loaded so we don't reload on future currentUser changes
-      loadedRef.current = true;
+      setLoadedUserId(uid);
       // Don't schedule on page load - reminders are already scheduled from when they were created
       // await scheduleAllReminderItems(stored);
     })();
-  }, [currentUser?._id]);
+  }, [currentUser?._id, loadedUserId]);
 
   // Set Convex sync callback separately (don't reload reminders when it changes)
   useEffect(() => {
