@@ -220,6 +220,25 @@ export default function AppSettings() {
     persistReminders();
   }, [reminders, isOnline, saveAllReminders]);
 
+  // Also sync to AsyncStorage to keep local storage in sync with state
+  useEffect(() => {
+    const syncToLocalStorage = async () => {
+      try {
+        await AsyncStorage.setItem(
+          `${String(currentUser?._id || "")}:symptomRemindersList`,
+          JSON.stringify(reminders)
+        );
+        console.log("💾 [AppSettings] Synced reminders to AsyncStorage");
+      } catch (err) {
+        console.error("❌ [AppSettings] Failed to sync to AsyncStorage:", err);
+      }
+    };
+
+    if (reminders.length > 0 || reminders.length === 0) {
+      syncToLocalStorage();
+    }
+  }, [reminders, currentUser?._id]);
+
   const handleToggleReminder = async (value: boolean) => {
     // Prevent multiple simultaneous requests
     if (isRequestingPermission) return;
