@@ -82,7 +82,10 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 26
+            "minSdkVersion": 33
+          },
+          "ios": {
+            "deploymentTarget": "17.0"
           }
         }
       ],
@@ -96,7 +99,8 @@
       ],
       "./plugins/withGoogleServices",
       "./plugins/withOnnxRuntime",
-      "./plugins/withAndroidXFix"
+      "./plugins/withAndroidXFix",
+      "./plugins/withExecuTorchiOSExclude"
     ],
     "experiments": {
       "typedRoutes": true,

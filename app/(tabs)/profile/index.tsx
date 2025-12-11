@@ -24,6 +24,7 @@ import StatusModal from "../../components/StatusModal";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { normalizeNanpToE164, savePhoneSecurely } from "../../utils/securePhone";
+import { LLMTest } from "@/utils/llm";
 
 export default function Profile() {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -1030,6 +1031,9 @@ export default function Profile() {
               FAQs, user guide, feedback, and report issues
             </Text>
           </TouchableOpacity>
+
+          {/* LLM Test - DEV ONLY */}
+          <LLMTest />
 
           {/* Sign Out Button */}
           <TouchableOpacity
