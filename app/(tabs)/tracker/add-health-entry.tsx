@@ -460,6 +460,7 @@ export default function AddHealthEntry() {
               notes,
               photos: [...photos, ...localPhotoUris],
               timestamp, // Include timestamp so date/time updates are sent to server
+              date: dateString, // Include date field to sync date changes
             });
             console.log("✅ Entry updated online (Convex)");
           } catch (remoteErr) {
@@ -525,6 +526,7 @@ export default function AddHealthEntry() {
                       // @json decorator handles serialization - pass array directly
                       record.photos = [...photos, ...localPhotoUris];
                       record.timestamp = timestamp; // Update timestamp for date/time changes
+                      record.date = dateString; // Update date field to match timestamp
                       if ('type' in schemaColumns && !record.type) {
                         record.type = 'manual_entry';
                       }
@@ -650,6 +652,7 @@ export default function AddHealthEntry() {
                     // @json decorator handles serialization - pass array directly
                     e.photos = [...photos, ...localPhotoUris];
                     e.timestamp = timestamp; // Update timestamp for date/time changes
+                    e.date = dateString; // Update date field to match timestamp
                     e.isSynced = false; // Mark for re-sync
                     if ('type' in schemaColumns && !e.type) {
                       e.type = 'manual_entry';
@@ -690,7 +693,7 @@ export default function AddHealthEntry() {
                       const duplicate = await healthCollection.create((newRec: any) => {
                         newRec.userId = (entry as any).userId;
                         newRec.convexId = (entry as any).convexId; // maintain link
-                        newRec.date = (entry as any).date; // Keep original date key for categorization
+                        newRec.date = dateString; // Update date field to match timestamp
                         newRec.timestamp = timestamp; // Use updated timestamp for date/time changes
                         newRec.symptoms = symptoms;
                         newRec.severity = parseInt(severity);
