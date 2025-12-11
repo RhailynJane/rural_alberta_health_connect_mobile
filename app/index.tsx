@@ -8,7 +8,7 @@ import { useSessionRefresh } from "./_layout";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
 
 export default function Index() {
-  console.log("📍 index.tsx MOUNTED");
+  console.log("index.tsx MOUNTED");
 
   const router = useRouter();
   const { isAuthenticated, isLoading } = useConvexAuth();

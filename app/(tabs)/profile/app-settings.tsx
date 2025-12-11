@@ -49,12 +49,6 @@ export default function AppSettings() {
     isAuthenticated && !isLoading ? {} : "skip"
   );
 
-  // Fetch server-stored list of reminders (array form)
-  const serverReminders = useQuery(
-    (api as any)["profile/reminders"].getAllReminders,
-    isAuthenticated && !isLoading && refreshTrigger !== -1 ? {} : "skip"
-  );
-
   const saveAllReminders = useMutation(
     (api as any)["profile/reminders"].saveAllReminders
   );
@@ -104,7 +98,7 @@ export default function AppSettings() {
         const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
         if (v !== null) {
           setLocationServicesEnabled(v === "1");
-          console.log(`📍 [AppSettings] Loaded cached location status on mount: ${v === "1" ? "enabled" : "disabled"}`);
+          console.log(`[AppSettings] Loaded cached location status on mount: ${v === "1" ? "enabled" : "disabled"}`);
         }
       } catch {}
     })();
@@ -113,17 +107,17 @@ export default function AppSettings() {
   // Reload cache when screen comes into focus (navigating back to this screen)
   useFocusEffect(
     useCallback(() => {
-      console.log(`📍 [AppSettings] Screen focused - reloading cache and refreshing data...`);
+      console.log(`[AppSettings] Screen focused - reloading cache and refreshing data...`);
       (async () => {
         try {
           const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
-          console.log(`📍 [AppSettings] Cache value read: "${v}"`);
+          console.log(`[AppSettings] Cache value read: "${v}"`);
           if (v !== null) {
             const newValue = v === "1";
             setLocationServicesEnabled(newValue);
-            console.log(`📍 [AppSettings] Set local state to: ${newValue ? "enabled" : "disabled"}`);
+            console.log(`[AppSettings] Set local state to: ${newValue ? "enabled" : "disabled"}`);
           } else {
-            console.log(`📍 [AppSettings] No cached value found`);
+            console.log(`[AppSettings] No cached value found`);
           }
         } catch (err) {
           console.error("Failed to reload cached location status:", err);
@@ -148,11 +142,11 @@ export default function AppSettings() {
       // ONLY sync when we transition FROM offline TO online
       if (wasOffline && isNowOnline && locationStatus !== undefined) {
       const val = !!locationStatus.locationServicesEnabled;
-        console.log(`📍 [AppSettings] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
+        console.log(`[AppSettings] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
       setLocationServicesEnabled(val);
       AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, val ? "1" : "0").catch(() => {});
       } else {
-        console.log(`📍 [AppSettings] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
+        console.log(`[AppSettings] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
     }
   }, [locationStatus, isOnline]);
 
@@ -187,24 +181,22 @@ export default function AppSettings() {
   }, [currentUser?._id, syncCallback]);
 
   // Sync reminders from Convex (array) -> local AsyncStorage/state, without thrashing
-  useEffect(() => {
-    if (!serverReminders || !currentUser?._id) return;
-
-    (async () => {
-      try {
-        const localItems = await getReminders();
-        // Only update if different to avoid flicker
-        const needUpdate = JSON.stringify(serverReminders) !== JSON.stringify(localItems);
-        if (needUpdate) {
-          setReminders(serverReminders as ReminderItem[]);
-          // Don't schedule on sync - reminders are already scheduled from when they were created
-          // await scheduleAllReminderItems(serverReminders as ReminderItem[]);
-        }
-      } catch {
-        // no-op
-      }
-    })();
-  }, [serverReminders, currentUser?._id]);
+  // DISABLED: This was causing local changes to be overwritten by stale server data
+  // Instead, we rely on the persist effect to save to server, and initial load from localStorage
+  // useEffect(() => {
+  //   if (!serverReminders || !currentUser?._id) return;
+  //   (async () => {
+  //     try {
+  //       const localItems = await getReminders();
+  //       const needUpdate = JSON.stringify(serverReminders) !== JSON.stringify(localItems);
+  //       if (needUpdate) {
+  //         setReminders(serverReminders as ReminderItem[]);
+  //       }
+  //     } catch {
+  //       // no-op
+  //     }
+  //   })();
+  // }, [serverReminders, currentUser?._id]);
 
   // Persist reminder changes to backend
   useEffect(() => {
