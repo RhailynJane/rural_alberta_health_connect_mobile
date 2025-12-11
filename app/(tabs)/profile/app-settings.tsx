@@ -41,6 +41,9 @@ export default function AppSettings() {
   const { isOnline } = useNetworkStatus();
   const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
 
+  // Force refetch on screen focus
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   const currentUser = useQuery(
     api.users.getCurrentUser,
     isAuthenticated && !isLoading ? {} : "skip"
@@ -49,7 +52,7 @@ export default function AppSettings() {
   // Fetch server-stored list of reminders (array form)
   const serverReminders = useQuery(
     (api as any)["profile/reminders"].getAllReminders,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && refreshTrigger !== -1 ? {} : "skip"
   );
 
   const saveAllReminders = useMutation(
@@ -59,7 +62,7 @@ export default function AppSettings() {
   // Get location services status
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
-    isAuthenticated && !isLoading ? {} : "skip"
+    isAuthenticated && !isLoading && refreshTrigger !== -1 ? {} : "skip"
   );
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
@@ -107,7 +110,7 @@ export default function AppSettings() {
   // Reload cache when screen comes into focus (navigating back to this screen)
   useFocusEffect(
     useCallback(() => {
-      console.log(`📍 [AppSettings] Screen focused - reloading cache...`);
+      console.log(`📍 [AppSettings] Screen focused - reloading cache and refreshing data...`);
       (async () => {
         try {
           const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
@@ -123,6 +126,9 @@ export default function AppSettings() {
           console.error("Failed to reload cached location status:", err);
         }
       })();
+      // Force refresh reminders and location status from server
+      setRefreshTrigger(prev => prev + 1);
+      console.log(`🔔 [AppSettings] Reminders and location status will be refetched from server`);
     }, [])
   );
 
@@ -196,6 +202,28 @@ export default function AppSettings() {
       }
     })();
   }, [serverReminders, currentUser?._id]);
+
+  // Persist reminder changes to backend
+  useEffect(() => {
+    const persistReminders = async () => {
+      try {
+        console.log("💾 [AppSettings] Persisting", reminders.length, "reminders to Convex");
+        if (isOnline) {
+          await saveAllReminders({ reminders: JSON.stringify(reminders) });
+        } else {
+          console.log("📴 [AppSettings] Offline: reminders saved locally only");
+        }
+      } catch (err) {
+        console.error("❌ [AppSettings] Failed to persist reminders:", err);
+      }
+    };
+
+    // Don't persist on initial load or if reminders haven't changed
+    // Only persist after user interactions (add, delete, toggle)
+    if (reminders.length > 0 || (serverReminders && reminders.length !== serverReminders.length)) {
+      persistReminders();
+    }
+  }, [reminders, isOnline, saveAllReminders, serverReminders]);
 
   const handleToggleReminder = async (value: boolean) => {
     // Prevent multiple simultaneous requests
