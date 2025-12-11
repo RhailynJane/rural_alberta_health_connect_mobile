@@ -703,11 +703,6 @@ export default function AddHealthEntry() {
                         if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
                         if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
                       });
-                        newRec.createdBy = (entry as any).createdBy;
-                        if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = now;
-                        if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
-                        if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
-                      });
                       console.log('🛟 [WMDB DEBUG] (offline) Duplicate rescue record created with id:', duplicate.id);
                       if ('isDeleted' in schemaColumns) {
                         try {
