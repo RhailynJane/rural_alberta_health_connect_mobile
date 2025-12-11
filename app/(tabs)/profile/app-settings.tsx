@@ -88,8 +88,8 @@ export default function AppSettings() {
   // Track last persisted state to prevent infinite loops
   const lastPersistedRef = useRef<string>("");
 
-  // Track if reminders have been loaded, only load once on mount
-  const loadedRef = useRef<boolean>(false);
+  // Track which user's reminders we've loaded to avoid reloading when reference changes
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
 
   // Load cached location status immediately for offline UX
   useEffect(() => {
