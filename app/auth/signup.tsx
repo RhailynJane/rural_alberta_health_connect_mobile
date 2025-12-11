@@ -122,7 +122,7 @@ export default function SignUp() {
       
       // Ensure profile exists in Convex
       await ensureProfileExists();
-      router.push("/auth/personal-info");
+      router.replace("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
@@ -475,7 +475,7 @@ export default function SignUp() {
                           <Text
                             style={styles.linkText}
                             onPress={() =>
-                              router.push("/auth/terms-of-service")
+                              router.replace("/auth/terms-of-service")
                             }
                           >
                             Terms of Service
@@ -483,7 +483,7 @@ export default function SignUp() {
                           and{" "}
                           <Text
                             style={styles.linkText}
-                            onPress={() => router.push("/auth/privacy-policy")}
+                            onPress={() => router.replace("/auth/privacy-policy")}
                           >
                             Privacy Policy
                           </Text>
@@ -535,7 +535,7 @@ export default function SignUp() {
                           Already have an account?{" "}
                         </Text>
                         <TouchableOpacity
-                          onPress={() => router.push("/auth/signin")}
+                          onPress={() => router.replace("/auth/signin")}
                         >
                           <Text
                             style={[

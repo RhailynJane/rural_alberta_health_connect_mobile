@@ -70,7 +70,7 @@ export default function SignIn() {
   };
 
   const handleForgotPassword = () => {
-    router.push("/auth/forgot-password");
+    router.replace("/auth/forgot-password");
   };
 
   return (
@@ -191,7 +191,7 @@ export default function SignIn() {
                       <Text style={[styles.signUpText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                         Don&apos;t have an account?{" "}
                       </Text>
-                      <TouchableOpacity onPress={() => router.push("/auth/signup")}>
+                      <TouchableOpacity onPress={() => router.replace("/auth/signup")}>>
                         <Text style={[styles.signUpLink, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           Create Account
                         </Text>
