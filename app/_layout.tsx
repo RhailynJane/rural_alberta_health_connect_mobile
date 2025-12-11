@@ -29,6 +29,9 @@ import {
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!);
 
+// Suppress the GO_BACK warning since we're using replace() which clears history
+LogBox.ignoreLogs(["The action 'GO_BACK' was not handled by any navigator"]);
+
 const secureStorage = {
   getItem: async (key: string) => {
     try {
