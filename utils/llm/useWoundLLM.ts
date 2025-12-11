@@ -5,8 +5,14 @@
  * Uses ExecuTorch with Qwen3 0.6B quantized model for fast, privacy-preserving
  * first-aid information generation.
  *
+ * ARCHITECTURE (Singleton Pattern):
+ * - The actual LLM model is managed by LLMSingleton + LLMHost
+ * - LLMHost lives at app root level (outside tabs) - never unmounts on tab switch
+ * - This hook subscribes to singleton state - no model re-initialization on mount
+ * - Tab switching is now SAFE - no OOM from repeated model loading
+ *
  * Key Features:
- * - Automatic model download and initialization
+ * - Automatic model download and initialization (via LLMHost)
  * - Integration with YOLO detection results
  * - Offline-capable wound context generation
  * - Streaming response support
@@ -16,46 +22,20 @@
  * - iOS: Returns unavailable state (OpenCV conflict with YOLO preprocessing)
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import { useCallback, useSyncExternalStore } from 'react';
 import type { Detection, PipelineResult } from '@/utils/yolo/types';
-import {
-  formatDetectionsForLLM,
-  buildWoundContextMessages,
-  type WoundContextOptions,
-  type WoundContextResult,
-} from './woundContext';
-
-// Conditionally import ExecuTorch only on Android
-// On iOS, react-native-executorch is excluded from autolinking due to OpenCV conflict
-let useLLMHook: typeof import('react-native-executorch').useLLM | null = null;
-let QWEN3_0_6B_QUANTIZED_MODEL: typeof import('react-native-executorch').QWEN3_0_6B_QUANTIZED | null = null;
-
-if (Platform.OS === 'android') {
-  try {
-    const executorch = require('react-native-executorch');
-    useLLMHook = executorch.useLLM;
-    QWEN3_0_6B_QUANTIZED_MODEL = executorch.QWEN3_0_6B_QUANTIZED;
-  } catch (e) {
-    console.warn('[LLM:useWoundLLM] Failed to load react-native-executorch:', e);
-  }
-}
+import { getLLMSingleton, type LLMState } from './LLMSingleton';
+import type { WoundContextOptions, WoundContextResult } from './woundContext';
 
 const LOG_PREFIX = '[LLM:useWoundLLM]';
-
-/**
- * Model options for on-device LLM
- * Default: Qwen3 0.6B (smallest, fastest, ~400MB)
- */
-export type WoundLLMModel = typeof QWEN3_0_6B_QUANTIZED_MODEL;
 
 /**
  * Hook configuration options
  */
 export interface UseWoundLLMOptions {
-  /** Model to use - defaults to Qwen3 0.6B quantized */
-  model?: WoundLLMModel;
-  /** Auto-initialize model on mount - defaults to true */
+  /** @deprecated Model is now managed by LLMHost singleton */
+  model?: unknown;
+  /** @deprecated Model auto-initializes via LLMHost */
   autoInit?: boolean;
 }
 
@@ -93,8 +73,23 @@ export interface UseWoundLLMReturn {
   clearHistory: () => void;
 }
 
+// Singleton instance (stable reference)
+const singleton = getLLMSingleton();
+
+// For useSyncExternalStore
+const subscribe = (callback: () => void) => {
+  return singleton.subscribe(() => callback());
+};
+
+const getSnapshot = (): LLMState => {
+  return singleton.getState();
+};
+
 /**
  * Hook for on-device wound assessment LLM
+ *
+ * Now uses singleton pattern - model persists across tab switches.
+ * LLMHost component must be rendered at app root level.
  *
  * @example
  * ```tsx
@@ -125,67 +120,9 @@ export interface UseWoundLLMReturn {
  * }
  * ```
  */
-export function useWoundLLM(options: UseWoundLLMOptions = {}): UseWoundLLMReturn {
-  const { model = QWEN3_0_6B_QUANTIZED_MODEL, autoInit = true } = options;
-
-  // Track download progress manually since the hook doesn't expose it directly
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  // Check if on-device LLM is available (Android only)
-  const isAvailable = Platform.OS === 'android' && useLLMHook !== null && model !== null;
-
-  // Initialize the LLM hook (only on Android)
-  // On iOS, we return a mock object with unavailable state
-  const llm = isAvailable && useLLMHook && model
-    ? useLLMHook({ model })
-    : {
-        isReady: false,
-        isGenerating: false,
-        downloadProgress: 0,
-        response: '',
-        error: Platform.OS === 'ios'
-          ? 'On-device LLM not available on iOS'
-          : 'ExecuTorch module not loaded',
-        messageHistory: [] as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
-        configure: () => {},
-        generate: async () => {},
-        sendMessage: async () => {},
-        deleteMessage: () => {},
-        interrupt: () => {},
-      };
-
-  // Update download progress based on ready state
-  useEffect(() => {
-    if (llm.isReady) {
-      setDownloadProgress(100);
-      console.log(`${LOG_PREFIX} Model ready`);
-    } else if (!llm.error) {
-      // Model is loading
-      console.log(`${LOG_PREFIX} Model loading...`);
-    }
-  }, [llm.isReady, llm.error]);
-
-  // Configure LLM when ready
-  useEffect(() => {
-    if (llm.isReady) {
-      try {
-        llm.configure({
-          generationConfig: {
-            outputTokenBatchSize: 50, // Balance between speed and quality
-          },
-          chatConfig: {
-            contextWindowLength: 2048, // Sufficient for wound assessment
-            initialMessageHistory: [],
-            systemPrompt: '',
-          },
-        });
-        console.log(`${LOG_PREFIX} Model configured`);
-      } catch (err) {
-        console.warn(`${LOG_PREFIX} Configuration warning:`, err);
-      }
-    }
-  }, [llm.isReady]);
+export function useWoundLLM(_options: UseWoundLLMOptions = {}): UseWoundLLMReturn {
+  // Subscribe to singleton state using useSyncExternalStore for optimal performance
+  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   /**
    * Generate wound context from raw detections
@@ -195,86 +132,9 @@ export function useWoundLLM(options: UseWoundLLMOptions = {}): UseWoundLLMReturn
       detections: Detection[],
       contextOptions?: WoundContextOptions
     ): Promise<WoundContextResult> => {
-      const startTime = Date.now();
-      setLocalError(null);
-
-      console.log(
-        `${LOG_PREFIX} Generating context for ${detections.length} detection(s)`
-      );
-
-      // Check readiness
-      if (!llm.isReady) {
-        const error = 'LLM model is not loaded yet';
-        console.error(`${LOG_PREFIX} ${error}`);
-        setLocalError(error);
-        return { context: '', success: false, error };
-      }
-
-      // Check if already generating
-      if (llm.isGenerating) {
-        const error = 'LLM is busy with another request';
-        console.error(`${LOG_PREFIX} ${error}`);
-        setLocalError(error);
-        return { context: '', success: false, error };
-      }
-
-      try {
-        // Build messages
-        const messages = buildWoundContextMessages(detections, contextOptions);
-
-        console.log(`${LOG_PREFIX} Starting generation...`);
-
-        // Generate response
-        await llm.generate(messages);
-
-        // Extract response - try messageHistory first (more reliable)
-        let responseText = '';
-        const lastMessage = llm.messageHistory[llm.messageHistory.length - 1];
-
-        if (lastMessage?.role === 'assistant' && lastMessage.content) {
-          responseText = lastMessage.content;
-        } else if (llm.response?.trim()) {
-          responseText = llm.response;
-        }
-
-        const generationTimeMs = Date.now() - startTime;
-        console.log(
-          `${LOG_PREFIX} Generation complete in ${generationTimeMs}ms, ` +
-            `response length: ${responseText.length}`
-        );
-
-        if (!responseText.trim()) {
-          const error = 'LLM generated empty response';
-          console.error(`${LOG_PREFIX} ${error}`);
-          setLocalError(error);
-          return {
-            context: '',
-            success: false,
-            error,
-            generationTimeMs,
-          };
-        }
-
-        return {
-          context: responseText,
-          success: true,
-          generationTimeMs,
-        };
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : 'Unknown generation error';
-        console.error(`${LOG_PREFIX} Generation failed:`, errorMessage);
-        setLocalError(errorMessage);
-
-        return {
-          context: '',
-          success: false,
-          error: errorMessage,
-          generationTimeMs: Date.now() - startTime,
-        };
-      }
+      return singleton.generateContext(detections, contextOptions);
     },
-    [llm]
+    []
   );
 
   /**
@@ -306,37 +166,24 @@ export function useWoundLLM(options: UseWoundLLMOptions = {}): UseWoundLLMReturn
    * Interrupt ongoing generation
    */
   const interrupt = useCallback(() => {
-    if (llm.isGenerating) {
-      console.log(`${LOG_PREFIX} Interrupting generation`);
-      llm.interrupt();
-    }
-  }, [llm]);
+    singleton.interrupt();
+  }, []);
 
   /**
    * Clear message history
    */
   const clearHistory = useCallback(() => {
-    console.log(`${LOG_PREFIX} Clearing message history`);
-    while (llm.messageHistory.length > 0) {
-      llm.deleteMessage(0);
-    }
-  }, [llm]);
-
-  // Combine errors
-  const combinedError = useMemo(() => {
-    if (localError) return localError;
-    if (llm.error) return String(llm.error);
-    return null;
-  }, [localError, llm.error]);
+    singleton.clearHistory();
+  }, []);
 
   return {
-    isAvailable,
-    isReady: llm.isReady,
-    isLoading: isAvailable && !llm.isReady && !llm.error,
-    isGenerating: llm.isGenerating,
-    downloadProgress,
-    response: llm.response,
-    error: combinedError,
+    isAvailable: state.isAvailable,
+    isReady: state.isReady,
+    isLoading: state.isLoading,
+    isGenerating: state.isGenerating,
+    downloadProgress: state.downloadProgress,
+    response: state.response,
+    error: state.error,
     generateContext,
     generateFromPipeline,
     interrupt,
