@@ -215,9 +215,9 @@ export const updateHealthEntry = mutation({
       throw new Error("AI assessments cannot be edited");
     }
 
-    // Prevent editing deleted entries
+    // If the entry is already deleted, treat edits as no-ops to avoid sync failures
     if (entry.isDeleted) {
-      throw new Error("Cannot edit deleted entry");
+      return entry._id;
     }
 
     // Build update object - only update provided fields
