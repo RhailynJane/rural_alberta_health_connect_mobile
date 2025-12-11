@@ -199,6 +199,7 @@ export const updateHealthEntry = mutation({
     notes: v.optional(v.string()),
     photos: v.optional(v.array(v.string())),
     type: v.optional(v.string()), // allow updating the type explicitly if needed
+    timestamp: v.optional(v.number()), // allow updating the date/time of the entry
   },
   handler: async (ctx, args) => {
     // Get the entry to verify ownership and type
@@ -249,6 +250,10 @@ export const updateHealthEntry = mutation({
 
     if (args.photos !== undefined) {
       updates.photos = args.photos;
+    }
+
+    if (args.timestamp !== undefined) {
+      updates.timestamp = args.timestamp;
     }
 
 

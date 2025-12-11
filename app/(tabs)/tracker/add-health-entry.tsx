@@ -7,17 +7,17 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -418,11 +418,9 @@ export default function AddHealthEntry() {
     }
 
     try {
-      // For edit mode, use original timestamp (Option A: preserve original)
-      // For add mode, create new timestamp
-      const timestamp = mode === 'edit' && originalTimestamp
-        ? originalTimestamp
-        : createTimestamp(selectedDate, selectedTime);
+      // Create timestamp from selected date/time (always use user's selection)
+      // This allows editing the date/time of an entry
+      const timestamp = createTimestamp(selectedDate, selectedTime);
       const dateString = formatDate(selectedDate);
       // Use actual userId if available, skip saving if offline without userId
       const saveUserId = userId;
@@ -461,6 +459,7 @@ export default function AddHealthEntry() {
               severity: parseInt(severity),
               notes,
               photos: [...photos, ...localPhotoUris],
+              timestamp, // Include timestamp so date/time updates are sent to server
             });
             console.log("✅ Entry updated online (Convex)");
           } catch (remoteErr) {
@@ -525,6 +524,7 @@ export default function AddHealthEntry() {
                       record.notes = notes || '';
                       // @json decorator handles serialization - pass array directly
                       record.photos = [...photos, ...localPhotoUris];
+                      record.timestamp = timestamp; // Update timestamp for date/time changes
                       if ('type' in schemaColumns && !record.type) {
                         record.type = 'manual_entry';
                       }
@@ -649,6 +649,7 @@ export default function AddHealthEntry() {
                     e.notes = notes || '';
                     // @json decorator handles serialization - pass array directly
                     e.photos = [...photos, ...localPhotoUris];
+                    e.timestamp = timestamp; // Update timestamp for date/time changes
                     e.isSynced = false; // Mark for re-sync
                     if ('type' in schemaColumns && !e.type) {
                       e.type = 'manual_entry';
@@ -659,7 +660,6 @@ export default function AddHealthEntry() {
                     if ('editCount' in schemaColumns) {
                       e.editCount = (e.editCount || 0) + 1;
                     }
-                    // Preserve original timestamp (Option A) - Don't update e.timestamp
                   });
                   await database.batch(updatedEntry);
                   console.log('✅ [OFFLINE] Fields updated successfully via prepareUpdate');
@@ -690,14 +690,19 @@ export default function AddHealthEntry() {
                       const duplicate = await healthCollection.create((newRec: any) => {
                         newRec.userId = (entry as any).userId;
                         newRec.convexId = (entry as any).convexId; // maintain link
-                        newRec.date = (entry as any).date;
-                        newRec.timestamp = now; // NEW timestamp to win tiebreaker
+                        newRec.date = (entry as any).date; // Keep original date key for categorization
+                        newRec.timestamp = timestamp; // Use updated timestamp for date/time changes
                         newRec.symptoms = symptoms;
                         newRec.severity = parseInt(severity);
                         newRec.notes = notes || '';
                         newRec.photos = JSON.stringify([...photos, ...localPhotoUris]);
                         newRec.type = (entry as any).type || 'manual_entry';
                         newRec.isSynced = false; // Offline edit means not synced
+                        newRec.createdBy = (entry as any).createdBy;
+                        if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = now;
+                        if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
+                        if ('isDeleted' in schemaColumns) newRec.isDeleted = false; // new active record
+                      });
                         newRec.createdBy = (entry as any).createdBy;
                         if ('lastEditedAt' in schemaColumns) newRec.lastEditedAt = now;
                         if ('editCount' in schemaColumns) newRec.editCount = ((entry as any).editCount || 0) + 1;
