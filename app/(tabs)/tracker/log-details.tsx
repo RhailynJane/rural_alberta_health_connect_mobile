@@ -544,7 +544,7 @@ export default function LogDetails() {
               userId: currentUser._id,
             });
             console.log('✅ Deleted from Convex:', convexId);
-          } catch (error) {
+          } catch {
             throw new Error('Failed to delete entry from server. Please try again.');
           }
         }
