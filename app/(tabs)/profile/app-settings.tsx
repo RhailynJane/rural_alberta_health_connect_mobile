@@ -161,12 +161,11 @@ export default function AppSettings() {
     }
   }, [saveAllReminders, isOnline]);
 
-  // Load reminders
+  // Load reminders once on mount (only when currentUser changes)
   useEffect(() => {
     if (!currentUser?._id) return;
     const uid = String(currentUser._id);
     setReminderUserKey(uid);
-    setConvexSyncCallback(syncCallback);
 
     (async () => {
       const stored = await getReminders();
@@ -174,7 +173,12 @@ export default function AppSettings() {
       // Don't schedule on page load - reminders are already scheduled from when they were created
       // await scheduleAllReminderItems(stored);
     })();
-  }, [currentUser?._id, syncCallback]);
+  }, [currentUser?._id]);
+
+  // Set Convex sync callback separately (don't reload reminders when it changes)
+  useEffect(() => {
+    setConvexSyncCallback(syncCallback);
+  }, [syncCallback]);
 
   // Sync reminders from Convex (array) -> local AsyncStorage/state, without thrashing
   // DISABLED: This was causing local changes to be overwritten by stale server data
