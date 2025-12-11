@@ -166,14 +166,14 @@ function RootLayoutContent({
         
         {/* Conditional rendering: Show auth stack if not authenticated, otherwise show app stack */}
         {!isAuthenticated && !isLoading ? (
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="auth/signin" />
-            <Stack.Screen name="auth/signup" />
-            <Stack.Screen name="auth/personal-info" />
-            <Stack.Screen name="auth/emergency-contact" />
-            <Stack.Screen name="auth/medical-history" />
+          <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
+            <Stack.Screen name="index" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/signin" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/signup" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/personal-info" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/emergency-contact" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="auth/medical-history" options={{ gestureEnabled: false }} />
           </Stack>
         ) : (
           <Stack screenOptions={{ headerShown: false }}>
