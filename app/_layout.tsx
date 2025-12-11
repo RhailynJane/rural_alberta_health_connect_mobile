@@ -17,8 +17,11 @@ import { NotificationProvider } from "./components/NotificationContext";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { SyncProvider } from "./components/SyncProvider";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
-import { initializeFirebase, registerForFirebaseMessaging } from "./utils/firebase";
-import { storeFirebaseToken } from "./utils/firebaseNotifications";
+import {
+    getOneSignalSubscriptionId,
+    initializeOneSignal,
+    setOneSignalUserProperties
+} from "./utils/onesignal";
 import {
     configureForegroundNotifications,
     setupNotificationListeners,
@@ -68,41 +71,127 @@ export const useSessionRefresh = () => {
 };
 
 /**
- * Component to handle Firebase FCM token registration when user logs in
+/**
+ * Component to handle OneSignal registration and user sync
  * Must be inside ConvexAuthProvider to access useConvexAuth
  */
-function FirebaseTokenRegistration() {
+function OneSignalRegistration() {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const user = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
-  const registerFCMToken = useMutation(api.notifications.registerFirebaseFCMToken);
+  const registerPushToken = useMutation(api.notifications.registerFirebaseFCMToken);
   const [hasRegistered, setHasRegistered] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user || isLoading || hasRegistered) return;
 
-    const registerToken = async () => {
+    const registerWithOneSignal = async () => {
       try {
-        const token = await registerForFirebaseMessaging(user._id);
-        if (token) {
-          await storeFirebaseToken(token);
-          // Register with Convex backend
-          await registerFCMToken({
-            fcmToken: token,
-            platform: "android",
-            deviceName: "mobile",
-          });
-          console.log("✅ FCM token registered with backend");
+        // Initialize OneSignal (safe to call multiple times)
+        await initializeOneSignal();
+        
+        // Set user properties in OneSignal
+        await setOneSignalUserProperties(user._id, {
+          email: user.email || '',
+          name: user.name || '',
+        });
+
+        // Get OneSignal subscription ID
+        const subscriptionId = await getOneSignalSubscriptionId();
+        
+        if (subscriptionId) {
+          try {
+            // Register with Convex backend
+            await registerPushToken({
+              fcmToken: subscriptionId, // Use OneSignal subscription ID
+              platform: "oneSignal",
+              deviceName: "mobile",
+            });
+            console.log("✅ OneSignal subscription registered with backend");
+            setHasRegistered(true);
+          } catch (backendError) {
+            console.warn("⚠️ Failed to register push token with backend:", backendError);
+            setHasRegistered(true);
+          }
+        } else {
+          console.log("ℹ️ OneSignal subscription ID not available");
           setHasRegistered(true);
         }
       } catch (error) {
-        console.error("❌ Failed to register FCM token:", error);
+        console.warn("⚠️ OneSignal registration error:", error);
+        setHasRegistered(true);
       }
     };
 
-    registerToken();
-  }, [isAuthenticated, user, isLoading, hasRegistered, registerFCMToken]);
+    registerWithOneSignal();
+  }, [isAuthenticated, user, isLoading, hasRegistered, registerPushToken]);
 
-  return null; // This component doesn't render anything
+  return null;
+}
+
+/**
+ * Component to handle conditional routing based on authentication state
+ * Must be inside ConvexAuthProvider to access useConvexAuth
+ */
+function RootLayoutContent({
+  notificationBanner,
+  setNotificationBanner,
+  isRefreshing,
+}: {
+  notificationBanner: { title: string; body: string } | null;
+  setNotificationBanner: (banner: { title: string; body: string } | null) => void;
+  isRefreshing: boolean;
+}) {
+  const { isOnline } = useNetworkStatus();
+  const pathname = usePathname();
+  const suppressGlobalOfflineOnPersonalInfo = pathname === "/auth/personal-info";
+  const { isAuthenticated, isLoading } = useConvexAuth();
+
+  return (
+    <SafeAreaProvider>
+      {/* In-app notification banner */}
+      {notificationBanner && (
+        <NotificationBanner
+          title={notificationBanner.title}
+          body={notificationBanner.body}
+          onDismiss={() => setNotificationBanner(null)}
+          onPress={() => {
+            setNotificationBanner(null);
+            // Handle navigation based on notification type
+          }}
+        />
+      )}
+      <View style={{ flex: 1 }}>
+        {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
+        {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
+        
+        {/* Conditional rendering: Show auth stack if not authenticated, otherwise show app stack */}
+        {!isAuthenticated && !isLoading ? (
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="auth/signin" />
+            <Stack.Screen name="auth/signup" />
+            <Stack.Screen name="auth/personal-info" />
+            <Stack.Screen name="auth/emergency-contact" />
+            <Stack.Screen name="auth/medical-history" />
+          </Stack>
+        ) : (
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        )}
+      </View>
+      {/* React Buoy DevTools - only in development */}
+      {__DEV__ && (
+        <FloatingDevTools
+          environment="local"
+          userRole="admin"
+          disableHints
+        />
+      )}
+    </SafeAreaProvider>
+  );
 }
 
 export default function RootLayout() {
@@ -112,9 +201,6 @@ export default function RootLayout() {
     title: string;
     body: string;
   } | null>(null);
-  const { isOnline } = useNetworkStatus();
-  const pathname = usePathname();
-  const suppressGlobalOfflineOnPersonalInfo = pathname === "/auth/personal-info";
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
@@ -136,9 +222,9 @@ export default function RootLayout() {
     // Configure foreground notification behavior
     configureForegroundNotifications();
 
-    // Initialize Firebase for push notifications
-    initializeFirebase().catch((error) => {
-      console.warn("Firebase initialization skipped or failed:", error);
+    // Initialize OneSignal for push notifications
+    initializeOneSignal().catch((error) => {
+      console.warn("OneSignal initialization warning:", error);
     });
 
     // Setup notification listeners
@@ -165,46 +251,15 @@ export default function RootLayout() {
     <DatabaseProvider database={database}>
       <SessionRefreshContext.Provider value={{ refreshSession, isRefreshing }}>
         <ConvexAuthProvider key={providerKey} client={convex} storage={secureStorage}>
-          <FirebaseTokenRegistration />
+          <OneSignalRegistration />
           <SyncProvider>
             <NotificationProvider>
               <SignUpFormProvider>
-                <SafeAreaProvider>
-                  {/* In-app notification banner */}
-                  {notificationBanner && (
-                    <NotificationBanner
-                      title={notificationBanner.title}
-                      body={notificationBanner.body}
-                      onDismiss={() => setNotificationBanner(null)}
-                      onPress={() => {
-                        setNotificationBanner(null);
-                        // Handle navigation based on notification type
-                      }}
-                    />
-                  )}
-                  <View style={{ flex: 1 }}>
-                    {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
-                    {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
-                    <Stack screenOptions={{ headerShown: false }}>
-                      <Stack.Screen name="index" />
-                      <Stack.Screen name="onboarding" />
-                      <Stack.Screen name="auth/signin" />
-                      <Stack.Screen name="auth/signup" />
-                      <Stack.Screen name="auth/personal-info" />
-                      <Stack.Screen name="auth/emergency-contact" />
-                      <Stack.Screen name="auth/medical-history" />
-                      <Stack.Screen name="(tabs)" />
-                    </Stack>
-                  </View>
-                  {/* React Buoy DevTools - only in development */}
-                  {__DEV__ && (
-                    <FloatingDevTools
-                      environment="local"
-                      userRole="admin"
-                      disableHints
-                    />
-                  )}
-                </SafeAreaProvider>
+                <RootLayoutContent
+                  notificationBanner={notificationBanner}
+                  setNotificationBanner={setNotificationBanner}
+                  isRefreshing={isRefreshing}
+                />
               </SignUpFormProvider>
             </NotificationProvider>
           </SyncProvider>

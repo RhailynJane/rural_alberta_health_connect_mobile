@@ -54,3 +54,22 @@ export const updatePhone = mutation({
     return { success: true };
   },
 });
+
+/**
+ * Check if a user with the given email already exists
+ */
+export const checkUserExistsByEmail = mutation({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.email.toLowerCase().trim();
+    
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", normalizedEmail))
+      .first();
+    
+    return existingUser !== null;
+  },
+});
