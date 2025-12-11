@@ -568,8 +568,8 @@ export default function AddHealthEntry() {
                         const duplicate = await healthCollection.create((newRec: any) => {
                           newRec.userId = (entry as any).userId;
                           newRec.convexId = (entry as any).convexId; // maintain link
-                          newRec.date = (entry as any).date;
-                          newRec.timestamp = (entry as any).timestamp; // preserve original timestamp
+                          newRec.date = dateString; // Use updated date field
+                          newRec.timestamp = timestamp; // Use updated timestamp, not original
                           newRec.symptoms = symptoms;
                           newRec.severity = parseInt(severity);
                           newRec.notes = notes || '';
