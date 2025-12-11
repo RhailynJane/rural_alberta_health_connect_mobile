@@ -75,6 +75,7 @@ export default function AppSettings() {
   const daysOfWeek: ("Sun"|"Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat")[] = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const [weeklyTimes, setWeeklyTimes] = useState<Record<string, string | null>>({ Sun:null, Mon:null, Tue:null, Wed:null, Thu:null, Fri:null, Sat:null });
   const [weeklyEditingDay, setWeeklyEditingDay] = useState<null | (typeof daysOfWeek)[number]>(null);
+  const [remindersReady, setRemindersReady] = useState(false);
   
   // Modals for confirmation and success
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -172,12 +173,15 @@ export default function AppSettings() {
     // Only load if this is a different user than last time
     if (uid === loadedUserId) return;
 
+    // Reset readiness while loading for a (potentially) new user
+    setRemindersReady(false);
     setReminderUserKey(uid);
 
     (async () => {
       const stored = await getReminders();
       setReminders(stored);
       setLoadedUserId(uid);
+      setRemindersReady(true);
       // Don't schedule on page load - reminders are already scheduled from when they were created
       // await scheduleAllReminderItems(stored);
     })();
@@ -208,6 +212,7 @@ export default function AppSettings() {
 
   // Persist reminder changes to backend
   useEffect(() => {
+    if (!remindersReady) return; // avoid persisting initial empty state before load
     const persistReminders = async () => {
       try {
         const currentRemindersString = JSON.stringify(reminders);
@@ -230,10 +235,11 @@ export default function AppSettings() {
 
     // Only persist after user interactions (add, delete, toggle), not on every render
     persistReminders();
-  }, [reminders, isOnline, saveAllReminders]);
+  }, [reminders, isOnline, saveAllReminders, remindersReady]);
 
   // Also sync to AsyncStorage to keep local storage in sync with state
   useEffect(() => {
+    if (!remindersReady) return; // avoid overwriting storage before initial load
     const syncToLocalStorage = async () => {
       try {
         await AsyncStorage.setItem(
@@ -249,7 +255,7 @@ export default function AppSettings() {
     if (reminders.length > 0 || reminders.length === 0) {
       syncToLocalStorage();
     }
-  }, [reminders, currentUser?._id]);
+  }, [reminders, currentUser?._id, remindersReady]);
 
   const handleToggleReminder = async (value: boolean) => {
     // Prevent multiple simultaneous requests
