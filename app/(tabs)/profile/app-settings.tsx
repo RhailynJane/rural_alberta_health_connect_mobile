@@ -94,6 +94,9 @@ export default function AppSettings() {
     // Track previous online state to detect transitions
     const prevIsOnlineRef = useRef<boolean | null>(null);
 
+  // Track last persisted state to prevent infinite loops
+  const lastPersistedRef = useRef<string>("");
+
   // Load cached location status immediately for offline UX
   useEffect(() => {
     (async () => {
@@ -207,9 +210,16 @@ export default function AppSettings() {
   useEffect(() => {
     const persistReminders = async () => {
       try {
+        const currentRemindersString = JSON.stringify(reminders);
+        // Only persist if reminders have actually changed from last persist
+        if (lastPersistedRef.current === currentRemindersString) {
+          return; // No change, skip persist
+        }
+        
         console.log("💾 [AppSettings] Persisting", reminders.length, "reminders to Convex");
         if (isOnline) {
-          await saveAllReminders({ reminders: JSON.stringify(reminders) });
+          await saveAllReminders({ reminders: currentRemindersString });
+          lastPersistedRef.current = currentRemindersString;
         } else {
           console.log("📴 [AppSettings] Offline: reminders saved locally only");
         }
@@ -218,12 +228,9 @@ export default function AppSettings() {
       }
     };
 
-    // Don't persist on initial load or if reminders haven't changed
-    // Only persist after user interactions (add, delete, toggle)
-    if (reminders.length > 0 || (serverReminders && reminders.length !== serverReminders.length)) {
-      persistReminders();
-    }
-  }, [reminders, isOnline, saveAllReminders, serverReminders]);
+    // Only persist after user interactions (add, delete, toggle), not on every render
+    persistReminders();
+  }, [reminders, isOnline, saveAllReminders]);
 
   const handleToggleReminder = async (value: boolean) => {
     // Prevent multiple simultaneous requests
