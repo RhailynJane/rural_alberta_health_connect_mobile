@@ -41,9 +41,6 @@ export default function AppSettings() {
   const { isOnline } = useNetworkStatus();
   const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
 
-  // Force refetch on screen focus
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
   const currentUser = useQuery(
     api.users.getCurrentUser,
     isAuthenticated && !isLoading ? {} : "skip"
@@ -56,7 +53,7 @@ export default function AppSettings() {
   // Get location services status
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
-    isAuthenticated && !isLoading && refreshTrigger !== -1 ? {} : "skip"
+    isAuthenticated && !isLoading ? {} : "skip"
   );
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
@@ -107,7 +104,7 @@ export default function AppSettings() {
   // Reload cache when screen comes into focus (navigating back to this screen)
   useFocusEffect(
     useCallback(() => {
-      console.log(`[AppSettings] Screen focused - reloading cache and refreshing data...`);
+      console.log(`[AppSettings] Screen focused - reloading cache...`);
       (async () => {
         try {
           const v = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
@@ -123,9 +120,8 @@ export default function AppSettings() {
           console.error("Failed to reload cached location status:", err);
         }
       })();
-      // Force refresh reminders and location status from server
-      setRefreshTrigger(prev => prev + 1);
-      console.log(`🔔 [AppSettings] Reminders and location status will be refetched from server`);
+      // Note: NOT refreshing reminders on focus since local state is the source of truth
+      // Reminders are persisted via the persist effect
     }, [])
   );
 
