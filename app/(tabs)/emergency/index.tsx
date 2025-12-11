@@ -105,6 +105,12 @@ export default function Emergency() {
     isAuthenticated && !authLoading ? {} : "skip"
   );
 
+  // Get user profile with emergency contact (allow offline access via cache)
+  const profile = useQuery(
+    (api as any)["profile/personalInformation"].getProfile,
+    isAuthenticated && !authLoading ? {} : "skip"
+  );
+
   // Mutation to toggle location services (only when online)
   const toggleLocationServices = useMutation(
     api.locationServices.toggleLocationServices
@@ -583,6 +589,31 @@ export default function Emergency() {
             </View>
           </View>
         </View>
+
+        {/* My Emergency Contact Card */}
+        {profile?.emergencyContactName && profile?.emergencyContactPhone && (
+          <View style={styles.card}>
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <Icon name="person" size={24} color="#9B59B6" />
+                <Text style={styles.cardTitle}>My Emergency Contact</Text>
+              </View>
+              <Text style={styles.clinicName}>{profile.emergencyContactName}</Text>
+              <Text style={styles.cardDescription}>
+                Personal emergency contact
+              </Text>
+              <View style={styles.cardFooter}>
+                <Text style={styles.cardNumber}>{profile.emergencyContactPhone}</Text>
+                <TouchableOpacity
+                  style={[styles.callButton, styles.personalContactButton]}
+                  onPress={() => handleEmergencyCall(profile.emergencyContactPhone!)}
+                >
+                  <Icon name="call" size={20} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Local Clinic Card */}
         <View style={styles.card}>
@@ -1153,6 +1184,9 @@ const styles = StyleSheet.create({
   },
   clinicButton: {
     backgroundColor: "#2DE16B",
+  },
+  personalContactButton: {
+    backgroundColor: "#9B59B6",
   },
   distanceText: {
     fontFamily: FONTS.BarlowSemiCondensed,
