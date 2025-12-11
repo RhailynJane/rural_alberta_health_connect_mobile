@@ -89,6 +89,9 @@ export default function Emergency() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
+  // Force refetch on screen focus
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   // Get location services status and emergency details (allow offline access via cache)
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
@@ -102,13 +105,13 @@ export default function Emergency() {
   // Get reminder settings (allow offline access via cache)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !authLoading ? {} : "skip"
+    isAuthenticated && !authLoading && refreshTrigger !== -1 ? {} : "skip"
   );
 
   // Get user profile with emergency contact (allow offline access via cache)
   const profile = useQuery(
     (api as any)["profile/personalInformation"].getProfile,
-    isAuthenticated && !authLoading ? {} : "skip"
+    isAuthenticated && !authLoading && refreshTrigger !== -1 ? {} : "skip"
   );
 
   // Mutation to toggle location services (only when online)
@@ -157,6 +160,9 @@ export default function Emergency() {
           console.error("Failed to reload cached location status:", err);
         }
       })();
+      // Also force refresh reminder settings and profile when screen comes into focus
+      setRefreshTrigger(prev => prev + 1);
+      console.log(`🔔 [Emergency] Screen focused - reminder settings and profile will be refetched from server`);
     }, [])
   );
 
