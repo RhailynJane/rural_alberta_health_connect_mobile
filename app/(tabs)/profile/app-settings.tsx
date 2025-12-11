@@ -325,11 +325,11 @@ export default function AppSettings() {
     try {
       const item = reminders[reminderToDelete];
       // Delete the reminder (local)
-      await deleteReminder(item.id);
+      const updated = await deleteReminder(item.id);
       // Clear notification history for this reminder (local)
       await clearReminderHistoryForReminder(item.id);
-      // Refresh reminder list (local)
-      const updated = await getReminders();
+      // Use the updated list returned by delete, don't re-fetch from AsyncStorage
+      // This prevents racing with the persist effect which syncs the new data
       setReminders(updated);
       // Re-schedule all remaining reminders (local)
       await scheduleAllReminderItems(updated);
@@ -354,16 +354,18 @@ export default function AppSettings() {
       return;
     }
 
+    let updated: ReminderItem[] = reminders;
+    
     if (selectedReminderIndex !== null) {
       // Update existing
       const item = reminders[selectedReminderIndex];
-      await updateReminder(item.id, { time });
+      updated = await updateReminder(item.id, { time });
     } else {
       // Add new reminder with the selected frequency
       // nextFrequency is set when user picks "Hourly" or "Daily" from frequency chooser
       // (Custom weekly reminders are created directly in Save button handler)
       const freq = nextFrequency === "hourly" ? "hourly" : "daily";
-      await addReminder({
+      updated = await addReminder({
         enabled: true,
         frequency: freq as any,
         time: freq === "daily" ? time : undefined,
@@ -371,7 +373,8 @@ export default function AppSettings() {
       // Show success modal for new reminder
       setSuccessModalVisible(true);
     }
-    const updated = await getReminders();
+    // Use the updated list returned by add/update, don't re-fetch from AsyncStorage
+    // This prevents racing with the persist effect which syncs the new data
     setReminders(updated);
     setPendingEnable(false);
     setTimePickerVisible(false);
@@ -724,15 +727,17 @@ export default function AppSettings() {
                   <TouchableOpacity
                     onPress={async () => {
                       const entries = Object.entries(weeklyTimes).filter(([, t]) => !!t) as [string, string][];
+                      let updated = reminders;
                       for (const [day, t] of entries) {
-                        await addReminder({
+                        updated = await addReminder({
                           enabled: true,
                           frequency: "weekly" as any,
                           time: t,
                           dayOfWeek: day,
                         });
                       }
-                      const updated = await getReminders();
+                      // Use the final updated list returned by the last addReminder
+                      // This prevents racing with the persist effect which syncs the new data
                       setReminders(updated);
                       setPendingEnable(false);
                       setWeeklyModalVisible(false);
