@@ -88,6 +88,9 @@ export default function AppSettings() {
   // Track last persisted state to prevent infinite loops
   const lastPersistedRef = useRef<string>("");
 
+  // Track if reminders have been loaded, only load once on mount
+  const loadedRef = useRef<boolean>(false);
+
   // Load cached location status immediately for offline UX
   useEffect(() => {
     (async () => {
@@ -161,15 +164,21 @@ export default function AppSettings() {
     }
   }, [saveAllReminders, isOnline]);
 
-  // Load reminders once on mount (only when currentUser changes)
+  // Load reminders only once on mount (not every time currentUser reference changes)
   useEffect(() => {
     if (!currentUser?._id) return;
+    
+    // Only load once - don't reload if currentUser object reference changes
+    if (loadedRef.current) return;
+    
     const uid = String(currentUser._id);
     setReminderUserKey(uid);
 
     (async () => {
       const stored = await getReminders();
       setReminders(stored);
+      // Mark as loaded so we don't reload on future currentUser changes
+      loadedRef.current = true;
       // Don't schedule on page load - reminders are already scheduled from when they were created
       // await scheduleAllReminderItems(stored);
     })();
