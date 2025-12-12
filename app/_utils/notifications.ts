@@ -168,15 +168,13 @@ export async function initializeNotificationsOnce() {
   if (typeof (Notifications as any).setNotificationHandler === 'function') {
     (Notifications as any).setNotificationHandler({
       handleNotification: async (notification: any) => {
-        const type = notification?.request?.content?.data?.type;
-        const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
-        // For reminders: show banner and play sound even in foreground. For others: keep silent.
+        // Show ALL notifications on device (both reminders and push notifications)
         const result = {
           // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
-          shouldShowAlert: !!isReminder,
-          shouldShowBanner: !!isReminder,
+          shouldShowAlert: true,
+          shouldShowBanner: true,
           shouldShowList: true,
-          shouldPlaySound: !!isReminder,
+          shouldPlaySound: true,
           shouldSetBadge: true,
         };
         return result as any;

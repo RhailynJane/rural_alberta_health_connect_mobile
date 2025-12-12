@@ -7,17 +7,17 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -418,11 +418,9 @@ export default function AddHealthEntry() {
     }
 
     try {
-      // For edit mode, use original timestamp (Option A: preserve original)
-      // For add mode, create new timestamp
-      const timestamp = mode === 'edit' && originalTimestamp
-        ? originalTimestamp
-        : createTimestamp(selectedDate, selectedTime);
+      // Create timestamp from selected date/time (always use user's selection)
+      // This allows editing the date/time of an entry
+      const timestamp = createTimestamp(selectedDate, selectedTime);
       const dateString = formatDate(selectedDate);
       // Use actual userId if available, skip saving if offline without userId
       const saveUserId = userId;
@@ -461,6 +459,8 @@ export default function AddHealthEntry() {
               severity: parseInt(severity),
               notes,
               photos: [...photos, ...localPhotoUris],
+              timestamp, // Include timestamp so date/time updates are sent to server
+              date: dateString, // Include date field to sync date changes
             });
             console.log("✅ Entry updated online (Convex)");
           } catch (remoteErr) {
@@ -525,6 +525,8 @@ export default function AddHealthEntry() {
                       record.notes = notes || '';
                       // @json decorator handles serialization - pass array directly
                       record.photos = [...photos, ...localPhotoUris];
+                      record.timestamp = timestamp; // Update timestamp for date/time changes
+                      record.date = dateString; // Update date field to match timestamp
                       if ('type' in schemaColumns && !record.type) {
                         record.type = 'manual_entry';
                       }
@@ -566,8 +568,8 @@ export default function AddHealthEntry() {
                         const duplicate = await healthCollection.create((newRec: any) => {
                           newRec.userId = (entry as any).userId;
                           newRec.convexId = (entry as any).convexId; // maintain link
-                          newRec.date = (entry as any).date;
-                          newRec.timestamp = (entry as any).timestamp; // preserve original timestamp
+                          newRec.date = dateString; // Use updated date field
+                          newRec.timestamp = timestamp; // Use updated timestamp, not original
                           newRec.symptoms = symptoms;
                           newRec.severity = parseInt(severity);
                           newRec.notes = notes || '';
@@ -649,6 +651,8 @@ export default function AddHealthEntry() {
                     e.notes = notes || '';
                     // @json decorator handles serialization - pass array directly
                     e.photos = [...photos, ...localPhotoUris];
+                    e.timestamp = timestamp; // Update timestamp for date/time changes
+                    e.date = dateString; // Update date field to match timestamp
                     e.isSynced = false; // Mark for re-sync
                     if ('type' in schemaColumns && !e.type) {
                       e.type = 'manual_entry';
@@ -659,7 +663,6 @@ export default function AddHealthEntry() {
                     if ('editCount' in schemaColumns) {
                       e.editCount = (e.editCount || 0) + 1;
                     }
-                    // Preserve original timestamp (Option A) - Don't update e.timestamp
                   });
                   await database.batch(updatedEntry);
                   console.log('✅ [OFFLINE] Fields updated successfully via prepareUpdate');
@@ -690,8 +693,8 @@ export default function AddHealthEntry() {
                       const duplicate = await healthCollection.create((newRec: any) => {
                         newRec.userId = (entry as any).userId;
                         newRec.convexId = (entry as any).convexId; // maintain link
-                        newRec.date = (entry as any).date;
-                        newRec.timestamp = now; // NEW timestamp to win tiebreaker
+                        newRec.date = dateString; // Update date field to match timestamp
+                        newRec.timestamp = timestamp; // Use updated timestamp for date/time changes
                         newRec.symptoms = symptoms;
                         newRec.severity = parseInt(severity);
                         newRec.notes = notes || '';

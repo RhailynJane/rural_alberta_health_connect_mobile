@@ -47,7 +47,7 @@ export async function createAndPushNotification(
 }
 
 /**
- * Send push notification to all of a user's devices
+ * Send push notification to all of a user's devices via Expo Push Service
  */
 async function sendPushToUser(
   ctx: any,
@@ -74,6 +74,8 @@ async function sendPushToUser(
     title,
     body,
     data: data || {},
+    priority: "high",
+    channelId: "default",
   }));
 
   // Send to Expo push notification service
@@ -87,7 +89,11 @@ async function sendPushToUser(
     });
 
     if (!response.ok) {
-      console.error("Expo push notification failed:", await response.text());
+      const errorText = await response.text();
+      console.error("Expo push notification failed:", errorText);
+    } else {
+      const result = await response.json();
+      console.log(`✅ Sent Expo push to ${tokens.length} device(s):`, result);
     }
   } catch (error) {
     console.error("Error sending push notification:", error);
@@ -324,50 +330,23 @@ export const getUserPushTokens = query({
 });
 
 /**
- * Send notification via Firebase Cloud Messaging
- * For server-side use only - should be called from backend
+ * Send push notification via Expo Push Service
+ * Public mutation for sending push notifications to users
  */
-export async function sendFirebaseNotification(
-  ctx: any,
+export const sendPushNotificationFCM = mutation({
   args: {
-    userId: string;
-    title: string;
-    body: string;
-    data?: Record<string, string>;
-  }
-) {
-  const { userId, title, body, data } = args;
-
-  try {
-    // Get user's Firebase tokens
-    const tokens = await ctx.db
-      .query("pushTokens")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
-      .collect();
-
-    const fcmTokens = tokens.filter((t: any) => t.platform.includes("firebase"));
-
-    if (fcmTokens.length === 0) {
-      console.log("ℹ️ No Firebase tokens found for user:", userId);
-      return;
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    data: v.optional(v.record(v.string(), v.string())),
+  },
+  handler: async (ctx, args) => {
+    try {
+      await sendPushToUser(ctx, args.userId, args.title, args.body, args.data);
+      return { success: true, method: 'expo' };
+    } catch (error: any) {
+      console.error("❌ Error sending push notification:", error);
+      return { success: false, error: error.message };
     }
-
-    // Send via Firebase Admin SDK
-    // This requires firebase-admin setup on the backend
-    // For now, we'll create a helper that can be called with the Admin SDK
-    console.log(`📤 Firebase notification ready to send to ${fcmTokens.length} device(s):`, {
-      title,
-      body,
-      tokens: fcmTokens.map((t: any) => t.token.substring(0, 20) + "..."),
-    });
-
-    // In production, call Firebase Admin SDK here:
-    // await admin.messaging().sendMulticast({
-    //   tokens: fcmTokens.map(t => t.token),
-    //   notification: { title, body },
-    //   data: data || {},
-    // });
-  } catch (error) {
-    console.error("❌ Failed to send Firebase notification:", error);
-  }
-}
+  },
+});

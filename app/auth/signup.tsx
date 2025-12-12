@@ -5,14 +5,14 @@ import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
@@ -71,6 +71,7 @@ export default function SignUp() {
   const { values: persistedValues, setValues: setPersistedValues } =
     useSignUpForm();
   const ensureProfileExists = useMutation((api as any)["profile/ensureProfileExists"].ensureProfileExists);
+  const checkUserExists = useMutation(api.users.checkUserExistsByEmail);
   
 
   const handleSignUp = async (values: SignUpFormValues) => {
@@ -85,6 +86,17 @@ export default function SignUp() {
       return;
     }
     try {
+      // Check if user already exists
+      const existingUser = await checkUserExists({ 
+        email: values.email.toLowerCase().trim() 
+      });
+      
+      if (existingUser) {
+        setErrorModalMessage("Email already exists. Please use a different email or sign in instead.");
+        setShowErrorModal(true);
+        return;
+      }
+
       // Log what we're sending
       console.log("📤 Signup params:", {
         email: values.email.toLowerCase().trim(),
@@ -105,9 +117,12 @@ export default function SignUp() {
       
       console.log("✅ Signup result:", result);
       
+      // Wait for session to fully establish before creating profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Ensure profile exists in Convex
       await ensureProfileExists();
-      router.push("/auth/personal-info");
+      router.replace("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
@@ -121,17 +136,17 @@ export default function SignUp() {
         
         // Check for specific error patterns
         if (msg.includes("invalid password")) {
-          errorMessage = "This email is already registered. Please sign in instead or use a different email.";
-        } else if (msg.includes("account already exists") || msg.includes("user already exists")) {
-          errorMessage = "An account with this email already exists. Please sign in.";
-        } else if (msg.includes("password")) {
+          errorMessage = "Email already exists. Please use a different email or sign in instead.";
+        } else if (msg.includes("account already exists") || msg.includes("user already exists") || msg.includes("already registered")) {
+          errorMessage = "Email already exists. Please use a different email.";
+        } else if (msg.includes("password") && !msg.includes("invalid")) {
           errorMessage = "Password must be at least 6 characters long.";
         } else {
           errorMessage = error.message;
         }
       }
       
-      // Show error in both text and modal
+      // Show error in modal
       setSubmitError(errorMessage);
       setErrorModalMessage(errorMessage);
       setShowErrorModal(true);
@@ -460,7 +475,7 @@ export default function SignUp() {
                           <Text
                             style={styles.linkText}
                             onPress={() =>
-                              router.push("/auth/terms-of-service")
+                              router.replace("/auth/terms-of-service")
                             }
                           >
                             Terms of Service
@@ -468,7 +483,7 @@ export default function SignUp() {
                           and{" "}
                           <Text
                             style={styles.linkText}
-                            onPress={() => router.push("/auth/privacy-policy")}
+                            onPress={() => router.replace("/auth/privacy-policy")}
                           >
                             Privacy Policy
                           </Text>
@@ -520,7 +535,7 @@ export default function SignUp() {
                           Already have an account?{" "}
                         </Text>
                         <TouchableOpacity
-                          onPress={() => router.push("/auth/signin")}
+                          onPress={() => router.replace("/auth/signin")}
                         >
                           <Text
                             style={[

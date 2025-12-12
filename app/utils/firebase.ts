@@ -6,9 +6,11 @@
  */
 
 import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
 // Lazy initialization
 let isInitialized = false;
+let initializationAttempted = false;
 
 /**
  * Initialize Firebase/Expo notifications
@@ -21,6 +23,12 @@ export async function initializeFirebase(): Promise<any | null> {
       return { initialized: true };
     }
 
+    if (initializationAttempted) {
+      console.log("⏸️ Firebase initialization already attempted");
+      return { initialized: false };
+    }
+
+    initializationAttempted = true;
     console.log("🔔 Initializing Firebase push notifications via Expo...");
 
     // Configure notification handler for foreground
@@ -81,12 +89,27 @@ export async function registerForFirebaseMessaging(
 
     console.log("✅ Notification permissions granted");
 
-    // Get Expo push token (which connects to Firebase)
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId: "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6", // EAS projectId
-    });
+    // Try to get Expo push token
+    // On Android, this might fail if Google Play Services isn't available
+    // or if the native Firebase module hasn't been properly initialized
+    let token: any = null;
+    try {
+      token = await Notifications.getExpoPushTokenAsync({
+        projectId: "15cddcd7-b6e3-4d41-910e-2f0f3fe3dbd6", // EAS projectId
+      });
+    } catch (tokenError: any) {
+      // On Android, if native Firebase isn't ready, this will fail
+      // Log the error but don't crash the app
+      if (Platform.OS === "android") {
+        console.warn("⚠️ Failed to get Expo push token (Android):", tokenError?.message);
+        console.log("💡 This is normal if running in development or without proper Firebase setup");
+        // Return a placeholder token so the flow doesn't break
+        return null;
+      }
+      throw tokenError;
+    }
 
-    if (token.data) {
+    if (token?.data) {
       console.log("✅ Expo push token received:", token.data.substring(0, 20) + "...");
       onTokenReceived?.(token.data);
       return token.data;
@@ -96,6 +119,7 @@ export async function registerForFirebaseMessaging(
     }
   } catch (error) {
     console.error("❌ Firebase registration failed:", error);
+    // Don't throw - allow app to continue without Firebase
     return null;
   }
 }

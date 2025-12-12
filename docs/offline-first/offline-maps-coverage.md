@@ -6,7 +6,7 @@ The app now supports **10 downloadable regions** covering all of Alberta, from m
 
 ---
 
-## 📍 Available Regions
+## Available Regions
 
 ### 1. ⭐ **Entire Alberta Province** (Recommended for Rural Users)
 - **Coverage**: Complete Alberta (49°N to 60°N, -120°W to -110°W)

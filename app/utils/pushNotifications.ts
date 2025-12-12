@@ -81,19 +81,6 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     return token;
   } catch (error: any) {
-    // Check if this is the Firebase error
-    if (error?.message?.includes("FirebaseApp is not initialized")) {
-      console.log("⚠️ Firebase not configured - Push notifications disabled");
-      console.log("ℹ️ To enable push notifications:");
-      console.log("   1. Set up Firebase project at https://console.firebase.google.com/");
-      console.log("   2. Download google-services.json");
-      console.log("   3. Place it at: android/app/google-services.json");
-      console.log("   4. Rebuild the app");
-      console.log("ℹ️ See setup-fcm.md for detailed instructions");
-      console.log("ℹ️ In-app notifications will still work when app is open");
-      return null;
-    }
-    
     console.error("❌ Error registering for push notifications:", error);
     return null;
   }

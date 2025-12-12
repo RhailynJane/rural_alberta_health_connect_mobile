@@ -13,7 +13,7 @@ RAHC is your personal health companion, designed specifically for rural Alberta 
 - 🤖 Get AI-powered symptom assessments
 - 📊 Track your daily health metrics
 - 🚨 Access emergency services quickly
-- 📍 Use offline maps when internet isn't available
+- Use offline maps when internet isn't available
 - 🔔 Set health check-in reminders
 - 💾 Secure health data storage
 
@@ -173,7 +173,7 @@ Quick access when you need help fast.
 ### Emergency Location Features
 
 **Tap Emergency** from Dashboard or bottom navigation to:
-- 📍 See your current location on map
+- See your current location on map
 - 📞 Call emergency services (911)
 - 🏥 View nearby clinics and hospitals
 - 📲 Share location with emergency contacts

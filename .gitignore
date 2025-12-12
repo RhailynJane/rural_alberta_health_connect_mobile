@@ -51,7 +51,17 @@ app-example
 
 # generated native folders
 /ios
-/android
+/android/build
+/android/gradle
+/android/.gradle
+
+# Firebase configs
+# Source of truth for EAS build (keep in repo)
+!/google-services.json
+# Ignore generated copies under android/app (prebuild will place it there)
+/android/app/google-services.json
+# Never commit Admin SDK private keys
+/android/app/rahc-push-firebase-adminsdk-*.json
 
 # temp
 temp*rhaila.md

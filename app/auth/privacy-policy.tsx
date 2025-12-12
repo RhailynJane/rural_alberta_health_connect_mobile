@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router";
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import CurvedBackground from "../components/curvedBackground";
@@ -15,7 +15,7 @@ export default function PrivacyPolicy() {
   const router = useRouter();
 
   const handleAgree = () => {
-    router.push("/auth/signup");
+    router.replace("/auth/signup");
   };
 
   return (

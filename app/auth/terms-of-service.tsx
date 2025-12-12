@@ -10,7 +10,7 @@ export default function TermsOfService() {
 
   const handleAgree = () => {
     // Navigate back to sign-up page
-    router.push("/auth/signup");
+    router.replace("/auth/signup");
   };
 
   return (

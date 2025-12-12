@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "616249844516",
+    "project_id": "rahc-push",
+    "storage_bucket": "rahc-push.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:616249844516:android:82f2832c384033f1c849b1",
+        "android_client_info": {
+          "package_name": "com.rahc.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOxIrLt3hgAlMluPcu3yGIkAh1iVtZPRo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

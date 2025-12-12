@@ -7,14 +7,14 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -127,6 +127,7 @@ export default function History() {
         category: entry.category || "",
         notes: entry.notes || "",
         timestamp: entry.timestamp || Date.now(),
+        date: entry.date || "", // Include date field for proper history display
         createdBy: entry.createdBy || "User",
         type: entry.type || "manual_entry",
         convexId: entry.convexId,

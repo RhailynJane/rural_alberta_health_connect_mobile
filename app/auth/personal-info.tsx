@@ -3,16 +3,16 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -345,7 +345,7 @@ export default function PersonalInfo() {
 
       // Navigate immediately after local save - don't wait for Convex sync
       console.log("➡️ Navigating to emergency contact");
-      router.push("/auth/emergency-contact");
+      router.replace("/auth/emergency-contact");
 
       // Then sync with Convex (online) in the background - this will work when there's internet
       // Don't await this - let it sync in the background

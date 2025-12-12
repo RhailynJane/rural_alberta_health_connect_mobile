@@ -89,6 +89,9 @@ export default function Emergency() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
 
+  // Force refetch on screen focus
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
   // Get location services status and emergency details (allow offline access via cache)
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
@@ -102,7 +105,13 @@ export default function Emergency() {
   // Get reminder settings (allow offline access via cache)
   const reminderSettings = useQuery(
     (api as any)["profile/reminders"].getReminderSettings,
-    isAuthenticated && !authLoading ? {} : "skip"
+    isAuthenticated && !authLoading && refreshTrigger !== -1 ? {} : "skip"
+  );
+
+  // Get user profile with emergency contact (allow offline access via cache)
+  const profile = useQuery(
+    (api as any)["profile/personalInformation"].getProfile,
+    isAuthenticated && !authLoading && refreshTrigger !== -1 ? {} : "skip"
   );
 
   // Mutation to toggle location services (only when online)
@@ -123,7 +132,7 @@ export default function Emergency() {
         const cached = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
         if (cached !== null) {
           setLocalLocationEnabled(cached === "1");
-          console.log(`📍 [Emergency] Loaded cached location status on mount: ${cached === "1" ? "enabled" : "disabled"}`);
+          console.log(`[Emergency] Loaded cached location status on mount: ${cached === "1" ? "enabled" : "disabled"}`);
         }
       } catch (err) {
         console.error("Failed to load cached location status:", err);
@@ -135,22 +144,25 @@ export default function Emergency() {
   useFocusEffect(
     useCallback(() => {
       const LOCATION_STATUS_CACHE_KEY = "@app_settings_location_enabled";
-      console.log(`📍 [Emergency] Screen focused - reloading cache...`);
+      console.log(`[Emergency] Screen focused - reloading cache...`);
       (async () => {
         try {
           const cached = await AsyncStorage.getItem(LOCATION_STATUS_CACHE_KEY);
-          console.log(`📍 [Emergency] Cache value read: "${cached}"`);
+          console.log(`[Emergency] Cache value read: "${cached}"`);
           if (cached !== null) {
             const newValue = cached === "1";
             setLocalLocationEnabled(newValue);
-            console.log(`📍 [Emergency] Set local state to: ${newValue ? "enabled" : "disabled"}`);
+            console.log(`[Emergency] Set local state to: ${newValue ? "enabled" : "disabled"}`);
           } else {
-            console.log(`📍 [Emergency] No cached value found`);
+            console.log(`[Emergency] No cached value found`);
           }
         } catch (err) {
           console.error("Failed to reload cached location status:", err);
         }
       })();
+      // Also force refresh reminder settings and profile when screen comes into focus
+      setRefreshTrigger(prev => prev + 1);
+      console.log(`🔔 [Emergency] Screen focused - reminder settings and profile will be refetched from server`);
     }, [])
   );
 
@@ -166,10 +178,10 @@ export default function Emergency() {
       // ONLY sync when we transition FROM offline TO online
       if (wasOffline && isNowOnline && locationStatus !== undefined) {
         const val = !!locationStatus.locationServicesEnabled;
-        console.log(`📍 [Emergency] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
+        console.log(`[Emergency] Online transition detected - syncing from server: ${val ? "enabled" : "disabled"}`);
       setLocalLocationEnabled(!!locationStatus.locationServicesEnabled);
       } else {
-        console.log(`📍 [Emergency] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
+        console.log(`[Emergency] Sync skipped - wasOffline: ${wasOffline}, isNowOnline: ${isNowOnline}, locationStatus: ${locationStatus !== undefined ? "defined" : "undefined"}`);
     }
   }, [locationStatus, isOnline]);
 
@@ -183,7 +195,7 @@ export default function Emergency() {
     const loadRealTimeData = async () => {
       // CRITICAL: Clear clinics immediately if location services are disabled
       if (!effectiveLocationEnabled) {
-        console.log("📍 Location services disabled - clearing clinics");
+        console.log("Location services disabled - clearing clinics");
         setRealTimeClinics([]);
         setIsLoading(false);
         return;
@@ -229,7 +241,7 @@ export default function Emergency() {
               if (isFinite(lat) && isFinite(lng)) {
                 latitude = lat;
                 longitude = lng;
-                console.log(`📍 Using stored coordinates: ${lat}, ${lng}`);
+                console.log(`Using stored coordinates: ${lat}, ${lng}`);
               }
             }
           }
@@ -240,7 +252,7 @@ export default function Emergency() {
               const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
               console.log('🔐 Location permission status:', status);
               if (status === 'granted') {
-                console.log('📍 Getting GPS location from device...');
+                console.log('Getting GPS location from device...');
                 const location = await ExpoLocation.getCurrentPositionAsync({
                   accuracy: ExpoLocation.Accuracy.Low, // Use Low for faster results
                 });
@@ -458,7 +470,7 @@ export default function Emergency() {
                   }
                   
                   await toggleLocationServices({ enabled: true });
-                  console.log("📍 Location services enabled");
+                  console.log("Location services enabled");
                 } catch (err) {
                   console.error("Failed to enable location services:", err);
                   // Revert local state on error
@@ -478,7 +490,7 @@ export default function Emergency() {
           setLocalLocationEnabled(false);
           // Update cache immediately for instant UI sync with App Settings
           await AsyncStorage.setItem(LOCATION_STATUS_CACHE_KEY, "0");
-          console.log("📍 Location services disabled (cache updated)");
+          console.log("Location services disabled (cache updated)");
           
           // Clear real-time clinics when disabled
           setRealTimeClinics([]);
@@ -490,7 +502,7 @@ export default function Emergency() {
           }
           
           await toggleLocationServices({ enabled: false });
-          console.log("📍 Location services disabled (server updated)");
+          console.log("Location services disabled (server updated)");
         }
       } catch (error) {
         console.error("Failed to update location services:", error);
@@ -583,6 +595,31 @@ export default function Emergency() {
             </View>
           </View>
         </View>
+
+        {/* My Emergency Contact Card */}
+        {profile?.emergencyContactName && profile?.emergencyContactPhone && (
+          <View style={styles.card}>
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <Icon name="person" size={24} color="#9B59B6" />
+                <Text style={styles.cardTitle}>My Emergency Contact</Text>
+              </View>
+              <Text style={styles.clinicName}>{profile.emergencyContactName}</Text>
+              <Text style={styles.cardDescription}>
+                Personal emergency contact
+              </Text>
+              <View style={styles.cardFooter}>
+                <Text style={styles.cardNumber}>{profile.emergencyContactPhone}</Text>
+                <TouchableOpacity
+                  style={[styles.callButton, styles.personalContactButton]}
+                  onPress={() => handleEmergencyCall(profile.emergencyContactPhone!)}
+                >
+                  <Icon name="call" size={20} color="#FFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Local Clinic Card */}
         <View style={styles.card}>
@@ -1153,6 +1190,9 @@ const styles = StyleSheet.create({
   },
   clinicButton: {
     backgroundColor: "#2DE16B",
+  },
+  personalContactButton: {
+    backgroundColor: "#9B59B6",
   },
   distanceText: {
     fontFamily: FONTS.BarlowSemiCondensed,

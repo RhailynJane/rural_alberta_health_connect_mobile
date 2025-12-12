@@ -3,16 +3,16 @@ import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -190,7 +190,7 @@ export default function EmergencyContact() {
       }
 
       console.log("➡️ Navigating to medical history");
-      router.push("/auth/medical-history");
+      router.replace("/auth/medical-history");
     } catch (error) {
       console.error("❌ Emergency Contact - Error:", error);
       setErrorModalMessage("Failed to save emergency contact information. Please try again.");
