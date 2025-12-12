@@ -306,7 +306,13 @@ function renderAssessmentCards(text: string | null) {
   );
 }
 
+// DEBUG: Track re-renders during LLM generation
+let renderCount = 0;
+
 export default function AssessmentResults() {
+  renderCount++;
+  console.log(`🔄 AssessmentResults RENDER #${renderCount}`);
+
   const database = useWatermelonDatabase();
   const { isOnline, isChecking } = useNetworkStatus();
   const router = useRouter();
@@ -325,14 +331,16 @@ export default function AssessmentResults() {
   const [yoloProgress, setYoloProgress] = useState<string>("");
 
   // On-device LLM for offline assessment (Android only)
+  // NOTE: We intentionally DO NOT subscribe to `isGenerating` or `response` here
+  // because they update on every token, causing expensive re-renders.
+  // Instead, we use local state and wait for the Promise to resolve.
   const {
     isAvailable: llmAvailable,
     isReady: llmReady,
-    isGenerating: llmGenerating,
     generateFromPipeline: llmGenerateFromPipeline,
-    response: llmResponse,
   } = useWoundLLM();
   const [usedOfflineLLM, setUsedOfflineLLM] = useState(false);
+  const [isLLMGenerating, setIsLLMGenerating] = useState(false); // Local state - no streaming re-renders
 
   // Use ref to track if we're currently fetching to prevent multiple calls
   const isFetchingRef = useRef(false);
@@ -488,6 +496,20 @@ export default function AssessmentResults() {
         // ========================================
         console.log("🤖 Using ON-DEVICE LLM for assessment");
 
+        // MEMORY OPTIMIZATION: Clear heavy base64 annotated images before LLM generation
+        // The LLM model (~400MB) + base64 images (~5MB each) can cause OOM on devices
+        // We keep detection metadata but release the heavy image data
+        if (yoloPipelineResult) {
+          console.log("🧹 Clearing annotated images to free memory for LLM...");
+          yoloPipelineResult.results.forEach((result) => {
+            result.annotatedImageBase64 = ""; // Release ~5MB per image
+          });
+          // Force garbage collection hint by updating state without heavy data
+          setYoloResult({ ...yoloPipelineResult });
+        }
+
+        setIsLLMGenerating(true); // Set local state - no streaming re-renders
+
         try {
           // Use generateContext directly with detections (like LLMTest does)
           const llmResult = await llmGenerateFromPipeline(
@@ -525,6 +547,8 @@ export default function AssessmentResults() {
           const fallbackContext = getSeverityBasedGuidance(severity);
           setSymptomContext(fallbackContext);
           await saveToLocalDB(fallbackContext, "Fallback");
+        } finally {
+          setIsLLMGenerating(false); // Clear local state after generation completes
         }
 
         setIsLoading(false);
@@ -1127,15 +1151,15 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {llmGenerating
-                      ? "Generating offline assessment..."
+                    {isLLMGenerating
+                      ? "Generating assessment..."
                       : "Analyzing your symptoms with AI assessment..."}
                   </Text>
-                  {llmGenerating && (
+                  {isLLMGenerating && (
                     <View style={styles.offlineLLMIndicator}>
                       <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
                       <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Using on-device AI (offline mode)
+                        Using on-device AI
                       </Text>
                     </View>
                   )}

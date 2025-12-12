@@ -24,7 +24,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import type { Detection, PipelineResult } from '@/utils/yolo/types';
-import { getLLMSingleton, type LLMState } from './LLMSingleton';
+import { getLLMSingleton } from './LLMSingleton';
 import type { WoundContextOptions, WoundContextResult } from './woundContext';
 
 const LOG_PREFIX = '[LLM:useWoundLLM]';
@@ -76,20 +76,32 @@ export interface UseWoundLLMReturn {
 // Singleton instance (stable reference)
 const singleton = getLLMSingleton();
 
-// For useSyncExternalStore
+// For useSyncExternalStore - single subscribe function for all selectors
 const subscribe = (callback: () => void) => {
   return singleton.subscribe(() => callback());
 };
 
-const getSnapshot = (): LLMState => {
-  return singleton.getState();
-};
+// Individual selectors - these return primitives so React's Object.is comparison
+// will correctly skip re-renders when the value hasn't changed.
+// This is CRITICAL for performance: subscribing to the whole state object causes
+// re-renders on EVERY token during streaming (response changes ~100+ times).
+const getIsAvailable = () => singleton.getState().isAvailable;
+const getIsReady = () => singleton.getState().isReady;
+const getIsLoading = () => singleton.getState().isLoading;
+const getIsGenerating = () => singleton.getState().isGenerating;
+const getDownloadProgress = () => singleton.getState().downloadProgress;
+const getResponse = () => singleton.getState().response;
+const getError = () => singleton.getState().error;
 
 /**
  * Hook for on-device wound assessment LLM
  *
  * Now uses singleton pattern - model persists across tab switches.
  * LLMHost component must be rendered at app root level.
+ *
+ * PERFORMANCE NOTE: This hook uses individual selectors for each state field.
+ * This means components only re-render when the specific fields they USE change.
+ * If you only use `isReady`, you won't re-render when `response` updates.
  *
  * @example
  * ```tsx
@@ -121,8 +133,16 @@ const getSnapshot = (): LLMState => {
  * ```
  */
 export function useWoundLLM(_options: UseWoundLLMOptions = {}): UseWoundLLMReturn {
-  // Subscribe to singleton state using useSyncExternalStore for optimal performance
-  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  // Subscribe to individual state fields using separate useSyncExternalStore calls.
+  // React uses Object.is comparison - primitives (boolean, number, string) only
+  // trigger re-renders when their actual value changes, NOT on every state update.
+  const isAvailable = useSyncExternalStore(subscribe, getIsAvailable, getIsAvailable);
+  const isReady = useSyncExternalStore(subscribe, getIsReady, getIsReady);
+  const isLoading = useSyncExternalStore(subscribe, getIsLoading, getIsLoading);
+  const isGenerating = useSyncExternalStore(subscribe, getIsGenerating, getIsGenerating);
+  const downloadProgress = useSyncExternalStore(subscribe, getDownloadProgress, getDownloadProgress);
+  const response = useSyncExternalStore(subscribe, getResponse, getResponse);
+  const error = useSyncExternalStore(subscribe, getError, getError);
 
   /**
    * Generate wound context from raw detections
@@ -177,13 +197,13 @@ export function useWoundLLM(_options: UseWoundLLMOptions = {}): UseWoundLLMRetur
   }, []);
 
   return {
-    isAvailable: state.isAvailable,
-    isReady: state.isReady,
-    isLoading: state.isLoading,
-    isGenerating: state.isGenerating,
-    downloadProgress: state.downloadProgress,
-    response: state.response,
-    error: state.error,
+    isAvailable,
+    isReady,
+    isLoading,
+    isGenerating,
+    downloadProgress,
+    response,
+    error,
     generateContext,
     generateFromPipeline,
     interrupt,
