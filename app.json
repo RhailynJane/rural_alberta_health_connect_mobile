@@ -95,6 +95,7 @@
           "mode": "default"
         }
       ],
+      "./plugins/withGoogleServices",
       "./plugins/withOnnxRuntime",
       "./plugins/withAndroidXFix"
     ],
