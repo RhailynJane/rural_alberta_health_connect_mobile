@@ -111,10 +111,10 @@ export function formatOfflinePrompt(input: OfflineAssessmentInput): string {
  *
  * Returns Message array compatible with react-native-executorch useLLM
  */
-export function buildOfflineMessages(input: OfflineAssessmentInput): Array<{
+export function buildOfflineMessages(input: OfflineAssessmentInput): {
   role: 'system' | 'user' | 'assistant';
   content: string;
-}> {
+}[] {
   return [
     {
       role: 'system' as const,
@@ -192,6 +192,41 @@ Note: If symptoms worsen or new concerning symptoms develop, seek medical attent
 }
 
 /**
+ * Strip thinking tags from LLM response
+ *
+ * Qwen3 models often include <think>...</think> reasoning blocks.
+ * We strip these for cleaner user-facing output.
+ *
+ * If stripping would leave empty content, we keep the original
+ * (model might have put useful content inside thinking tags).
+ */
+function stripThinkingTags(response: string): string {
+  // Try to remove properly closed <think>...</think> blocks
+  let cleaned = response.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+  // Clean up whitespace
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+
+  // If stripping left us with empty/minimal content, the model put
+  // all useful content inside thinking tags - extract it instead
+  if (cleaned.length < 50) {
+    // Extract content from inside thinking tags
+    const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i);
+    if (thinkMatch && thinkMatch[1]) {
+      cleaned = thinkMatch[1].trim();
+    } else {
+      // No thinking tags found or unclosed - use original
+      cleaned = response.replace(/<\/?think>/gi, '').trim();
+    }
+  }
+
+  // Remove any remaining orphaned tags
+  cleaned = cleaned.replace(/<\/?think>/gi, '');
+
+  return cleaned;
+}
+
+/**
  * Format offline assessment result for display
  *
  * Structures the LLM response into sections matching the online format
@@ -202,14 +237,17 @@ export function formatOfflineResult(
 ): string {
   const lines: string[] = [];
 
+  // Strip thinking/reasoning tags from model output
+  const cleanedResponse = stripThinkingTags(llmResponse);
+
   // Add offline indicator
   lines.push('📱 OFFLINE FIRST-AID ASSESSMENT');
   lines.push('================================');
   lines.push('(Generated on-device for privacy)');
   lines.push('');
 
-  // Add LLM response
-  lines.push(llmResponse);
+  // Add LLM response (cleaned)
+  lines.push(cleanedResponse);
   lines.push('');
 
   // Add standard disclaimers

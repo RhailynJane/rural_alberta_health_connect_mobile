@@ -25,8 +25,8 @@ import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 // YOLO Pipeline for wound detection
 import { formatForGemini, runPipeline, type PipelineResult } from "../../../utils/yolo";
 
-// On-device LLM for offline assessment
-import { useWoundLLM } from "../../../utils/llm";
+// On-device LLM for offline assessment (use Static variant - no streaming re-renders)
+import { useWoundLLMStatic } from "../../../utils/llm";
 import { getSeverityBasedGuidance, formatOfflineResult } from "../../../utils/llm/offlineFallback";
 
 import BottomNavigation from "../../components/bottomNavigation";
@@ -306,13 +306,7 @@ function renderAssessmentCards(text: string | null) {
   );
 }
 
-// DEBUG: Track re-renders during LLM generation
-let renderCount = 0;
-
 export default function AssessmentResults() {
-  renderCount++;
-  console.log(`🔄 AssessmentResults RENDER #${renderCount}`);
-
   const database = useWatermelonDatabase();
   const { isOnline, isChecking } = useNetworkStatus();
   const router = useRouter();
@@ -331,14 +325,13 @@ export default function AssessmentResults() {
   const [yoloProgress, setYoloProgress] = useState<string>("");
 
   // On-device LLM for offline assessment (Android only)
-  // NOTE: We intentionally DO NOT subscribe to `isGenerating` or `response` here
-  // because they update on every token, causing expensive re-renders.
-  // Instead, we use local state and wait for the Promise to resolve.
+  // Using useWoundLLMStatic - only subscribes to isAvailable/isReady
+  // This prevents 1000+ re-renders during generation (no response subscription)
   const {
     isAvailable: llmAvailable,
     isReady: llmReady,
     generateFromPipeline: llmGenerateFromPipeline,
-  } = useWoundLLM();
+  } = useWoundLLMStatic();
   const [usedOfflineLLM, setUsedOfflineLLM] = useState(false);
   const [isLLMGenerating, setIsLLMGenerating] = useState(false); // Local state - no streaming re-renders
 
@@ -495,19 +488,6 @@ export default function AssessmentResults() {
         // PATH A: On-Device LLM (ExecuTorch)
         // ========================================
         console.log("🤖 Using ON-DEVICE LLM for assessment");
-
-        // MEMORY OPTIMIZATION: Clear heavy base64 annotated images before LLM generation
-        // The LLM model (~400MB) + base64 images (~5MB each) can cause OOM on devices
-        // We keep detection metadata but release the heavy image data
-        if (yoloPipelineResult) {
-          console.log("🧹 Clearing annotated images to free memory for LLM...");
-          yoloPipelineResult.results.forEach((result) => {
-            result.annotatedImageBase64 = ""; // Release ~5MB per image
-          });
-          // Force garbage collection hint by updating state without heavy data
-          setYoloResult({ ...yoloPipelineResult });
-        }
-
         setIsLLMGenerating(true); // Set local state - no streaming re-renders
 
         try {
@@ -535,7 +515,80 @@ export default function AssessmentResults() {
             });
 
             setSymptomContext(formattedContext);
-            await saveToLocalDB(formattedContext, "On-Device");
+
+            // Save to databases
+            // If online AND authenticated, save to Convex first, then local
+            // If offline or not authenticated, save to local only
+            console.log("💾 [SAVE] Preparing to save on-device assessment...");
+            console.log("💾 [SAVE] isOnline:", isOnline);
+            console.log("💾 [SAVE] currentUser?._id:", currentUser?._id);
+            console.log("💾 [SAVE] formattedContext length:", formattedContext.length);
+
+            if (isOnline && currentUser?._id) {
+              console.log("💾 [SAVE] Path: Online + Authenticated → Saving to Convex + WatermelonDB");
+              try {
+                const today = new Date();
+                const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                const timestamp = today.getTime();
+
+                console.log("💾 [SAVE] Convex payload:", {
+                  userId: currentUser._id,
+                  date: dateString,
+                  timestamp,
+                  symptoms: description?.substring(0, 50),
+                  severity,
+                  category,
+                  duration,
+                  photosCount: displayPhotos?.length || 0,
+                  aiContextLength: formattedContext.length,
+                });
+
+                // Save to Convex (cloud)
+                const newId = await logAIAssessment({
+                  userId: currentUser._id,
+                  date: dateString,
+                  timestamp,
+                  symptoms: description,
+                  severity: severity,
+                  category: category,
+                  duration: duration,
+                  aiContext: formattedContext,
+                  photos: displayPhotos,
+                  notes: `AI Assessment (On-Device) - ${category}`,
+                });
+                console.log("✅ On-device assessment saved to Convex:", newId);
+
+                // Also save to WatermelonDB with sync flag
+                const collection = database.get("health_entries");
+                await database.write(async () => {
+                  await collection.create((entry: any) => {
+                    entry.userId = currentUser._id;
+                    entry.symptoms = description;
+                    entry.severity = severity;
+                    entry.category = category;
+                    entry.duration = duration;
+                    entry.notes = `AI Assessment (On-Device) - ${category}`;
+                    entry.timestamp = timestamp;
+                    entry.date = dateString;
+                    entry.type = "ai_assessment";
+                    entry.createdBy = "AI Assessment (On-Device)";
+                    entry.aiContext = formattedContext;
+                    entry.photos = JSON.stringify(displayPhotos || []);
+                    entry.isSynced = true;
+                    entry.convexId = newId;
+                  });
+                });
+                console.log("✅ On-device assessment also saved to WatermelonDB");
+                setIsLogged(true);
+              } catch (saveError) {
+                console.error("❌ Failed to save to Convex, falling back to local:", saveError);
+                await saveToLocalDB(formattedContext, "On-Device");
+              }
+            } else {
+              // Offline or not authenticated - save locally only
+              console.log("💾 [SAVE] Path: Offline/Not authenticated → Saving to WatermelonDB only");
+              await saveToLocalDB(formattedContext, "On-Device");
+            }
           } else {
             throw new Error(llmResult.error || "LLM returned empty response");
           }
@@ -1060,11 +1113,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                               </View>
                             ))}
                           </View>
-                          {yoloResult.summary.highestConfidence && (
-                            <Text style={[styles.yoloConfidenceText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                              Highest confidence: {(yoloResult.summary.highestConfidence.confidence * 100).toFixed(0)}%
-                            </Text>
-                          )}
                         </>
                       ) : (
                         <View style={styles.yoloSummaryHeader}>
@@ -1783,12 +1831,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     fontWeight: "500",
-  },
-  yoloConfidenceText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: "#666",
-    fontStyle: "italic",
   },
   photoLabelContainer: {
     alignItems: "center",

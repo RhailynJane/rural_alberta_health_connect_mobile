@@ -14,7 +14,7 @@ export { LLMHost } from './LLMHost';
 export { getLLMSingleton, type LLMState } from './LLMSingleton';
 
 // Hook for components (subscribes to singleton)
-export { useWoundLLM, type UseWoundLLMOptions, type UseWoundLLMReturn } from './useWoundLLM';
+export { useWoundLLM, useWoundLLMStatic, type UseWoundLLMOptions, type UseWoundLLMReturn } from './useWoundLLM';
 
 // Test component
 export { LLMTest } from './LLMTest';

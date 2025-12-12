@@ -211,4 +211,78 @@ export function useWoundLLM(_options: UseWoundLLMOptions = {}): UseWoundLLMRetur
   };
 }
 
+/**
+ * Lightweight hook for on-device LLM - NO streaming subscriptions
+ *
+ * Use this when you DON'T need to display streaming response text.
+ * Only subscribes to isAvailable and isReady - won't re-render on every token.
+ *
+ * For heavy components (like assessment-results), this prevents 1000+ re-renders
+ * during generation.
+ *
+ * @example
+ * ```tsx
+ * function HeavyComponent() {
+ *   const { isReady, generateFromPipeline } = useWoundLLMStatic();
+ *
+ *   // Component won't re-render during generation
+ *   const handleGenerate = async () => {
+ *     const result = await generateFromPipeline(yoloResult);
+ *     // Use result.context directly - no streaming
+ *   };
+ * }
+ * ```
+ */
+export function useWoundLLMStatic(): Pick<
+  UseWoundLLMReturn,
+  'isAvailable' | 'isReady' | 'generateContext' | 'generateFromPipeline' | 'interrupt'
+> {
+  // Only subscribe to stable fields - NO response/isGenerating subscriptions
+  const isAvailable = useSyncExternalStore(subscribe, getIsAvailable, getIsAvailable);
+  const isReady = useSyncExternalStore(subscribe, getIsReady, getIsReady);
+
+  const generateContext = useCallback(
+    async (
+      detections: Detection[],
+      contextOptions?: WoundContextOptions
+    ): Promise<WoundContextResult> => {
+      return singleton.generateContext(detections, contextOptions);
+    },
+    []
+  );
+
+  const generateFromPipeline = useCallback(
+    async (
+      result: PipelineResult,
+      contextOptions?: WoundContextOptions
+    ): Promise<WoundContextResult> => {
+      const allDetections: Detection[] = [];
+      result.results.forEach((imageResult) => {
+        if (imageResult.success) {
+          allDetections.push(...imageResult.detections);
+        }
+      });
+
+      console.log(
+        `${LOG_PREFIX} [Static] Generating from pipeline: ${result.totalDetections} total detection(s)`
+      );
+
+      return generateContext(allDetections, contextOptions);
+    },
+    [generateContext]
+  );
+
+  const interrupt = useCallback(() => {
+    singleton.interrupt();
+  }, []);
+
+  return {
+    isAvailable,
+    isReady,
+    generateContext,
+    generateFromPipeline,
+    interrupt,
+  };
+}
+
 export default useWoundLLM;
