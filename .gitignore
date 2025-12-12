@@ -54,8 +54,14 @@ app-example
 /android/build
 /android/gradle
 /android/.gradle
-# Exception: track google-services.json for Firebase FCM push notifications
-!/android/app/google-services.json
+
+# Firebase configs
+# Source of truth for EAS build (keep in repo)
+!/google-services.json
+# Ignore generated copies under android/app (prebuild will place it there)
+/android/app/google-services.json
+# Never commit Admin SDK private keys
+/android/app/rahc-push-firebase-adminsdk-*.json
 
 # temp
 temp*rhaila.md
