@@ -6,6 +6,43 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
+// Firebase Admin SDK initialization
+let firebaseAdmin: any = null;
+let firebaseInitialized = false;
+
+async function initializeFirebaseAdmin() {
+  if (firebaseInitialized) {
+    return firebaseAdmin;
+  }
+
+  try {
+    const adminSDKKey = process.env.FIREBASE_ADMIN_SDK_KEY;
+    if (!adminSDKKey) {
+      console.warn("⚠️ FIREBASE_ADMIN_SDK_KEY not set - FCM push notifications disabled");
+      firebaseInitialized = true;
+      return null;
+    }
+
+    // Dynamic import to avoid bundling issues
+    const admin = await import("firebase-admin");
+    
+    if (admin.apps.length === 0) {
+      admin.initializeApp({
+        credential: admin.credential.cert(JSON.parse(adminSDKKey))
+      });
+      console.log("✅ Firebase Admin SDK initialized");
+    }
+    
+    firebaseAdmin = admin;
+    firebaseInitialized = true;
+    return admin;
+  } catch (error) {
+    console.error("❌ Firebase Admin SDK initialization failed:", error);
+    firebaseInitialized = true;
+    return null;
+  }
+}
+
 /**
  * Helper to create a notification and optionally send push
  */
@@ -324,50 +361,80 @@ export const getUserPushTokens = query({
 });
 
 /**
- * Send notification via Firebase Cloud Messaging
- * For server-side use only - should be called from backend
+ * Send push notification via Firebase Cloud Messaging (FCM)
+ * Public mutation for sending push notifications to users
  */
-export async function sendFirebaseNotification(
-  ctx: any,
+export const sendPushNotificationFCM = mutation({
   args: {
-    userId: string;
-    title: string;
-    body: string;
-    data?: Record<string, string>;
-  }
-) {
-  const { userId, title, body, data } = args;
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    data: v.optional(v.record(v.string(), v.string())),
+  },
+  handler: async (ctx, args) => {
+    try {
+      // Initialize Firebase Admin if needed
+      const admin = await initializeFirebaseAdmin();
+      if (!admin) {
+        console.log("⚠️ Firebase Admin not available - falling back to Expo push");
+        // Fallback to Expo push
+        await sendPushToUser(ctx, args.userId, args.title, args.body, args.data);
+        return { success: true, method: 'expo' };
+      }
 
-  try {
-    // Get user's Firebase tokens
-    const tokens = await ctx.db
-      .query("pushTokens")
-      .withIndex("by_user", (q: any) => q.eq("userId", userId))
-      .collect();
+      // Get user's push tokens
+      const tokens = await ctx.db
+        .query("pushTokens")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect();
 
-    const fcmTokens = tokens.filter((t: any) => t.platform.includes("firebase"));
+      if (tokens.length === 0) {
+        console.log(`No push tokens found for user ${args.userId}`);
+        return { success: false, message: "No tokens found" };
+      }
 
-    if (fcmTokens.length === 0) {
-      console.log("ℹ️ No Firebase tokens found for user:", userId);
-      return;
+      // Prepare FCM message
+      const message: any = {
+        notification: {
+          title: args.title,
+          body: args.body,
+        },
+        data: args.data || {},
+        android: {
+          priority: "high" as const,
+          notification: {
+            channelId: "reminders-high",
+            sound: "default",
+            clickAction: "FLUTTER_NOTIFICATION_CLICK",
+          },
+        },
+      };
+
+      // Send to all tokens
+      const results = await Promise.allSettled(
+        tokens.map((token) =>
+          admin.messaging().send({
+            ...message,
+            token: token.token,
+          })
+        )
+      );
+
+      const successCount = results.filter((r) => r.status === "fulfilled").length;
+      const failCount = results.filter((r) => r.status === "rejected").length;
+
+      console.log(`✅ Sent FCM notifications: ${successCount} succeeded, ${failCount} failed`);
+      
+      return { 
+        success: true, 
+        method: 'fcm',
+        tokenCount: tokens.length,
+        successCount,
+        failCount,
+      };
+    } catch (error: any) {
+      console.error("❌ Error sending FCM notification:", error);
+      return { success: false, error: error.message };
     }
-
-    // Send via Firebase Admin SDK
-    // This requires firebase-admin setup on the backend
-    // For now, we'll create a helper that can be called with the Admin SDK
-    console.log(`📤 Firebase notification ready to send to ${fcmTokens.length} device(s):`, {
-      title,
-      body,
-      tokens: fcmTokens.map((t: any) => t.token.substring(0, 20) + "..."),
-    });
-
-    // In production, call Firebase Admin SDK here:
-    // await admin.messaging().sendMulticast({
-    //   tokens: fcmTokens.map(t => t.token),
-    //   notification: { title, body },
-    //   data: data || {},
-    // });
-  } catch (error) {
-    console.error("❌ Failed to send Firebase notification:", error);
-  }
-}
+  },
+});
