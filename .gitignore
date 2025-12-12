@@ -52,6 +52,9 @@ app-example
 # generated native folders
 /ios
 /android
+# Exception: track google-services.json for Firebase FCM push notifications
+!/android/app
+!/android/app/google-services.json
 
 # temp
 temp*rhaila.md
