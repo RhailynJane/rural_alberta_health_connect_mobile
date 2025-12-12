@@ -16,7 +16,7 @@
  */
 
 import { Platform } from 'react-native';
-import { EventEmitter } from 'events';
+import { EventEmitter, type EventsMap } from 'expo-modules-core';
 import type { Detection } from '@/utils/yolo/types';
 import {
   buildWoundContextMessages,
@@ -59,10 +59,15 @@ export interface LLMState {
  * Ensures only ONE model instance exists across the entire app lifecycle.
  * React components subscribe to state changes via events.
  */
+// Events map for type-safe event emitter
+interface LLMEventsMap extends EventsMap {
+  stateChange: (state: LLMState) => void;
+}
+
 class LLMSingletonManager {
   private static instance: LLMSingletonManager | null = null;
 
-  private emitter: EventEmitter;
+  private emitter: EventEmitter<LLMEventsMap>;
   private state: LLMState;
   private llmInstance: ReturnType<typeof useLLMHook> | null = null;
   private isInitialized: boolean = false;
@@ -70,8 +75,7 @@ class LLMSingletonManager {
   private isGeneratingRef: boolean = false;
 
   private constructor() {
-    this.emitter = new EventEmitter();
-    this.emitter.setMaxListeners(50); // Support many subscribers
+    this.emitter = new EventEmitter<LLMEventsMap>();
 
     const isAvailable = Platform.OS === 'android' && useLLMHook !== null && QWEN3_0_6B_QUANTIZED_MODEL !== null;
 
@@ -104,12 +108,12 @@ class LLMSingletonManager {
    * Subscribe to state changes
    */
   subscribe(callback: (state: LLMState) => void): () => void {
-    this.emitter.on('stateChange', callback);
+    const subscription = this.emitter.addListener('stateChange', callback);
     // Immediately emit current state
     callback(this.state);
 
     return () => {
-      this.emitter.off('stateChange', callback);
+      subscription.remove();
     };
   }
 
@@ -122,10 +126,11 @@ class LLMSingletonManager {
   }
 
   /**
-   * Get current state (for non-reactive access)
+   * Get current state (for useSyncExternalStore)
+   * Returns direct reference - state is immutable (replaced on each update)
    */
   getState(): LLMState {
-    return { ...this.state };
+    return this.state;
   }
 
   /**

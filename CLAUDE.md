@@ -52,7 +52,7 @@ npx convex deploy      # Deploy backend to production
 - **Camera**: React Native Vision Camera (v4.7.2) for symptom image capture
 - **Maps**: @rnmapbox/maps (v10.2.6) for location-based services
 - **Notifications**: Expo Notifications with local scheduling and reminder management
-- **ML/AI**: ONNX Runtime for on-device inference, Vision Camera with worklets for real-time processing
+- **ML/AI**: ONNX Runtime for YOLO detection, ExecuTorch for on-device LLM (Android only)
 - **Computer Vision**: react-native-fast-opencv for image preprocessing
 
 ### Backend (Convex)
@@ -324,6 +324,55 @@ runAllYoloTests();
 // Full pipeline test with real images (requires device/emulator)
 await runAllYoloTestsWithImages(['file://test-image.jpg']);
 ```
+
+## On-Device LLM (utils/llm/)
+
+On-device wound assessment using ExecuTorch with Qwen3 0.6B quantized model.
+
+### Architecture (Singleton Pattern)
+
+React Native tab navigation unmounts components, causing OOM from repeated model initialization. Solution: singleton pattern outside React lifecycle.
+
+```
+App Root (_layout.tsx)
+  └── LLMHost (never unmounts, calls useLLM())
+        └── LLMSingleton (module-level, broadcasts state via EventEmitter)
+              └── useWoundLLM() (subscribes via useSyncExternalStore)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `LLMSingleton.ts` | Singleton manager, holds model instance |
+| `LLMHost.tsx` | Root-level component calling ExecuTorch `useLLM()` |
+| `useWoundLLM.ts` | Consumer hook using `useSyncExternalStore` |
+| `woundContext.ts` | Prompt building for wound assessment |
+
+### Usage
+
+```typescript
+import { useWoundLLM } from '@/utils/llm';
+
+const { isReady, isGenerating, generateFromPipeline, response } = useWoundLLM();
+
+// Generate context from YOLO detections
+const result = await generateFromPipeline(yoloResult, {
+  bodyLocation: 'left arm',
+  injuryDuration: '2 hours ago',
+});
+```
+
+### Platform Support
+
+- **Android**: Full support via ExecuTorch
+- **iOS**: Disabled in `react-native.config.js` due to OpenCV pod conflict (`opencv-rne` vs `FastOpenCV-iOS`)
+
+### Implementation Notes
+
+- **EventEmitter**: Uses `expo-modules-core` (not Node.js `events`)
+- **useSyncExternalStore**: `getState()` returns direct reference (not spread) to avoid infinite loops
+- See `docs/architecture/llm-singleton-pattern.md` for details
 
 ## Health Tracking System
 

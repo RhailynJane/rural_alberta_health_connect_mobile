@@ -25,6 +25,10 @@ import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 // YOLO Pipeline for wound detection
 import { formatForGemini, runPipeline, type PipelineResult } from "../../../utils/yolo";
 
+// On-device LLM for offline assessment
+import { useWoundLLM } from "../../../utils/llm";
+import { getSeverityBasedGuidance, formatOfflineResult } from "../../../utils/llm/offlineFallback";
+
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -320,6 +324,16 @@ export default function AssessmentResults() {
   const [yoloError, setYoloError] = useState<string | null>(null);
   const [yoloProgress, setYoloProgress] = useState<string>("");
 
+  // On-device LLM for offline assessment (Android only)
+  const {
+    isAvailable: llmAvailable,
+    isReady: llmReady,
+    isGenerating: llmGenerating,
+    generateFromPipeline: llmGenerateFromPipeline,
+    response: llmResponse,
+  } = useWoundLLM();
+  const [usedOfflineLLM, setUsedOfflineLLM] = useState(false);
+
   // Use ref to track if we're currently fetching to prevent multiple calls
   const isFetchingRef = useRef(false);
 
@@ -337,15 +351,18 @@ export default function AssessmentResults() {
     ? JSON.parse(params.aiContext as string)
     : null;
 
+  // AI Source preference from user selection ("cloud" or "device")
+  const aiSourceParam = (params.aiSource as string) || "cloud";
+
   // Define fetchAIAssessment first so it is in scope and can be called after images are processed
   const fetchAIAssessment = async (imagesArg: string[] = [], yoloPipelineResult?: PipelineResult | null) => {
     // Prevent multiple simultaneous requests and re-fetches
     if (isFetchingRef.current || hasAttemptedFetch) {
       return;
     }
-    
-    console.log(`🔍 fetchAIAssessment called - isOnline: ${isOnline}, isChecking: ${isChecking}`);
-    
+
+    console.log(`🔍 fetchAIAssessment called - aiSource: ${aiSourceParam}, isOnline: ${isOnline}`);
+
     try {
       isFetchingRef.current = true;
       setHasAttemptedFetch(true);
@@ -389,42 +406,40 @@ export default function AssessmentResults() {
         ? imagesArg
         : (aiContext?.uploadedPhotos || []);
 
-      // If offline, save locally and show offline message
-      if (!isOnline) {
-        console.log("📴 Offline: Saving AI assessment to local database");
-        
+      // Helper: Get user ID for offline storage
+      const getUserId = async (): Promise<string> => {
+        let uid: string | undefined = currentUser?._id as any;
+        if (!uid) {
+          try {
+            const raw = await AsyncStorage.getItem("@profile_user");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              uid = parsed?._id || parsed?.id;
+            }
+          } catch {}
+        }
+        if (!uid) {
+          try {
+            const usersCol = database.get('users');
+            const allUsers = await usersCol.query().fetch();
+            const first = (allUsers as any[])[0];
+            if (first) {
+              const r = (first as any)._raw || {};
+              uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
+            }
+          } catch {}
+        }
+        return uid || "offline_user";
+      };
+
+      // Helper: Save assessment to local DB
+      const saveToLocalDB = async (context: string, source: string) => {
         const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, "0");
-        const day = String(today.getDate()).padStart(2, "0");
-        const dateString = `${year}-${month}-${day}`;
+        const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         const timestamp = today.getTime();
+        const uid = await getUserId();
 
         try {
-          // Determine user id while offline
-          let uid: string | undefined = currentUser?._id as any;
-          if (!uid) {
-            try {
-              const raw = await AsyncStorage.getItem("@profile_user");
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                uid = parsed?._id || parsed?.id || uid;
-              }
-            } catch {}
-          }
-          if (!uid) {
-            // Try Watermelon users table
-            try {
-              const usersCol = database.get('users');
-              const allUsers = await usersCol.query().fetch();
-              const first = (allUsers as any[])[0];
-              if (first) {
-                const r = (first as any)._raw || {};
-                uid = (first as any).convexUserId || r.convex_user_id || (first as any).id || r.id;
-              }
-            } catch {}
-          }
-
           const collection = database.get("health_entries");
           let wmEntryId: string | undefined;
           await database.write(async () => {
@@ -433,18 +448,21 @@ export default function AssessmentResults() {
               entry.symptoms = description;
               entry.severity = severity;
               entry.category = category;
-              entry.notes = `AI Assessment - ${category}`;
+              entry.duration = duration;
+              entry.notes = `AI Assessment (${source}) - ${category}`;
               entry.timestamp = timestamp;
               entry.date = dateString;
               entry.type = "ai_assessment";
-              entry.createdBy = "AI Assessment";
-              entry.isSynced = false;
+              entry.createdBy = `AI Assessment (${source})`;
+              entry.aiContext = context;
+              entry.photos = JSON.stringify(displayPhotos || []);
+              entry.isSynced = source === "Cloud";
             });
             wmEntryId = newEntry.id;
           });
 
-          console.log("✅ AI assessment saved offline successfully");
-          
+          console.log(`✅ Assessment saved to local DB (${source})`);
+
           // Emit event to notify tracker/daily-log that a new entry was added (offline)
           healthEntriesEvents.emit({
             type: 'add',
@@ -452,21 +470,97 @@ export default function AssessmentResults() {
             timestamp
           });
           console.log("📡 Emitted healthEntriesEvents.add event for offline AI assessment");
-          
+
           setIsLogged(true);
-          
-          // Show offline success message instead of error
-          setSymptomContext("Your assessment has been saved offline and will be analyzed when you reconnect to the internet. The entry is now visible in your health history.");
-        } catch (offlineError) {
-          console.error("❌ Failed to save offline:", offlineError);
-          setAssessmentError(true);
-          } finally {
-            setIsLoading(false);
-            isFetchingRef.current = false;
+        } catch (saveError) {
+          console.error("❌ Failed to save to local DB:", saveError);
+        }
+      };
+
+      // ========================================
+      // DECISION: Use On-Device LLM or Cloud AI
+      // ========================================
+      const shouldUseDeviceLLM = aiSourceParam === "device" || (!isOnline && llmReady);
+
+      if (shouldUseDeviceLLM && llmAvailable && llmReady) {
+        // ========================================
+        // PATH A: On-Device LLM (ExecuTorch)
+        // ========================================
+        console.log("🤖 Using ON-DEVICE LLM for assessment");
+
+        try {
+          // Use generateContext directly with detections (like LLMTest does)
+          const llmResult = await llmGenerateFromPipeline(
+            yoloPipelineResult || { results: [], totalDetections: 0, successfulImages: 0, failedImages: 0, summary: { byClass: {}, highestConfidence: null, averageConfidence: 0 } },
+            {
+              userSymptoms: description,
+              bodyLocation: category,
+              injuryDuration: duration,
+            }
+          );
+
+          if (llmResult.success && llmResult.context) {
+            console.log(`✅ On-device LLM completed in ${llmResult.generationTimeMs}ms`);
+            setUsedOfflineLLM(true);
+
+            // Format the response
+            const formattedContext = formatOfflineResult(llmResult.context, {
+              description,
+              severity,
+              duration,
+              category,
+              yoloResult: yoloPipelineResult,
+            });
+
+            setSymptomContext(formattedContext);
+            await saveToLocalDB(formattedContext, "On-Device");
+          } else {
+            throw new Error(llmResult.error || "LLM returned empty response");
           }
-          return;
+        } catch (llmError: any) {
+          console.error("❌ On-device LLM failed:", llmError);
+          setAssessmentError(true);
+
+          // Fallback: Use severity-based guidance
+          const fallbackContext = getSeverityBasedGuidance(severity);
+          setSymptomContext(fallbackContext);
+          await saveToLocalDB(fallbackContext, "Fallback");
+        }
+
+        setIsLoading(false);
+        isFetchingRef.current = false;
+        return;
       }
 
+      // ========================================
+      // EDGE CASE: Offline but LLM not ready
+      // ========================================
+      if (!isOnline && (!llmAvailable || !llmReady)) {
+        console.log("⚠️ Offline and LLM not available");
+        setAssessmentError(true);
+
+        const fallbackContext = `OFFLINE - AI NOT AVAILABLE
+==================================
+${llmAvailable ? "The on-device AI model has not been downloaded yet." : "On-device AI is not available on this platform."}
+
+${getSeverityBasedGuidance(severity)}
+
+To enable offline assessments:
+1. Connect to the internet
+2. Return to the AI Assessment screen
+3. ${llmAvailable ? "The model will download automatically (~400MB)" : "Use Cloud AI for assessment"}`;
+
+        setSymptomContext(fallbackContext);
+        await saveToLocalDB(fallbackContext, "Offline-Pending");
+
+        setIsLoading(false);
+        isFetchingRef.current = false;
+        return;
+      }
+
+      // ========================================
+      // PATH B: Cloud AI (Gemini) - Original flow
+      // ========================================
       console.log("🚀 Calling Gemini with:", {
         description: description.substring(0, 50),
         severity,
@@ -880,9 +974,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                   <Text style={styles.urgencyText}>
                     {getUrgencyText(actualSeverity)}
                   </Text>
-                  <Text style={styles.severityText}>
-                    Severity Level: {actualSeverity}/10
-                  </Text>
                 </View>
               </View>
 
@@ -1036,11 +1127,34 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Analyzing your symptoms with AI assessment...
+                    {llmGenerating
+                      ? "Generating offline assessment..."
+                      : "Analyzing your symptoms with AI assessment..."}
                   </Text>
+                  {llmGenerating && (
+                    <View style={styles.offlineLLMIndicator}>
+                      <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
+                      <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Using on-device AI (offline mode)
+                      </Text>
+                    </View>
+                  )}
                 </View>
               ) : (
                 <>
+                  {usedOfflineLLM && (
+                    <View style={styles.offlineAssessmentBanner}>
+                      <Ionicons name="hardware-chip" size={18} color="#FF6B35" />
+                      <View style={styles.offlineAssessmentBannerText}>
+                        <Text style={[styles.offlineAssessmentTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Offline Assessment
+                        </Text>
+                        <Text style={[styles.offlineAssessmentSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Generated by on-device AI while offline
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                   {renderAssessmentCards(symptomContext)}
                   {assessmentError && (
                     <View style={styles.errorNote}>
@@ -1666,5 +1780,44 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 10,
     fontWeight: "600",
+  },
+  // Offline LLM Indicator Styles
+  offlineLLMIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    padding: 8,
+    backgroundColor: "#FFF5EB",
+    borderRadius: 8,
+  },
+  offlineLLMText: {
+    fontSize: 13,
+    color: "#FF6B35",
+    marginLeft: 6,
+    fontWeight: "500",
+  },
+  offlineAssessmentBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF5EB",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#FFD4B3",
+  },
+  offlineAssessmentBannerText: {
+    marginLeft: 10,
+    flex: 1,
+  },
+  offlineAssessmentTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#E65100",
+  },
+  offlineAssessmentSubtitle: {
+    fontSize: 13,
+    color: "#FF6B35",
+    marginTop: 2,
   },
 });
