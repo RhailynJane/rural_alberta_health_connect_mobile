@@ -84,7 +84,7 @@ export async function createAndPushNotification(
 }
 
 /**
- * Send push notification to all of a user's devices
+ * Send push notification to all of a user's devices via Expo Push Service
  */
 async function sendPushToUser(
   ctx: any,
@@ -111,6 +111,8 @@ async function sendPushToUser(
     title,
     body,
     data: data || {},
+    priority: "high",
+    channelId: "default",
   }));
 
   // Send to Expo push notification service
@@ -124,7 +126,11 @@ async function sendPushToUser(
     });
 
     if (!response.ok) {
-      console.error("Expo push notification failed:", await response.text());
+      const errorText = await response.text();
+      console.error("Expo push notification failed:", errorText);
+    } else {
+      const result = await response.json();
+      console.log(`✅ Sent Expo push to ${tokens.length} device(s):`, result);
     }
   } catch (error) {
     console.error("Error sending push notification:", error);
