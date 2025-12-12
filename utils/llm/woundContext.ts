@@ -12,23 +12,34 @@ const LOG_PREFIX = '[LLM:WoundContext]';
 
 /**
  * System prompt for wound assessment
- * Emphasizes first-aid information only, not diagnosis
+ * Assertive, confident language for showcase while maintaining boundaries
  */
-export const WOUND_ASSESSMENT_SYSTEM_PROMPT = `You are a first-aid information assistant for a rural health app in Alberta, Canada.
+export const WOUND_ASSESSMENT_SYSTEM_PROMPT = `/no_think
+You are a confident first-aid expert. Give direct, actionable guidance.
 
-IMPORTANT DISCLAIMERS:
-- You do NOT provide medical diagnoses
-- You provide general first-aid information only
-- Always recommend consulting a healthcare professional
-- In emergencies, direct users to call 911
+RESPOND IN THIS EXACT FORMAT:
 
-When given wound detection results from an AI vision model:
-1. Explain what type of injury this appears to be in simple terms
-2. Provide basic first-aid steps appropriate for that injury type
-3. List warning signs that require immediate medical attention
-4. Suggest when to seek professional medical care
+## INJURY TYPE
+[State what the injury is - be direct]
 
-Be concise, clear, and helpful. Use bullet points for readability.`;
+## IMMEDIATE ACTIONS
+- [Action 1]
+- [Action 2]
+- [Action 3]
+
+## WARNING SIGNS
+- [Sign requiring medical attention]
+- [Sign requiring medical attention]
+
+## NEXT STEPS
+[Clear guidance on medical care]
+
+RULES:
+- Be confident and direct. No hedging words like "might", "possibly", "consider".
+- Use command verbs: "Clean the wound", "Apply pressure", "Seek care".
+- Keep each point to one line.
+- For emergencies: "Call 911 immediately."
+- End with: "Contact Health Link Alberta (811) for professional guidance."`;
 
 /**
  * Options for generating wound context
@@ -112,12 +123,23 @@ export function formatPipelineResultForLLM(
 
 /**
  * Build the chat messages for wound context generation
+ * Concise user message - system prompt handles format instructions
  */
 export function buildWoundContextMessages(
   detections: Detection[],
   options?: WoundContextOptions
 ): Message[] {
-  const detectionText = formatDetectionsForLLM(detections, options);
+  // Build concise facts-only prompt
+  const parts: string[] = [];
+
+  if (detections.length > 0) {
+    const classes = [...new Set(detections.map(d => d.className.toUpperCase()))];
+    parts.push(`Detected: ${classes.join(', ')}`);
+  }
+
+  if (options?.bodyLocation) parts.push(`Location: ${options.bodyLocation}`);
+  if (options?.injuryDuration) parts.push(`Duration: ${options.injuryDuration}`);
+  if (options?.userSymptoms) parts.push(`Notes: ${options.userSymptoms}`);
 
   return [
     {
@@ -126,15 +148,7 @@ export function buildWoundContextMessages(
     },
     {
       role: 'user',
-      content: `Based on the following wound detection results, please provide first-aid information:
-
-${detectionText}
-
-Please provide:
-1. What this injury type typically involves
-2. Recommended first-aid steps
-3. Warning signs to watch for
-4. When to seek professional medical care`,
+      content: parts.length > 0 ? parts.join('\n') : 'Assess this injury.',
     },
   ];
 }

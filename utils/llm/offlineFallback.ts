@@ -38,72 +38,48 @@ export interface OfflineAssessmentInput {
 /**
  * Format assessment input for on-device LLM prompt
  *
- * Creates a simplified prompt suitable for smaller models like Qwen3 0.6B
- * while still providing useful first-aid guidance.
+ * Concise prompt for Qwen3 0.6B - direct facts only, no verbose instructions.
+ * The system prompt handles output format.
  */
 export function formatOfflinePrompt(input: OfflineAssessmentInput): string {
-  const lines: string[] = [];
+  const parts: string[] = [];
 
-  lines.push('FIRST AID ASSESSMENT REQUEST');
-  lines.push('============================');
-  lines.push('');
-
-  // Patient description
-  if (input.description) {
-    lines.push(`Patient Description: ${input.description}`);
+  // YOLO detections first (most important)
+  if (input.yoloResult) {
+    const classes = Object.keys(input.yoloResult.summary?.byClass || {});
+    if (classes.length > 0) {
+      parts.push(`Detected: ${classes.map(c => c.toUpperCase()).join(', ')}`);
+    }
+  } else if (input.detections && input.detections.length > 0) {
+    const classes = [...new Set(input.detections.map(d => d.className.toUpperCase()))];
+    parts.push(`Detected: ${classes.join(', ')}`);
   }
 
-  // Severity
-  lines.push(`Reported Severity: ${input.severity}/10`);
+  // Key facts only
+  if (input.bodyLocation) parts.push(`Location: ${input.bodyLocation}`);
+  if (input.severity) parts.push(`Severity: ${input.severity}/10`);
 
-  // Duration
   if (input.duration) {
     const durationMap: Record<string, string> = {
-      today: 'Started today',
-      yesterday: 'Started yesterday',
-      '2-3_days': '2-3 days ago',
-      '1_week': '1 week ago',
-      '2_weeks_plus': 'More than 2 weeks',
-      ongoing: 'Ongoing condition',
+      today: 'today',
+      yesterday: 'yesterday',
+      '2-3_days': '2-3 days',
+      '1_week': '1 week',
+      '2_weeks_plus': '2+ weeks',
+      ongoing: 'ongoing',
     };
-    lines.push(`Duration: ${durationMap[input.duration] || input.duration}`);
+    parts.push(`Duration: ${durationMap[input.duration] || input.duration}`);
   }
 
-  // Category
-  if (input.category) {
-    lines.push(`Category: ${input.category}`);
+  if (input.description) {
+    // Truncate long descriptions
+    const desc = input.description.length > 100
+      ? input.description.slice(0, 100) + '...'
+      : input.description;
+    parts.push(`Patient notes: ${desc}`);
   }
 
-  // Body location
-  if (input.bodyLocation) {
-    lines.push(`Location on body: ${input.bodyLocation}`);
-  }
-
-  lines.push('');
-
-  // YOLO detections
-  if (input.yoloResult) {
-    const detectionText = formatPipelineResultForLLM(input.yoloResult);
-    lines.push('WOUND DETECTION RESULTS:');
-    lines.push(detectionText);
-    lines.push('');
-  } else if (input.detections && input.detections.length > 0) {
-    lines.push('WOUND DETECTION RESULTS:');
-    input.detections.forEach((d, i) => {
-      const confidence = (d.confidence * 100).toFixed(0);
-      lines.push(`${i + 1}. ${d.className.toUpperCase()} (${confidence}% confidence)`);
-    });
-    lines.push('');
-  }
-
-  // Request
-  lines.push('Please provide:');
-  lines.push('1. What this injury type typically involves');
-  lines.push('2. Basic first-aid steps');
-  lines.push('3. Warning signs to watch for');
-  lines.push('4. When to seek professional medical care');
-
-  return lines.join('\n');
+  return parts.join('\n');
 }
 
 /**
