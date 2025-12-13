@@ -192,6 +192,33 @@ export default function SymptomAssessment() {
       return;
     }
 
+    // Block if on-device selected but model not ready
+    if (aiSource === "device" && !llmReady) {
+      setAlertModalTitle("On-Device AI Not Ready");
+      setAlertModalMessage(
+        llmLoading
+          ? "The AI model is still downloading. Please wait for the download to complete, or switch to Cloud AI."
+          : "The on-device AI model needs to be downloaded first. Please wait for the download or switch to Cloud AI."
+      );
+      setAlertModalButtons([
+        {
+          label: "Use Cloud AI",
+          onPress: () => {
+            setAiSource("cloud");
+            setAlertModalVisible(false);
+          },
+          variant: "primary",
+        },
+        {
+          label: "Wait",
+          onPress: () => setAlertModalVisible(false),
+          variant: "secondary",
+        },
+      ]);
+      setAlertModalVisible(true);
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -481,9 +508,14 @@ export default function SymptomAssessment() {
                       ]}>
                         On-Device
                       </Text>
-                      {!llmReady && (
+                      {/* Status indicator */}
+                      {llmReady ? (
+                        <View style={styles.llmReadyBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#28A745" />
+                        </View>
+                      ) : (
                         <Text style={[styles.aiSourceOptionSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {llmLoading ? `(${llmProgress.toFixed(0)}%)` : "(not ready)"}
+                          {llmLoading ? `${llmProgress.toFixed(0)}%` : ""}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -492,8 +524,8 @@ export default function SymptomAssessment() {
                   {/* Status Message */}
                   <Text style={[styles.aiSourceDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                     {aiSource === "cloud"
-                      ? "Using Gemini AI for comprehensive medical assessment."
-                      : "Using on-device AI for privacy-focused first-aid guidance."}
+                      ? "Gemini AI: comprehensive medical assessment."
+                      : "On-device AI: private, works offline."}
                   </Text>
 
                   {/* Download Progress (if downloading) */}
@@ -503,7 +535,27 @@ export default function SymptomAssessment() {
                         <View style={[styles.llmProgressFill, { width: `${llmProgress}%` }]} />
                       </View>
                       <Text style={[styles.llmProgressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Downloading model...
+                        Downloading AI model ({llmProgress.toFixed(0)}%)
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Model Ready indicator */}
+                  {llmReady && !llmLoading && (
+                    <View style={styles.llmReadyContainer}>
+                      <Ionicons name="checkmark-circle" size={16} color="#28A745" />
+                      <Text style={[styles.llmReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        On-device AI ready
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Not downloaded yet (online) */}
+                  {!llmReady && !llmLoading && isOnline && (
+                    <View style={styles.llmNotReadyContainer}>
+                      <Ionicons name="cloud-download" size={16} color="#2A7DE1" />
+                      <Text style={[styles.llmNotReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        On-device model downloading in background...
                       </Text>
                     </View>
                   )}
@@ -513,7 +565,7 @@ export default function SymptomAssessment() {
                     <View style={styles.llmOfflineWarning}>
                       <Ionicons name="warning" size={16} color="#DC3545" />
                       <Text style={[styles.llmOfflineWarningText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        You're offline. Connect to internet to download the on-device model or use Cloud AI.
+                        Offline. Connect to download on-device AI.
                       </Text>
                     </View>
                   )}
@@ -1409,5 +1461,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#DC3545",
     marginTop: 8,
+  },
+  llmReadyBadge: {
+    marginLeft: 4,
+  },
+  llmReadyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#F0FFF4",
+    borderRadius: 6,
+  },
+  llmReadyText: {
+    fontSize: 13,
+    color: "#28A745",
+    marginLeft: 6,
+    fontWeight: "600",
+  },
+  llmNotReadyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 6,
+  },
+  llmNotReadyText: {
+    fontSize: 13,
+    color: "#2A7DE1",
+    marginLeft: 6,
   },
 });
