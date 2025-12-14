@@ -839,17 +839,19 @@ export default function LogDetails() {
                           }
                         });
                       }}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons name="pencil" size={18} color="#2A7DE1" />
+                      <Ionicons name="pencil" size={20} color="#FFF" />
                       <Text style={styles.editButtonText}>Edit Entry</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.deleteButton}
+                      style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
                       onPress={confirmDelete}
                       disabled={deleting}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#DC3545" />
+                      <Ionicons name="trash-outline" size={20} color="#FFF" />
                       <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
                     </TouchableOpacity>
                   </View>
@@ -1106,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   actionButtonsContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
@@ -1117,38 +1119,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
+    backgroundColor: "#2A7DE1",
+    borderRadius: 10,
     gap: 8,
   },
   editButtonText: {
     fontSize: 15,
-    color: "#2A7DE1",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
   },
   deleteButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#FFF5F5",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#DC3545",
+    backgroundColor: "#DC3545",
+    borderRadius: 10,
     gap: 8,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: "#E57373",
+    opacity: 0.7,
   },
   deleteButtonText: {
     fontSize: 15,
-    color: "#DC3545",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
   },
   detailCard: {
     backgroundColor: "#FFFFFF",

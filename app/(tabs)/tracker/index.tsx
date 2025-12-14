@@ -105,9 +105,20 @@ export default function Tracker() {
                   );
                 }
                 
-                // Apply severity filter
+                // Apply severity filter (convert string filter to numeric ranges)
                 if (severityFilter) {
-                  filtered = filtered.filter((e: any) => e.severity === severityFilter);
+                  let severityRange: [number, number] = [0, 10];
+                  if (severityFilter === 'mild') {
+                    severityRange = [1, 3];
+                  } else if (severityFilter === 'moderate') {
+                    severityRange = [4, 7];
+                  } else if (severityFilter === 'severe') {
+                    severityRange = [8, 10];
+                  }
+                  filtered = filtered.filter((e: any) => {
+                    const sev = typeof e.severity === 'string' ? parseInt(e.severity) : e.severity;
+                    return sev >= severityRange[0] && sev <= severityRange[1];
+                  });
                 }
                 
                 // Apply category filter
@@ -425,17 +436,29 @@ export default function Tracker() {
                                         </Text>
                                       </View>
                                     )}
-                                    {entry.severity && typeof entry.severity === 'string' && (
-                                      <View style={[
-                                        styles.categoryPill,
-                                        entry.severity === 'severe' && styles.severePill,
-                                        entry.severity === 'moderate' && styles.moderatePill,
-                                        entry.severity === 'mild' && styles.mildPill
-                                      ]}>
-                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                          {entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1)}
-                                        </Text>
-                                      </View>
+                                    {entry.severity && (
+                                      (() => {
+                                        const sev = typeof entry.severity === 'string' ? parseInt(entry.severity) : entry.severity;
+                                        let label = '';
+                                        let style = styles.mildPill;
+                                        if (sev <= 3) {
+                                          label = 'Mild';
+                                          style = styles.mildPill;
+                                        } else if (sev <= 7) {
+                                          label = 'Moderate';
+                                          style = styles.moderatePill;
+                                        } else {
+                                          label = 'Severe';
+                                          style = styles.severePill;
+                                        }
+                                        return (
+                                          <View style={[styles.categoryPill, style]}>
+                                            <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                              {label}
+                                            </Text>
+                                          </View>
+                                        );
+                                      })()
                                     )}
                                   </View>
 
@@ -511,17 +534,29 @@ export default function Tracker() {
                                         </Text>
                                       </View>
                                     )}
-                                    {entry.severity && typeof entry.severity === 'string' && (
-                                      <View style={[
-                                        styles.categoryPill,
-                                        entry.severity === 'severe' && styles.severePill,
-                                        entry.severity === 'moderate' && styles.moderatePill,
-                                        entry.severity === 'mild' && styles.mildPill
-                                      ]}>
-                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                          {entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1)}
-                                        </Text>
-                                      </View>
+                                    {entry.severity && (
+                                      (() => {
+                                        const sev = typeof entry.severity === 'string' ? parseInt(entry.severity) : entry.severity;
+                                        let label = '';
+                                        let style = styles.mildPill;
+                                        if (sev <= 3) {
+                                          label = 'Mild';
+                                          style = styles.mildPill;
+                                        } else if (sev <= 7) {
+                                          label = 'Moderate';
+                                          style = styles.moderatePill;
+                                        } else {
+                                          label = 'Severe';
+                                          style = styles.severePill;
+                                        }
+                                        return (
+                                          <View style={[styles.categoryPill, style]}>
+                                            <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                              {label}
+                                            </Text>
+                                          </View>
+                                        );
+                                      })()
                                     )}
                                   </View>
 

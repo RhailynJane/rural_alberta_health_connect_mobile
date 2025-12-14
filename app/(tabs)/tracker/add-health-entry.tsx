@@ -1339,7 +1339,7 @@ export default function AddHealthEntry() {
                   style={[styles.successButton, styles.goToLogButton]}
                   onPress={() => {
                     setShowSuccessModal(false);
-                    router.push("/(tabs)/tracker/daily-log");
+                    router.push("/(tabs)/tracker");
                   }}
                 >
                   <Ionicons name="calendar" size={20} color="white" />
