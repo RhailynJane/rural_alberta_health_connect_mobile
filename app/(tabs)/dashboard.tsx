@@ -25,6 +25,7 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
+import SideMenu from "../components/SideMenu";
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -49,6 +50,9 @@ export default function Dashboard() {
   const [modalTitle, setModalTitle] = useState<string>("");
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
+  
+  // Side menu state
+  const [sideMenuVisible, setSideMenuVisible] = useState(false);
 
   // Get current user data (allow offline access via cache)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
@@ -536,22 +540,41 @@ export default function Dashboard() {
     router.push("/tracker/daily-log");
   };
 
+  const handleSignOut = (): void => {
+    setModalTitle("Sign Out");
+    setModalMessage("Are you sure you want to sign out?");
+    setModalButtons([
+      {
+        label: "Cancel",
+        onPress: () => setModalVisible(false),
+        variant: 'secondary',
+      },
+      {
+        label: "Sign Out",
+        onPress: () => {
+          setModalVisible(false);
+          router.replace("/auth/signin");
+        },
+        variant: 'destructive',
+      },
+    ]);
+    setModalVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
-        <DueReminderBanner topOffset={120} />
+        <DueReminderBanner topOffset={70} />
         
-        {/* Fixed Header */}
+        {/* Header */}
         <CurvedHeader
-          title="Alberta Health Connect"
-          height={150}
           showLogo={true}
-          screenType="signin"
-          bottomSpacing={0}
           showNotificationBell={true}
           reminderEnabled={reminderSettings?.enabled || false}
           reminderSettings={reminderSettings || null}
+          showMenuButton={true}
+          onMenuPress={() => setSideMenuVisible(true)}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
@@ -873,6 +896,15 @@ export default function Dashboard() {
         </View>
       </CurvedBackground>
       <BottomNavigation />
+
+      {/* Side Menu */}
+      <SideMenu
+        visible={sideMenuVisible}
+        onClose={() => setSideMenuVisible(false)}
+        onSignOut={handleSignOut}
+        userName={userName}
+        userEmail={userEmail}
+      />
 
       {/* StatusModal for alerts and confirmations */}
       <StatusModal
