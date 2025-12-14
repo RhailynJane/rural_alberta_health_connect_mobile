@@ -230,120 +230,93 @@ function renderAssessmentCards(
     console.log(`${key}: ${sections[key as SectionKey].length} items`);
   });
 
-  // Categorize Next Steps into primary actions vs conditional escalation
+  // Categorize Next Steps into 3 clear time-based steps
   const categorizeNextSteps = (items: string[]) => {
-    const categorized = {
-      primaryActions: [] as string[],
-      conditionalEscalation: [] as string[],
-      followUpHint: null as string | null,
+    const steps = {
+      doNow: [] as string[],
+      within48: [] as string[],
+      seekCare: [] as string[],
     };
 
     items.forEach(item => {
       const lower = item.toLowerCase();
 
-      // Conditional escalation patterns (collapsed section)
+      // "Seek care if" patterns
       if (lower.includes('if symptoms') || lower.includes('seek') || lower.includes('worsen') ||
           lower.includes('persist') || lower.includes('go to') || lower.includes('contact') ||
           lower.includes('call 911') || lower.includes('emergency') || lower.includes('urgent')) {
         const cleaned = item
           .replace(/^(if symptoms?[^:]*:|seek[^:]*:|urgent[^:]*:|when to[^:]*:)\s*/i, '')
           .trim();
-        categorized.conditionalEscalation.push(cleaned);
+        steps.seekCare.push(cleaned);
       }
-      // Follow-up timing patterns (becomes hint text)
-      else if (lower.includes('reassess') || lower.includes('follow up') || lower.includes('follow-up') ||
-               (lower.includes('within') && (lower.includes('hour') || lower.includes('day')))) {
-        if (!categorized.followUpHint) {
-          categorized.followUpHint = item.replace(/^(follow[- ]?up:?|reassess:?)\s*/i, '').trim();
-        } else {
-          categorized.primaryActions.push(item.replace(/^(today:|now:)\s*/i, '').trim());
-        }
+      // "Within 24-48 hours" patterns
+      else if (lower.includes('within') || lower.includes('24') || lower.includes('48') ||
+               lower.includes('tomorrow') || lower.includes('follow') || lower.includes('monitor') ||
+               lower.includes('reassess') || lower.includes('watch for') || lower.includes('next day')) {
+        const cleaned = item
+          .replace(/^(within[^:]*:|follow[- ]?up:?|reassess:?)\s*/i, '')
+          .trim();
+        steps.within48.push(cleaned);
       }
-      // Primary actions (main visible content)
+      // "Do now" - immediate actions
       else {
-        categorized.primaryActions.push(item.replace(/^(today:|now:|immediately:)\s*/i, '').trim());
+        const cleaned = item
+          .replace(/^(today:|now:|immediately:)\s*/i, '')
+          .trim();
+        steps.doNow.push(cleaned);
       }
     });
 
-    return categorized;
+    return steps;
   };
 
-  // Next Steps Card - Primary path + collapsed conditional + follow-up hint
+  // Next Steps Card - Clear 3-step timeline
   const NextStepsCard = ({ items }: { items: string[] }) => {
-    const [showConditional, setShowConditional] = useState(false);
-    const { primaryActions, conditionalEscalation, followUpHint } = categorizeNextSteps(items);
+    const steps = categorizeNextSteps(items);
 
-    const toggleConditional = () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setShowConditional(!showConditional);
-    };
+    const StepRow = ({ stepNumber, label, content }: {
+      stepNumber: number;
+      label: string;
+      content: string[];
+    }) => {
+      if (content.length === 0) return null;
 
-    // Limit primary actions to 2 for clarity
-    const visibleActions = primaryActions.slice(0, 2);
-
-    return (
-      <View style={styles.nextStepsContainer}>
-        {/* Primary Path Block */}
-        <View style={styles.primaryPathCard}>
-          <Text style={[styles.primaryPathTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-            What to do now
-          </Text>
-          <View style={styles.primaryPathActions}>
-            {visibleActions.map((action, idx) => (
-              <View key={idx} style={styles.primaryActionRow}>
-                <View style={styles.primaryActionBullet} />
-                <Text style={[styles.primaryActionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {action}
-                </Text>
-              </View>
-            ))}
+      return (
+        <View style={styles.stepRow}>
+          <View style={styles.stepNumberContainer}>
+            <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {stepNumber}
+            </Text>
+          </View>
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {label}
+            </Text>
+            <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+              {content[0]}
+            </Text>
           </View>
         </View>
+      );
+    };
 
-        {/* Conditional Escalation - Collapsed by default */}
-        {conditionalEscalation.length > 0 && (
-          <View style={styles.conditionalSection}>
-            <TouchableOpacity
-              style={styles.conditionalHeader}
-              onPress={toggleConditional}
-              activeOpacity={0.7}
-            >
-              <View style={styles.conditionalHeaderLeft}>
-                <Ionicons
-                  name="information-circle-outline"
-                  size={16}
-                  color="#9CA3AF"
-                />
-                <Text style={[styles.conditionalHeaderText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  If symptoms change
-                </Text>
-              </View>
-              <Ionicons
-                name={showConditional ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#9CA3AF"
-              />
-            </TouchableOpacity>
-            {showConditional && (
-              <View style={styles.conditionalContent}>
-                {conditionalEscalation.map((item, idx) => (
-                  <Text
-                    key={idx}
-                    style={[styles.conditionalText, { fontFamily: FONTS.BarlowSemiCondensed }]}
-                  >
-                    {item}
-                  </Text>
-                ))}
-              </View>
-            )}
-          </View>
+    // Calculate step numbers dynamically based on which steps have content
+    let stepNum = 0;
+
+    return (
+      <View style={styles.nextStepsCard}>
+        <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          Next Steps
+        </Text>
+        {steps.doNow.length > 0 && (
+          <StepRow stepNumber={++stepNum} label="Do now" content={steps.doNow} />
         )}
-
-        {/* Time-based Follow-up Hint */}
-        {followUpHint && (
-          <Text style={[styles.followUpHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-            Reassess within 24–48 hours
-          </Text>
+        {steps.within48.length > 0 && (
+          <StepRow stepNumber={++stepNum} label="Within 24–48 hours" content={steps.within48} />
+        )}
+        {steps.seekCare.length > 0 && (
+          <StepRow stepNumber={++stepNum} label="Seek care if" content={steps.seekCare} />
         )}
       </View>
     );
@@ -1210,33 +1183,96 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
   // Calm, clinical care level indicators (not alarming)
   const getCareLevel = (severity: number) => {
     if (severity >= 9) return {
+      label: "Critical",
       text: "Seek immediate care",
       subtext: "Professional evaluation recommended now",
-      color: "#B91C1C", // Muted red
+      color: "#B91C1C",
       bgColor: "#FEF2F2",
       icon: "medical" as const
     };
     if (severity >= 7) return {
+      label: "Moderate",
       text: "Schedule care soon",
       subtext: "Consider seeing a healthcare provider today",
-      color: "#C2410C", // Muted orange
+      color: "#C2410C",
       bgColor: "#FFF7ED",
       icon: "calendar" as const
     };
     if (severity >= 4) return {
+      label: "Mild",
       text: "Monitor and follow guidance",
       subtext: "Home care may be appropriate with watchful attention",
-      color: "#1D4ED8", // Calm blue
+      color: "#1D4ED8",
       bgColor: "#EFF6FF",
       icon: "eye" as const
     };
     return {
+      label: "Minor",
       text: "Self-care recommended",
       subtext: "Your symptoms suggest manageable home care",
-      color: "#047857", // Muted green
+      color: "#047857",
       bgColor: "#ECFDF5",
       icon: "checkmark-circle" as const
     };
+  };
+
+  // Patient-friendly injury names (not technical/system labels)
+  const getPatientFriendlyName = (className: string): string => {
+    const nameMap: Record<string, string> = {
+      '1st degree burn': 'First-degree burn',
+      '2nd degree burn': 'Second-degree burn',
+      '3rd degree burn': 'Third-degree burn',
+      'Rashes': 'Skin rash',
+      'abrasion': 'Skin abrasion',
+      'bruise': 'Bruise',
+      'cut': 'Cut',
+      'frostbite': 'Frostbite',
+    };
+    return nameMap[className] || className;
+  };
+
+  // Generate primary diagnosis summary from detections
+  const getDiagnosisSummary = (yoloResult: PipelineResult | null) => {
+    if (!yoloResult || yoloResult.totalDetections === 0) {
+      return { primary: 'No injuries detected', detail: 'Image analysis complete' };
+    }
+
+    const byClass = yoloResult.summary.byClass;
+    const entries = Object.entries(byClass);
+
+    // Get the most common/significant finding
+    const sorted = entries.sort((a, b) => (b[1] as number) - (a[1] as number));
+    const [primaryClass, primaryCount] = sorted[0];
+    const friendlyName = getPatientFriendlyName(primaryClass);
+
+    // Total affected areas
+    const totalAreas = yoloResult.totalDetections;
+
+    // Build summary
+    const primary = `${friendlyName} detected`;
+    const detail = totalAreas === 1
+      ? '1 affected area identified'
+      : `${totalAreas} affected areas identified`;
+
+    return { primary, detail, totalAreas, friendlyName };
+  };
+
+  // Select best image to display (highest detection count or confidence)
+  const getBestImageIndex = (yoloResult: PipelineResult | null): number => {
+    if (!yoloResult || yoloResult.results.length <= 1) return 0;
+
+    let bestIndex = 0;
+    let bestScore = 0;
+
+    yoloResult.results.forEach((result, idx) => {
+      const score = result.detections.length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = idx;
+      }
+    });
+
+    return bestIndex;
   };
 
   const ResultCard = ({
@@ -1285,45 +1321,38 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
-              {/* Layer 1: Primary Outcome - Calm care level conclusion */}
+              {/* ASSESSMENT SUMMARY - Clean, minimal */}
               {(() => {
-                const careLevel = getCareLevel(actualSeverity);
+                const diagnosis = getDiagnosisSummary(yoloResult);
+                const hasDetections = yoloResult && yoloResult.totalDetections > 0;
+
                 return (
-                  <View style={[styles.careLevelContainer, { backgroundColor: careLevel.bgColor }]}>
-                    <View style={styles.careLevelIconContainer}>
-                      <Ionicons name={careLevel.icon} size={28} color={careLevel.color} />
-                    </View>
-                    <View style={styles.careLevelContent}>
-                      <Text
-                        style={[
-                          styles.careLevelText,
-                          { fontFamily: FONTS.BarlowSemiCondensed, color: careLevel.color },
-                        ]}
-                      >
-                        {careLevel.text}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.careLevelSubtext,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        {careLevel.subtext}
-                      </Text>
-                    </View>
+                  <View style={styles.summaryCard}>
+                    {/* Primary Diagnosis */}
+                    <Text style={[styles.diagnosisPrimary, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      {hasDetections ? diagnosis.primary : 'Assessment complete'}
+                    </Text>
+
+                    {/* Supporting Detail */}
+                    <Text style={[styles.diagnosisDetail, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      {hasDetections ? diagnosis.detail : 'No visible injuries detected'}
+                    </Text>
                   </View>
                 );
               })()}
 
-              {/* YOLO Wound Detection Results - SHOWN FIRST for immediate value */}
+              {/* ═══════════════════════════════════════════════════════════
+                  EVIDENCE SECTION - Unified Image Card
+                  Smart display: shows best image, patient-friendly labels
+                  ═══════════════════════════════════════════════════════════ */}
               {displayPhotos.length > 0 && (
-                <ResultCard title="Wound Detection Analysis" icon="scan">
+                <View style={styles.evidenceSection}>
                   {/* Processing State */}
                   {isYoloProcessing && (
                     <View style={styles.yoloProcessingContainer}>
                       <ActivityIndicator size="small" color="#2A7DE1" />
                       <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        {yoloProgress || "Analyzing images..."}
+                        {yoloProgress || "Analyzing your images..."}
                       </Text>
                     </View>
                   )}
@@ -1333,112 +1362,49 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                     <View style={styles.yoloErrorContainer}>
                       <Ionicons name="alert-circle" size={20} color="#DC3545" />
                       <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Detection failed: {yoloError}
+                        Unable to analyze image
                       </Text>
                     </View>
                   )}
 
-                  {/* Detection Summary */}
-                  {yoloResult && !isYoloProcessing && (
-                    <View style={styles.yoloSummaryContainer}>
-                      {yoloResult.totalDetections > 0 ? (
-                        <>
-                          <View style={styles.yoloSummaryHeader}>
-                            <Ionicons name="checkmark-circle" size={20} color="#28A745" />
-                            <Text style={[styles.yoloSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                              {yoloResult.totalDetections} wound(s) detected
-                            </Text>
-                          </View>
-                          <View style={styles.yoloClassList}>
-                            {Object.entries(yoloResult.summary.byClass).map(([className, count]) => (
-                              <View key={className} style={styles.yoloClassItem}>
-                                <View style={[styles.yoloClassBadge, {
-                                  backgroundColor:
-                                    className === '1st degree burn' ? '#FF8C00' :    // Orange - mild burn
-                                    className === '2nd degree burn' ? '#FF4500' :    // Red-Orange - moderate burn
-                                    className === '3rd degree burn' ? '#C80000' :    // Dark Red - severe burn
-                                    className === 'Rashes' ? '#FFB6C1' :             // Pink
-                                    className === 'abrasion' ? '#DC3545' :           // Red
-                                    className === 'bruise' ? '#6f42c1' :             // Purple
-                                    className === 'cut' ? '#28A745' :                // Green
-                                    className === 'frostbite' ? '#00CED1' :          // Cyan - cold injury
-                                    '#6c757d'                                        // Default gray
-                                }]}>
-                                  <Text style={[styles.yoloClassBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                    {className.toUpperCase()}
-                                  </Text>
-                                </View>
-                                <Text style={[styles.yoloClassCount, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                  × {count}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </>
-                      ) : (
-                        <View style={styles.yoloSummaryHeader}>
-                          <Ionicons name="information-circle" size={20} color="#6c757d" />
-                          <Text style={[styles.yoloSummaryTitle, { fontFamily: FONTS.BarlowSemiCondensed, color: '#6c757d' }]}>
-                            No wounds detected in images
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
+                  {/* Evidence Card - Single unified card */}
+                  {!isYoloProcessing && !yoloError && (() => {
+                    // Smart image selection: show best image only
+                    const bestIndex = getBestImageIndex(yoloResult);
+                    const bestResult = yoloResult?.results[bestIndex];
+                    const hasAnnotated = bestResult?.annotatedImageBase64 && bestResult.annotatedImageBase64.length > 0;
+                    const imageSource = hasAnnotated
+                      ? { uri: `data:image/jpeg;base64,${bestResult.annotatedImageBase64}` }
+                      : { uri: displayPhotos[bestIndex] };
 
-                  {/* Annotated Images (with bounding boxes) */}
-                  <Text
-                    style={[
-                      styles.cardText,
-                      {
-                        fontFamily: FONTS.BarlowSemiCondensed,
-                        marginTop: 12,
-                        marginBottom: 8,
-                      },
-                    ]}
-                  >
-                    {displayPhotos.length} photo(s) analyzed
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {displayPhotos.map((photo: string, index: number) => {
-                      // Use annotated image if available, otherwise fall back to original
-                      const yoloImageResult = yoloResult?.results[index];
-                      const hasAnnotatedImage = yoloImageResult?.annotatedImageBase64 && yoloImageResult.annotatedImageBase64.length > 0;
-                      const imageSource = hasAnnotatedImage
-                        ? { uri: `data:image/jpeg;base64,${yoloImageResult.annotatedImageBase64}` }
-                        : { uri: photo };
-                      const detectionsInImage = yoloImageResult?.detections.length || 0;
+                    const hasDetections = yoloResult && yoloResult.totalDetections > 0;
 
-                      return (
-                        <View key={index} style={styles.photoContainer}>
+                    return (
+                      <View style={styles.evidenceCard}>
+                        {/* Section Label */}
+                        <Text style={[styles.evidenceLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {hasDetections ? 'Affected areas identified' : 'Image analysis'}
+                        </Text>
+
+                        {/* Image with annotations */}
+                        <View style={styles.evidenceImageWrapper}>
                           <Image
                             source={imageSource}
-                            style={styles.assessmentPhoto}
+                            style={styles.evidenceImage}
+                            resizeMode="contain"
                           />
-                          <View style={styles.photoLabelContainer}>
-                            <Text
-                              style={[
-                                styles.photoLabel,
-                                { fontFamily: FONTS.BarlowSemiCondensed },
-                              ]}
-                            >
-                              Photo {index + 1}
-                            </Text>
-                            {yoloResult && !isYoloProcessing && (
-                              <View style={[styles.detectionBadge, {
-                                backgroundColor: detectionsInImage > 0 ? '#28A745' : '#6c757d'
-                              }]}>
-                                <Text style={[styles.detectionBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                  {detectionsInImage} found
-                                </Text>
-                              </View>
-                            )}
-                          </View>
                         </View>
-                      );
-                    })}
-                  </ScrollView>
-                </ResultCard>
+
+                        {/* Explanation */}
+                        <Text style={[styles.evidenceExplanation, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {hasDetections
+                            ? 'Highlighted areas show detected injury locations'
+                            : 'No injuries were detected in the analyzed image'}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
               )}
 
               {/* Layer 2 & 3: Assessment Content */}
@@ -1811,6 +1777,67 @@ const styles = StyleSheet.create({
     color: "#666",
     fontWeight: "500",
   },
+  // ASSESSMENT SUMMARY - Clean, minimal
+  summaryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  diagnosisPrimary: {
+    fontSize: 21,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
+  diagnosisDetail: {
+    fontSize: 15,
+    color: "#6B7280",
+  },
+  // ═══════════════════════════════════════════════════════════
+  // EVIDENCE SECTION - Unified Image Card Styles
+  // ═══════════════════════════════════════════════════════════
+  evidenceSection: {
+    marginBottom: 24,
+  },
+  evidenceCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  evidenceLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  evidenceImageWrapper: {
+    backgroundColor: "#F8F9FA",
+    padding: 8,
+    marginHorizontal: 8,
+    borderRadius: 10,
+  },
+  evidenceImage: {
+    width: "100%",
+    height: 280,
+    borderRadius: 8,
+  },
+  evidenceExplanation: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    textAlign: "center",
+    fontStyle: "italic",
+  },
   photoLabelContainer: {
     alignItems: "center",
     marginTop: 4,
@@ -1985,82 +2012,53 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
   },
-  // Next Steps - Primary Path + Conditional Escalation
-  nextStepsContainer: {
-    marginBottom: 16,
-  },
-  primaryPathCard: {
+  // Next Steps - Clear 3-step timeline
+  nextStepsCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 20,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  primaryPathTitle: {
+  nextStepsTitle: {
     fontSize: 17,
     fontWeight: "600",
     color: "#1F2937",
     marginBottom: 16,
-    letterSpacing: 0.1,
   },
-  primaryPathActions: {
-    gap: 12,
-  },
-  primaryActionRow: {
+  stepRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    marginBottom: 16,
   },
-  primaryActionBullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#D1D5DB",
-    marginTop: 8,
-    marginRight: 12,
-  },
-  primaryActionText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#374151",
-    lineHeight: 24,
-  },
-  // Conditional Escalation - Collapsed by default
-  conditionalSection: {
-    marginTop: 12,
-  },
-  conditionalHeader: {
-    flexDirection: "row",
+  stepNumberContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    justifyContent: "center",
+    marginRight: 14,
   },
-  conditionalHeaderLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  conditionalHeaderText: {
+  stepNumber: {
     fontSize: 14,
-    color: "#9CA3AF",
-    marginLeft: 6,
-  },
-  conditionalContent: {
-    paddingLeft: 26,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  conditionalText: {
-    fontSize: 14,
+    fontWeight: "600",
     color: "#6B7280",
-    lineHeight: 21,
-    marginBottom: 6,
   },
-  // Follow-up Hint
-  followUpHint: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginTop: 14,
-    paddingHorizontal: 4,
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  stepText: {
+    fontSize: 15,
+    color: "#6B7280",
+    lineHeight: 22,
   },
   // Disclaimer styles
   disclaimer: {
