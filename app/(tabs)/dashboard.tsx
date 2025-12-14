@@ -8,7 +8,6 @@ import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -481,59 +480,7 @@ export default function Dashboard() {
     router.push("/(tabs)/ai-assess");
   };
 
-  const handleEmergencyCall = (): void => {
-    setModalTitle("Emergency Call");
-    setModalMessage("For life-threatening emergencies, call 911 immediately.");
-    setModalButtons([
-      {
-        label: "Cancel",
-        onPress: () => setModalVisible(false),
-        variant: 'secondary',
-      },
-      {
-        label: "Call 911",
-        onPress: () => {
-          setModalVisible(false);
-          Linking.openURL("tel:911").catch((err) => {
-            console.error("Error calling 911:", err);
-            setModalTitle("Error");
-            setModalMessage("Could not make the call. Please check your device.");
-            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
-            setModalVisible(true);
-          });
-        },
-        variant: 'destructive',
-      },
-    ]);
-    setModalVisible(true);
-  };
 
-  const callHealthLink = (): void => {
-    setModalTitle("Health Link Alberta");
-    setModalMessage("Call 811 for non-emergency health advice?");
-    setModalButtons([
-      {
-        label: "Cancel",
-        onPress: () => setModalVisible(false),
-        variant: 'secondary',
-      },
-      {
-        label: "Call 811",
-        onPress: () => {
-          setModalVisible(false);
-          Linking.openURL("tel:811").catch((err) => {
-            console.error("Error calling 811:", err);
-            setModalTitle("Error");
-            setModalMessage("Could not make the call. Please check your device.");
-            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
-            setModalVisible(true);
-          });
-        },
-        variant: 'primary',
-      },
-    ]);
-    setModalVisible(true);
-  };
 
   const navigateToHistory = (): void => {
     router.push("/tracker/history");
@@ -820,81 +767,34 @@ export default function Dashboard() {
 
               {/* Medical Disclaimer */}
               <View style={styles.disclaimerContainer}>
-                <Text
-                  style={[
-                    styles.disclaimerTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Medical Disclaimer
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  This app provides health guidance only. It does not replace
-                  professional medical advice.
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Always consult healthcare professionals for medical concerns.
-                </Text>
-              </View>
-
-              {/* Emergency Notice */}
-              <View style={styles.emergencyContainer}>
-                <Text
-                  style={[
-                    styles.emergencyTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Emergency Notice
-                </Text>
-                <Text
-                  style={[
-                    styles.emergencyText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  For life-threatening emergencies, call 911 immediately. For
-                  urgent health concerns, contact Health Link Alberta at 811.
-                </Text>
-
-                <View style={styles.emergencyButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.emergencyButton}
-                    onPress={handleEmergencyCall}
+                <View style={styles.disclaimerIconBubble}>
+                  <Text style={[styles.disclaimerIcon, { fontFamily: FONTS.BarlowSemiCondensed }]}>ℹ️</Text>
+                </View>
+                <View style={styles.disclaimerContent}>
+                  <Text
+                    style={[
+                      styles.disclaimerTitle,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
                   >
-                    <Text
-                      style={[
-                        styles.emergencyButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Call 911
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.healthLinkButton}
-                    onPress={callHealthLink}
+                    Important
+                  </Text>
+                  <Text
+                    style={[
+                      styles.disclaimerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
                   >
-                    <Text
-                      style={[
-                        styles.healthLinkButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Call Health Link
-                    </Text>
-                  </TouchableOpacity>
+                    This app offers guidance and reminders but does not replace professional medical advice.
+                  </Text>
+                  <Text
+                    style={[
+                      styles.disclaimerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Always consult a licensed healthcare provider for diagnosis or treatment decisions.
+                  </Text>
                 </View>
               </View>
             </View>
@@ -1268,75 +1168,42 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   disclaimerContainer: {
-    backgroundColor: "#FFF3CD",
+    flexDirection: "row",
+    backgroundColor: "#E8F1FF",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#FFEAA7",
-    marginBottom: 24,
+    borderColor: "#B8D4F1",
+    marginBottom: 120,
+    alignItems: "flex-start",
+  },
+  disclaimerIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#1F73D2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  disclaimerIcon: {
+    fontSize: 20,
+    color: "white",
+  },
+  disclaimerContent: {
+    flex: 1,
   },
   disclaimerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#856404",
+    color: "#1F73D2",
     marginBottom: 8,
   },
   disclaimerText: {
     fontSize: 14,
-    color: "#856404",
+    color: "#1F73D2",
     marginBottom: 4,
     lineHeight: 20,
-  },
-  emergencyContainer: {
-    backgroundColor: "#F8D7DA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#F5C6CB",
-  },
-  emergencyTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#721C24",
-    marginBottom: 8,
-  },
-  emergencyText: {
-    fontSize: 14,
-    color: "#721C24",
-    marginBottom: 10,
-    lineHeight: 20,
-  },
-  emergencyButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  emergencyButton: {
-    backgroundColor: "#DC3545",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  emergencyButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  healthLinkButton: {
-    backgroundColor: "#6C757D",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  healthLinkButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
   },
   container: {
     flex: 1,
