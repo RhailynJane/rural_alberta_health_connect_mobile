@@ -487,7 +487,7 @@ export default function Dashboard() {
   };
 
   const navigateToDailyLog = (): void => {
-    router.push("/tracker/daily-log");
+    router.push("/tracker");
   };
 
   const handleSignOut = (): void => {

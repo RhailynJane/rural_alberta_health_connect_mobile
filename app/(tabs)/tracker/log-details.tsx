@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -22,8 +22,12 @@ import StatusModal from "../../components/StatusModal";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
-// Renders AI assessment text into separate cards (mirrors assessment-results)
-function renderAssessmentCards(text: string | null) {
+// Renders AI assessment text matching assessment-results UI (priority + accordions)
+function renderAssessmentCards(
+  text: string | null,
+  expandedSections: Record<string, boolean>,
+  toggleSection: (key: string) => void
+) {
   if (!text) return null;
 
   type SectionKey =
@@ -32,24 +36,19 @@ function renderAssessmentCards(text: string | null) {
     | "CLINICAL INTERPRETATION"
     | "BURN/WOUND GRADING"
     | "INFECTION RISK"
-    | "EMERGENCY RED FLAGS"
-    | "RURAL GUIDANCE"
     | "URGENCY ASSESSMENT"
     | "RECOMMENDATIONS"
     | "NEXT STEPS"
     | "OTHER";
 
-  const wantedOrder: SectionKey[] = [
+  const prioritySections: SectionKey[] = ["NEXT STEPS", "RECOMMENDATIONS"];
+  const accordionSections: SectionKey[] = [
     "CLINICAL ASSESSMENT",
     "VISUAL FINDINGS",
     "CLINICAL INTERPRETATION",
     "BURN/WOUND GRADING",
     "INFECTION RISK",
-    "EMERGENCY RED FLAGS",
-    "RURAL GUIDANCE",
     "URGENCY ASSESSMENT",
-    "RECOMMENDATIONS",
-    "NEXT STEPS",
   ];
 
   const sections: Record<SectionKey, string[]> = {
@@ -58,8 +57,6 @@ function renderAssessmentCards(text: string | null) {
     "CLINICAL INTERPRETATION": [],
     "BURN/WOUND GRADING": [],
     "INFECTION RISK": [],
-    "EMERGENCY RED FLAGS": [],
-    "RURAL GUIDANCE": [],
     "URGENCY ASSESSMENT": [],
     "RECOMMENDATIONS": [],
     "NEXT STEPS": [],
@@ -81,17 +78,6 @@ function renderAssessmentCards(text: string | null) {
     if (/^grading\s*:?/i.test(cleaned)) return "BURN/WOUND GRADING";
     if (/^infection\s+risk\s*(assessment)?\s*:?/i.test(cleaned)) return "INFECTION RISK";
     if (/^risk\s+of\s+infection\s*:?/i.test(cleaned)) return "INFECTION RISK";
-    if (/^(specific\s+)?emergency\s+red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^warning\s+signs?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^rural[-\s]?specific\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural[-\s]?specific\s+resource\s+guideline\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(specific\s+)?(resource\s+)?guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(considerations?|resources?)\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resources?\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
     if (/^urgency\s+(assessment|level)\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^urgency\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^recommendations?\s*:?/i.test(cleaned)) return "RECOMMENDATIONS";
@@ -115,44 +101,123 @@ function renderAssessmentCards(text: string | null) {
     if (content) sections[current].push(content);
   }
 
-  const Card = ({ title, items, icon }: { title: string; items: string[]; icon: React.ReactNode }) => (
-    <View style={styles.assessmentCard}>
-      <View style={styles.cardHeader}>
+  const PrimaryCard = ({ title, items, icon, sectionKey }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+    sectionKey: string;
+  }) => (
+    <View style={styles.primaryAssessmentCard}>
+      <View style={styles.primaryCardHeader}>
         {icon}
-        <Text style={[styles.cardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
       </View>
-      {items.map((it, idx) => (
-        <View key={idx} style={styles.cardItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{it}</Text>
-        </View>
-      ))}
+      {sectionKey === "NEXT STEPS"
+        ? items.slice(0, 4).map((it, idx) => (
+            <View key={idx} style={styles.stepRow}>
+              <View style={styles.stepNumberContainer}>
+                <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                  {it.split(':')[0] || `Step ${idx + 1}`}
+                </Text>
+                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                  {it.replace(/^.*?:\s*/, '') || it}
+                </Text>
+              </View>
+            </View>
+          ))
+        : items.slice(0, 4).map((it, idx) => (
+            <View key={idx} style={styles.cardItem}>
+              <Text style={styles.bulletPoint}>•</Text>
+              <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                {it}
+              </Text>
+            </View>
+          ))}
     </View>
   );
 
-  const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
-    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
-    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" />, color: "#3498DB" },
-    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" />, color: "#E67E22" },
-    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" />, color: "#E74C3C" },
-    "EMERGENCY RED FLAGS": { icon: <Ionicons name="warning" size={20} color="#DC3545" />, color: "#DC3545" },
-    "RURAL GUIDANCE": { icon: <Ionicons name="location" size={20} color="#16A085" />, color: "#16A085" },
-    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" />, color: "#FF6B35" },
-    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" />, color: "#28A745" },
-    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" />, color: "#6C757D" },
+  const AccordionCard = ({ title, items, icon, sectionKey }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+    sectionKey: string;
+  }) => {
+    const isExpanded = expandedSections[sectionKey] || false;
+    const previewCount = 2;
+    const previewItems = items.slice(0, previewCount);
+    return (
+      <View style={styles.accordionCard}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleSection(sectionKey)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionHeaderLeft}>
+            {icon}
+            <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6B7280"
+          />
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={styles.accordionContent}>
+            {(items.length > 0 ? items : previewItems).map((it, idx) => (
+              <View key={idx} style={styles.cardItem}>
+                <Text style={styles.bulletPoint}>•</Text>
+                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const icons: Record<SectionKey, { icon: React.ReactNode }> = {
+    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" /> },
+    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" /> },
+    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" /> },
+    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" /> },
+    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" /> },
+    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" /> },
+    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" /> },
+    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" /> },
+    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" /> },
   };
 
   return (
     <View>
-      {wantedOrder.map((key) =>
+      {prioritySections.map((key) =>
         sections[key] && sections[key].length > 0 ? (
-          <Card key={key} title={key} items={sections[key]} icon={icons[key].icon} />
+          <PrimaryCard key={key} title={key} items={sections[key]} icon={icons[key].icon} sectionKey={key} />
+        ) : null
+      )}
+      {accordionSections.map((key) =>
+        sections[key] && sections[key].length > 0 ? (
+          <AccordionCard
+            key={key}
+            title={key}
+            items={sections[key]}
+            icon={icons[key].icon}
+            sectionKey={key}
+          />
         ) : null
       )}
       {sections["OTHER"] && sections["OTHER"].length > 0 && (
-        <Card title="OTHER" items={sections["OTHER"]} icon={icons["OTHER"].icon} />
+        <AccordionCard
+          title="OTHER"
+          items={sections["OTHER"]}
+          icon={icons["OTHER"].icon}
+          sectionKey="OTHER"
+        />
       )}
     </View>
   );
@@ -167,12 +232,18 @@ export default function LogDetails() {
   const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
   const [offlineTried, setOfflineTried] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   // Metadata state to track both IDs explicitly
   const [entryMetadata, setEntryMetadata] = useState<{
     watermelonId: string | null;
     convexId: string | null;
   }>({ watermelonId: null, convexId: null });
+
+  const toggleSection = (key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Convert string to Convex ID type - but only if it looks like a Convex ID
   // Convex IDs start with 'k' or 'j' and are longer than 20 chars
@@ -651,6 +722,14 @@ export default function LogDetails() {
   }
 
   const dateTime = formatDateTime(resolvedEntry.timestamp);
+  const heroPhotos: string[] = resolvedEntry.photos || [];
+  const heroWidth = Dimensions.get("window").width - 32;
+
+  const handleHeroScroll = (event: any) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const idx = Math.round(contentOffset.x / layoutMeasurement.width);
+    setPhotoIndex(idx);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
@@ -671,10 +750,43 @@ export default function LogDetails() {
           <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.contentSection}>
               {/* Back Button */}
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={20} color="#2A7DE1" />
-                <Text style={styles.backButtonText}>Back to Log</Text>
+              <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+                <Ionicons name="arrow-back" size={18} color="#1F2937" />
+                <Text style={styles.backLinkText}>Back to log</Text>
               </TouchableOpacity>
+
+              {/* Hero photo carousel */}
+              {heroPhotos.length > 0 && (
+                <View>
+                  <View style={styles.heroImageCard}>
+                    <ScrollView
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={handleHeroScroll}
+                    >
+                      {heroPhotos.map((uri, idx) => (
+                        <Image
+                          key={`${uri}-${idx}`}
+                          source={{ uri }}
+                          style={[styles.heroImage, { width: heroWidth }]}
+                        />
+                      ))}
+                    </ScrollView>
+                    <View style={styles.heroOverlay}>
+                      <Text style={styles.heroOverlayText}>{`Photo ${photoIndex + 1} of ${heroPhotos.length}`}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.heroDots}>
+                    {heroPhotos.map((_, idx) => (
+                      <View
+                        key={`dot-${idx}`}
+                        style={[styles.heroDot, idx === photoIndex && styles.heroDotActive]}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
 
               {/* Entry Header */}
               <View style={styles.headerCard}>
@@ -727,51 +839,50 @@ export default function LogDetails() {
                           }
                         });
                       }}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons name="pencil" size={18} color="#2A7DE1" />
+                      <Ionicons name="pencil" size={20} color="#FFF" />
                       <Text style={styles.editButtonText}>Edit Entry</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.deleteButton}
+                      style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
                       onPress={confirmDelete}
                       disabled={deleting}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#DC3545" />
+                      <Ionicons name="trash-outline" size={20} color="#FFF" />
                       <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
 
-              {/* Symptoms */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="medical" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Symptoms & Description</Text>
-                </View>
-                <Text style={styles.cardContent}>{resolvedEntry.symptoms}</Text>
-              </View>
-
-              {/* Category */}
-              {resolvedEntry.category && (
+              {/* Health overview */}
+              {(resolvedEntry.symptoms || resolvedEntry.category || resolvedEntry.duration) && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
-                    <Ionicons name="pricetag" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Category</Text>
+                    <Ionicons name="pulse" size={20} color="#2563EB" />
+                    <Text style={styles.cardTitle}>Health details</Text>
                   </View>
-                  <Text style={styles.cardContent}>{resolvedEntry.category}</Text>
-                </View>
-              )}
-
-              {/* Duration */}
-              {resolvedEntry.duration && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="time" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Duration</Text>
-                  </View>
-                  <Text style={styles.cardContent}>{resolvedEntry.duration}</Text>
+                  {resolvedEntry.symptoms ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Symptoms</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.symptoms}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.category ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Category</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.category}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.duration ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Duration</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.duration}</Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
 
@@ -779,7 +890,7 @@ export default function LogDetails() {
               {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(resolvedEntry.aiContext)}
+                  {renderAssessmentCards(resolvedEntry.aiContext, expandedSections, toggleSection)}
                 </View>
               )}
 
@@ -794,51 +905,7 @@ export default function LogDetails() {
                 </View>
               )}
 
-              {/* Photos */}
-              {resolvedEntry.photos && resolvedEntry.photos.length > 0 && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="camera" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Photos ({resolvedEntry.photos.length})</Text>
-                  </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.photosContainer}>
-                      {resolvedEntry.photos.map((photo: string, index: number) => (
-                        <View key={index} style={styles.photoItem}>
-                          <Image source={{ uri: photo }} style={styles.photo} />
-                          <Text style={styles.photoLabel}>Photo {index + 1}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              )}
 
-              {/* Technical Details */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="information-circle" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Technical Details</Text>
-                </View>
-                <View style={styles.techDetails}>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry ID:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry._id}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Timestamp:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.timestamp}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Date Key:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.date}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry Type:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.type || "manual_entry"}</Text>
-                  </View>
-                </View>
-              </View>
             </View>
           </ScrollView>
         </View>
@@ -928,22 +995,69 @@ const styles = StyleSheet.create({
     color: "#666",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
-  backButton: {
+  backLink: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
-    padding: 10,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
+    marginBottom: 14,
+    gap: 6,
   },
-  backButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: "#2A7DE1",
+  backLinkText: {
+    fontSize: 15,
+    color: "#1F2937",
     fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroImageCard: {
+    borderRadius: 14,
+    overflow: "hidden",
+    marginBottom: 16,
+    backgroundColor: "#F3F4F6",
+  },
+  heroImage: {
+    width: "100%",
+    height: 220,
+  },
+  heroOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroOverlayText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroOverlaySubtext: {
+    color: "#E5E7EB",
+    fontSize: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 6,
+    gap: 8,
+  },
+  heroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#D1D5DB",
+  },
+  heroDotActive: {
+    width: 14,
+    borderRadius: 7,
+    backgroundColor: "#2A7DE1",
   },
   headerCard: {
     backgroundColor: "white",
@@ -952,11 +1066,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   headerRow: {
     flexDirection: "row",
@@ -999,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   actionButtonsContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
@@ -1010,46 +1119,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
+    backgroundColor: "#2A7DE1",
+    borderRadius: 10,
     gap: 8,
   },
   editButtonText: {
     fontSize: 15,
-    color: "#2A7DE1",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
   },
   deleteButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#FFF5F5",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#DC3545",
+    backgroundColor: "#DC3545",
+    borderRadius: 10,
     gap: 8,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: "#E57373",
+    opacity: 0.7,
   },
   deleteButtonText: {
     fontSize: 15,
-    color: "#DC3545",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
   },
   detailCard: {
-    backgroundColor: "white",
+    backgroundColor: "#FFFFFF",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E9ECEF",
+    borderColor: "#E5E7EB",
   },
   cardHeader: {
     flexDirection: "row",
@@ -1069,6 +1180,26 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: FONTS.BarlowSemiCondensed,
   },
+  infoRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2F4F7",
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontWeight: "600",
+  },
+  infoValue: {
+    fontSize: 15,
+    color: "#111827",
+    lineHeight: 22,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
   // Assessment card styles (match assessment-results)
   assessmentCard: {
     backgroundColor: "#F0F8FF",
@@ -1077,11 +1208,92 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#2A7DE1",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+  },
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  primaryCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  accordionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  // Next Steps timeline (match assessment-results)
+  stepRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  stepNumberContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
   },
   cardItem: {
     flexDirection: "row",
