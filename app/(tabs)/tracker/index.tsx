@@ -69,12 +69,27 @@ export default function Tracker() {
                 setEntriesByDate(grouped);
               }, [allEntries]);
 
-              // Entries to display based on selection/month/filters
+              // Entries to display based on selection/month/week/filters
               const displayEntries = useMemo(() => {
                 let filtered = [];
                 if (selectedDate) {
                   filtered = entriesByDate[selectedDate] || [];
+                } else if (viewMode === "week") {
+                  // Filter by current week
+                  const start = new Date(anchorDate);
+                  start.setHours(0, 0, 0, 0);
+                  start.setDate(anchorDate.getDate() - anchorDate.getDay()); // Sunday start
+                  
+                  const end = new Date(start);
+                  end.setDate(start.getDate() + 6);
+                  end.setHours(23, 59, 59, 999);
+                  
+                  filtered = allEntries.filter((entry: any) => {
+                    const dt = new Date(entry.timestamp);
+                    return dt >= start && dt <= end;
+                  });
                 } else {
+                  // Filter by current month
                   filtered = allEntries.filter((entry: any) => {
                     const dt = new Date(entry.timestamp);
                     return (
@@ -123,7 +138,7 @@ export default function Tracker() {
                 }
                 
                 return filtered;
-              }, [selectedDate, entriesByDate, allEntries, currentMonth, searchQuery, severityFilter, categoryFilter]);
+              }, [selectedDate, entriesByDate, allEntries, currentMonth, anchorDate, viewMode, searchQuery, severityFilter, categoryFilter]);
 
               return (
                 <SafeAreaView style={styles.safeArea} edges={isOnline ? ["top", "bottom"] : ["bottom"]}>
@@ -368,19 +383,17 @@ export default function Tracker() {
                             </View>
 
                             {entriesByDate[clickedDate] && entriesByDate[clickedDate].length > 0 ? (
-                              entriesByDate[clickedDate].map((entry: any) => (
-                                <View key={entry._id} style={styles.entryDetailCard}>
+                              entriesByDate[clickedDate].map((entry: any, index: number) => (
+                                <View key={entry._id} style={[styles.entryDetailCard, index > 0 && styles.entryCardSpacing]}>
                                   {/* Symptom/Description */}
                                   <View style={styles.entryDetailField}>
                                     <Text style={[styles.entryDetailLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>WHAT HAPPENED</Text>
-                                    <View style={styles.entryDetailBox}>
-                                      <Text style={[styles.entryDetailValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                        {entry.symptoms || entry.description || '(no description)'}
-                                      </Text>
-                                    </View>
+                                    <Text style={[styles.entryDetailValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                      {entry.symptoms || entry.description || '(no description)'}
+                                    </Text>
                                   </View>
 
-                                  {/* Category Pills */}
+                                  {/* Category and Severity Pills */}
                                   <View style={styles.categoryPillsContainer}>
                                     {entry.type && (
                                       <View style={styles.categoryPill}>
@@ -407,6 +420,17 @@ export default function Tracker() {
                                       </View>
                                     )}
                                   </View>
+
+                                  {/* View More Details Button */}
+                                  <TouchableOpacity 
+                                    style={styles.viewMoreButton}
+                                    onPress={() => router.push({ 
+                                      pathname: "/tracker/log-details", 
+                                      params: { entryId: entry._id, convexId: entry?.convexId || "" } 
+                                    })}
+                                  >
+                                    <Text style={[styles.viewMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>View more details →</Text>
+                                  </TouchableOpacity>
                                 </View>
                               ))
                             ) : (
@@ -419,6 +443,87 @@ export default function Tracker() {
                                 >
                                   <Text style={[styles.addLogButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>+ Add Log Entry</Text>
                                 </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        )}
+
+                        {/* All Entries for Month/Week Section */}
+                        {!clickedDate && (
+                          <View style={styles.allEntriesSection}>
+                            <Text style={[styles.allEntriesTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                              {viewMode === "month" 
+                                ? `${currentMonth.toLocaleString("default", { month: "long", year: "numeric" })} (${displayEntries.length})`
+                                : `Week of ${anchorDate.toLocaleString("default", { month: "long", day: "numeric" })} (${displayEntries.length})`
+                              }
+                            </Text>
+
+                            {displayEntries.length > 0 ? (
+                              displayEntries.map((entry: any, index: number) => (
+                                <View key={entry._id} style={[styles.entryDetailCard, styles.lightCard, index > 0 && styles.entryCardSpacing]}>
+                                  {/* Date/Time */}
+                                  <Text style={[styles.entryTimestamp, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                    {new Date(entry.timestamp).toLocaleString('default', { 
+                                      month: 'short', 
+                                      day: 'numeric',
+                                      hour: 'numeric',
+                                      minute: '2-digit'
+                                    })}
+                                  </Text>
+
+                                  {/* Symptom/Description */}
+                                  <View style={styles.entryDetailField}>
+                                    <Text style={[styles.entryDetailLabel, styles.lightLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>WHAT HAPPENED</Text>
+                                    <Text style={[styles.entryDetailValue, styles.lightValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                      {entry.symptoms || entry.description || '(no description)'}
+                                    </Text>
+                                  </View>
+
+                                  {/* Category and Severity Pills */}
+                                  <View style={styles.categoryPillsContainer}>
+                                    {entry.type && (
+                                      <View style={styles.categoryPill}>
+                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                          {entry.type === 'burns_heat' ? 'Burns & Heat' :
+                                           entry.type === 'trauma_injuries' ? 'Trauma & Injuries' :
+                                           entry.type === 'infections' ? 'Infections' :
+                                           entry.type === 'skin_rash' ? 'Skin and Rash' :
+                                           entry.type === 'cold_frostbite' ? 'Cold & Frostbite' :
+                                           entry.type === 'others' ? 'Others' : entry.type}
+                                        </Text>
+                                      </View>
+                                    )}
+                                    {entry.severity && typeof entry.severity === 'string' && (
+                                      <View style={[
+                                        styles.categoryPill,
+                                        entry.severity === 'severe' && styles.severePill,
+                                        entry.severity === 'moderate' && styles.moderatePill,
+                                        entry.severity === 'mild' && styles.mildPill
+                                      ]}>
+                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                          {entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1)}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+
+                                  {/* View More Details Button */}
+                                  <TouchableOpacity 
+                                    style={styles.viewMoreButton}
+                                    onPress={() => router.push({ 
+                                      pathname: "/tracker/log-details", 
+                                      params: { entryId: entry._id, convexId: entry?.convexId || "" } 
+                                    })}
+                                  >
+                                    <Text style={[styles.viewMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>View more details →</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              ))
+                            ) : (
+                              <View style={styles.emptyState}>
+                                <Text style={[styles.emptyStateText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  No entries for this {viewMode === "month" ? "month" : "week"}
+                                </Text>
                               </View>
                             )}
                           </View>
@@ -444,7 +549,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-    paddingTop: 40,
+    paddingTop: 16,
     paddingBottom: 100,
   },
   toolbar: {
@@ -588,15 +693,15 @@ const styles = StyleSheet.create({
   },
   calendarContainer: {
     backgroundColor: "#F8F9FA",
-    padding: 16,
+    padding: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    marginBottom: 24,
+    marginBottom: 10,
   },
   viewModeToggle: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 10,
     backgroundColor: "#E9ECEF",
     borderRadius: 8,
     padding: 4,
@@ -623,7 +728,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   monthTitle: {
     fontSize: 18,
@@ -640,7 +745,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#666",
-    marginBottom: 12,
+    marginBottom: 6,
   },
   dayCell: {
     width: "14.28%",
@@ -648,7 +753,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   dayCellWithEntries: {
     backgroundColor: "#E3F2FD",
@@ -753,41 +858,80 @@ const styles = StyleSheet.create({
     fontWeight: "300",
   },
   entryDetailCard: {
-    marginBottom: 16,
+    backgroundColor: "#374151",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#4B5563",
+  },
+  entryCardSpacing: {
+    marginTop: 8,
   },
   entryDetailField: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   entryDetailLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: "#9CA3AF",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  entryDetailBox: {
-    backgroundColor: "#374151",
-    borderRadius: 12,
-    padding: 14,
+    marginBottom: 4,
   },
   entryDetailValue: {
-    fontSize: 15,
+    fontSize: 14,
     color: "#FFFFFF",
-    lineHeight: 22,
+    lineHeight: 18,
   },
   categoryPillsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 6,
+    marginBottom: 8,
+  },
+  viewMoreButton: {
+    alignSelf: "flex-end",
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+  },
+  viewMoreText: {
+    fontSize: 13,
+    color: "#60A5FA",
+    fontWeight: "500",
+  },
+  // All Entries Section
+  allEntriesSection: {
+    marginTop: 16,
+  },
+  allEntriesTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 12,
+  },
+  lightCard: {
+    backgroundColor: "#F9FAFB",
+    borderColor: "#E5E7EB",
+  },
+  lightLabel: {
+    color: "#6B7280",
+  },
+  lightValue: {
+    color: "#1F2937",
+  },
+  entryTimestamp: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginBottom: 6,
+    fontWeight: "500",
   },
   categoryPill: {
     backgroundColor: "#4B5563",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
   categoryPillText: {
-    fontSize: 13,
+    fontSize: 12,
     color: "#FFFFFF",
     fontWeight: "500",
   },
