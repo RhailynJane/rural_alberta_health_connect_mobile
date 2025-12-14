@@ -23,8 +23,7 @@ export default function Tracker() {
   const [severityFilter, setSeverityFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
-  const [showEntryDetailModal, setShowEntryDetailModal] = useState(false);
+  const [clickedDate, setClickedDate] = useState<string | null>(null);
 
   // Get reminder settings
   const reminderSettings = useQuery(
@@ -307,8 +306,10 @@ export default function Tracker() {
                                   <TouchableOpacity
                                     key={`day-${key}`}
                                     style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
-                                    onPress={() => { if (hasEntries) setSelectedDate(isSelected ? null : key); }}
-                                    disabled={!hasEntries}
+                                    onPress={() => {
+                                      setClickedDate(key);
+                                      setSelectedDate(key);
+                                    }}
                                   >
                                     <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
                                     {hasEntries && (
@@ -333,8 +334,10 @@ export default function Tracker() {
                                     <TouchableOpacity
                                       key={`day-${key}`}
                                       style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
-                                      onPress={() => { if (hasEntries) setSelectedDate(isSelected ? null : key); }}
-                                      disabled={!hasEntries}
+                                      onPress={() => {
+                                        setClickedDate(key);
+                                        setSelectedDate(key);
+                                      }}
                                     >
                                       <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{d.getDate()}</Text>
                                       {hasEntries && (
@@ -348,119 +351,82 @@ export default function Tracker() {
                           </View>
                         </View>
 
-                        {/* Entries List */}
-                        <View style={styles.entriesList}>
-                          <Text style={[styles.entriesTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}> 
-                            {selectedDate
-                              ? `${new Date(selectedDate + "T00:00:00").toLocaleString("default", { month: "long", day: "numeric" })} (${displayEntries.length})`
-                              : `${currentMonth.toLocaleString("default", { month: "long", year: "numeric" })} (${displayEntries.length})`}
-                          </Text>
-
-                          {displayEntries.length > 0 ? (
-                            displayEntries.map((entry: any) => (
-                              <TouchableOpacity 
-                                key={entry._id} 
-                                style={styles.entryItem} 
-                                onPress={() => {
-                                  setSelectedEntry(entry);
-                                  setShowEntryDetailModal(true);
-                                }}
-                              >
-                                <View style={styles.entryContent}>
-                                  <View style={styles.entryHeader}>
-                                    <Text style={[styles.entryDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{new Date(entry.timestamp).toLocaleString()}</Text>
-                                    <View style={styles.severityBadge}><Text style={styles.entrySeverity}>Severity</Text></View>
-                                  </View>
-                                  <Text style={[styles.entryDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>{entry.symptoms || entry.description || "(no description)"}</Text>
-                                  <View style={styles.viewDetailsIndicator}><Text style={styles.viewDetailsText}>Tap to view details</Text></View>
-                                </View>
+                        {/* Entry Details Section */}
+                        {clickedDate && (
+                          <View style={styles.entryDetailsSection}>
+                            <View style={styles.entryDetailsHeader}>
+                              <Text style={[styles.entryDetailsDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                {new Date(clickedDate + 'T00:00:00').toLocaleString('default', { 
+                                  month: 'long', 
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </Text>
+                              <TouchableOpacity onPress={() => { setClickedDate(null); setSelectedDate(null); }}>
+                                <Text style={styles.closeDetailsText}>✕</Text>
                               </TouchableOpacity>
-                            ))
-                          ) : (
-                            <View style={styles.emptyState}><Text style={[styles.emptyStateText, { fontFamily: FONTS.BarlowSemiCondensed }]}>No entries</Text></View>
-                          )}
-                        </View>
+                            </View>
+
+                            {entriesByDate[clickedDate] && entriesByDate[clickedDate].length > 0 ? (
+                              entriesByDate[clickedDate].map((entry: any) => (
+                                <View key={entry._id} style={styles.entryDetailCard}>
+                                  {/* Symptom/Description */}
+                                  <View style={styles.entryDetailField}>
+                                    <Text style={[styles.entryDetailLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>WHAT HAPPENED</Text>
+                                    <View style={styles.entryDetailBox}>
+                                      <Text style={[styles.entryDetailValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                        {entry.symptoms || entry.description || '(no description)'}
+                                      </Text>
+                                    </View>
+                                  </View>
+
+                                  {/* Category Pills */}
+                                  <View style={styles.categoryPillsContainer}>
+                                    {entry.type && (
+                                      <View style={styles.categoryPill}>
+                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                          {entry.type === 'burns_heat' ? 'Burns & Heat' :
+                                           entry.type === 'trauma_injuries' ? 'Trauma & Injuries' :
+                                           entry.type === 'infections' ? 'Infections' :
+                                           entry.type === 'skin_rash' ? 'Skin and Rash' :
+                                           entry.type === 'cold_frostbite' ? 'Cold & Frostbite' :
+                                           entry.type === 'others' ? 'Others' : entry.type}
+                                        </Text>
+                                      </View>
+                                    )}
+                                    {entry.severity && typeof entry.severity === 'string' && (
+                                      <View style={[
+                                        styles.categoryPill,
+                                        entry.severity === 'severe' && styles.severePill,
+                                        entry.severity === 'moderate' && styles.moderatePill,
+                                        entry.severity === 'mild' && styles.mildPill
+                                      ]}>
+                                        <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                          {entry.severity.charAt(0).toUpperCase() + entry.severity.slice(1)}
+                                        </Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                              ))
+                            ) : (
+                              /* No entries state */
+                              <View style={styles.noEntriesCard}>
+                                <Text style={[styles.noEntriesText, { fontFamily: FONTS.BarlowSemiCondensed }]}>No entries on this day</Text>
+                                <TouchableOpacity 
+                                  style={styles.addLogButton}
+                                  onPress={handleAddLogEntry}
+                                >
+                                  <Text style={[styles.addLogButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>+ Add Log Entry</Text>
+                                </TouchableOpacity>
+                              </View>
+                            )}
+                          </View>
+                        )}
                       </View>
                     </ScrollView>
 
-                    {/* Entry Detail Modal */}
-                    <Modal
-                      visible={showEntryDetailModal}
-                      transparent={true}
-                      animationType="fade"
-                      onRequestClose={() => setShowEntryDetailModal(false)}
-                    >
-                      <TouchableOpacity 
-                        style={styles.entryDetailOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowEntryDetailModal(false)}
-                      >
-                        <TouchableOpacity 
-                          style={styles.entryDetailCard}
-                          activeOpacity={1}
-                          onPress={(e) => e.stopPropagation()}
-                        >
-                          <View style={styles.entryDetailHeader}>
-                            <Text style={[styles.entryDetailDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                              {selectedEntry ? new Date(selectedEntry.timestamp).toLocaleString('default', { 
-                                month: 'long', 
-                                day: 'numeric',
-                                year: 'numeric'
-                              }) : ''}
-                            </Text>
-                            <TouchableOpacity onPress={() => setShowEntryDetailModal(false)}>
-                              <Text style={styles.entryDetailClose}>✕</Text>
-                            </TouchableOpacity>
-                          </View>
 
-                          <ScrollView 
-                            style={styles.entryDetailScroll}
-                            contentContainerStyle={styles.entryDetailContent}
-                            showsVerticalScrollIndicator={false}
-                          >
-                            {/* Symptom/Description */}
-                            <View style={styles.entryDetailSection}>
-                              <Text style={[styles.entryDetailLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>What Happened</Text>
-                              <View style={styles.entryDetailBox}>
-                                <Text style={[styles.entryDetailValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                  {selectedEntry?.symptoms || selectedEntry?.description || '(no description)'}
-                                </Text>
-                              </View>
-                            </View>
-
-                            {/* Category Pills */}
-                            <View style={styles.entryDetailSection}>
-                              <View style={styles.categoryPills}>
-                                {selectedEntry?.type && (
-                                  <View style={styles.categoryPill}>
-                                    <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                      {selectedEntry.type === 'burns_heat' ? 'Burns & Heat' :
-                                       selectedEntry.type === 'trauma_injuries' ? 'Trauma & Injuries' :
-                                       selectedEntry.type === 'infections' ? 'Infections' :
-                                       selectedEntry.type === 'skin_rash' ? 'Skin and Rash' :
-                                       selectedEntry.type === 'cold_frostbite' ? 'Cold & Frostbite' :
-                                       selectedEntry.type === 'others' ? 'Others' : selectedEntry.type}
-                                    </Text>
-                                  </View>
-                                )}
-                                {selectedEntry?.severity && typeof selectedEntry.severity === 'string' && (
-                                  <View style={[
-                                    styles.categoryPill,
-                                    selectedEntry.severity === 'severe' && styles.severePill,
-                                    selectedEntry.severity === 'moderate' && styles.moderatePill,
-                                    selectedEntry.severity === 'mild' && styles.mildPill
-                                  ]}>
-                                    <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                                      {selectedEntry.severity.charAt(0).toUpperCase() + selectedEntry.severity.slice(1)}
-                                    </Text>
-                                  </View>
-                                )}
-                              </View>
-                            </View>
-                          </ScrollView>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    </Modal>
                   </CurvedBackground>
                   <BottomNavigation />
                 </SafeAreaView>
@@ -759,27 +725,15 @@ const styles = StyleSheet.create({
     color: "#2A7DE1",
     fontWeight: "600",
   },
-  // Entry Detail Modal Styles
-  entryDetailOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  entryDetailCard: {
+  // Entry Details Section Styles (inline below calendar)
+  entryDetailsSection: {
     backgroundColor: "#1F2937",
-    borderRadius: 20,
-    width: "90%",
-    maxWidth: 400,
+    borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    marginTop: 20,
+    marginBottom: 16,
   },
-  entryDetailHeader: {
+  entryDetailsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -788,30 +742,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#374151",
   },
-  entryDetailDate: {
+  entryDetailsDate: {
     fontSize: 18,
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  entryDetailClose: {
+  closeDetailsText: {
     fontSize: 24,
     color: "#9CA3AF",
     fontWeight: "300",
   },
-  entryDetailScroll: {
-    maxHeight: 400,
+  entryDetailCard: {
+    marginBottom: 16,
   },
-  entryDetailContent: {
-    gap: 16,
-  },
-  entryDetailSection: {
-    gap: 8,
+  entryDetailField: {
+    marginBottom: 16,
   },
   entryDetailLabel: {
     fontSize: 12,
     color: "#9CA3AF",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+    marginBottom: 8,
   },
   entryDetailBox: {
     backgroundColor: "#374151",
@@ -823,7 +775,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     lineHeight: 22,
   },
-  categoryPills: {
+  categoryPillsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
@@ -847,6 +799,28 @@ const styles = StyleSheet.create({
   },
   mildPill: {
     backgroundColor: "#10B981",
+  },
+  noEntriesCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  noEntriesText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  addLogButton: {
+    backgroundColor: "#2A7DE1",
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 25,
+  },
+  addLogButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
   },
   emptyState: {
     backgroundColor: "#F8F9FA",
