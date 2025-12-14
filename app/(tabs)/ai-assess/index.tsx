@@ -6,9 +6,11 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Keyboard,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +26,7 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import { useWoundLLM } from "../../../utils/llm";
 
 // AI Context Types
 type SymptomCategory =
@@ -86,6 +89,22 @@ export default function SymptomAssessment() {
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [selectedBodyParts] = useState<BodyPart[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // On-device LLM state (Android only)
+  const {
+    isAvailable: llmAvailable,
+    isReady: llmReady,
+    isLoading: llmLoading,
+    downloadProgress: llmProgress,
+    error: llmError,
+  } = useWoundLLM();
+  const [llmCardDismissed, setLlmCardDismissed] = useState(false);
+
+  // AI Source Selection: "cloud" (Gemini) or "device" (ExecuTorch)
+  // Default to cloud when online, device when offline (if ready)
+  const [aiSource, setAiSource] = useState<"cloud" | "device">(
+    isOnline ? "cloud" : (llmReady ? "device" : "cloud")
+  );
   
   // Error modal state
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -173,6 +192,33 @@ export default function SymptomAssessment() {
       return;
     }
 
+    // Block if on-device selected but model not ready
+    if (aiSource === "device" && !llmReady) {
+      setAlertModalTitle("On-Device AI Not Ready");
+      setAlertModalMessage(
+        llmLoading
+          ? "The AI model is still downloading. Please wait for the download to complete, or switch to Cloud AI."
+          : "The on-device AI model needs to be downloaded first. Please wait for the download or switch to Cloud AI."
+      );
+      setAlertModalButtons([
+        {
+          label: "Use Cloud AI",
+          onPress: () => {
+            setAiSource("cloud");
+            setAlertModalVisible(false);
+          },
+          variant: "primary",
+        },
+        {
+          label: "Wait",
+          onPress: () => setAlertModalVisible(false),
+          variant: "secondary",
+        },
+      ]);
+      setAlertModalVisible(true);
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -204,6 +250,7 @@ export default function SymptomAssessment() {
           description: symptomDescription,
           photos: JSON.stringify(uploadedPhotos), // Pass URIs, will convert later
           aiContext: JSON.stringify(initialAiContext),
+          aiSource: aiSource, // Pass user's AI source preference
         },
       });
     } catch (error) {
@@ -397,6 +444,139 @@ export default function SymptomAssessment() {
               >
                 Select a category or describe what you&apos;re experiencing
               </Text>
+
+              {/* AI Source Selection Card */}
+              {Platform.OS === 'android' && llmAvailable && (
+                <View style={styles.aiSourceCard}>
+                  <View style={styles.aiSourceHeader}>
+                    <Ionicons name="settings" size={20} color="#2A7DE1" />
+                    <Text style={[styles.aiSourceTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      AI Assessment Engine
+                    </Text>
+                  </View>
+
+                  {/* Toggle Buttons */}
+                  <View style={styles.aiSourceToggle}>
+                    <TouchableOpacity
+                      style={[
+                        styles.aiSourceOption,
+                        aiSource === "cloud" && styles.aiSourceOptionActive,
+                        !isOnline && styles.aiSourceOptionDisabled,
+                      ]}
+                      onPress={() => isOnline && setAiSource("cloud")}
+                      disabled={!isOnline}
+                    >
+                      <Ionicons
+                        name="cloud"
+                        size={18}
+                        color={aiSource === "cloud" ? "#fff" : (isOnline ? "#2A7DE1" : "#999")}
+                      />
+                      <Text style={[
+                        styles.aiSourceOptionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        aiSource === "cloud" && styles.aiSourceOptionTextActive,
+                        !isOnline && styles.aiSourceOptionTextDisabled,
+                      ]}>
+                        Cloud AI
+                      </Text>
+                      {!isOnline && (
+                        <Text style={[styles.aiSourceOptionSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          (offline)
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.aiSourceOption,
+                        aiSource === "device" && styles.aiSourceOptionActive,
+                        !llmReady && styles.aiSourceOptionDisabled,
+                      ]}
+                      onPress={() => llmReady && setAiSource("device")}
+                      disabled={!llmReady}
+                    >
+                      <Ionicons
+                        name="hardware-chip"
+                        size={18}
+                        color={aiSource === "device" ? "#fff" : (llmReady ? "#FF6B35" : "#999")}
+                      />
+                      <Text style={[
+                        styles.aiSourceOptionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                        aiSource === "device" && styles.aiSourceOptionTextActive,
+                        !llmReady && styles.aiSourceOptionTextDisabled,
+                      ]}>
+                        On-Device
+                      </Text>
+                      {/* Status indicator */}
+                      {llmReady ? (
+                        <View style={styles.llmReadyBadge}>
+                          <Ionicons name="checkmark-circle" size={14} color="#28A745" />
+                        </View>
+                      ) : (
+                        <Text style={[styles.aiSourceOptionSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {llmLoading ? `${llmProgress.toFixed(0)}%` : ""}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Status Message */}
+                  <Text style={[styles.aiSourceDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {aiSource === "cloud"
+                      ? "Gemini AI: comprehensive medical assessment."
+                      : "On-device AI: private, works offline."}
+                  </Text>
+
+                  {/* Download Progress (if downloading) */}
+                  {llmLoading && (
+                    <View style={styles.llmProgressContainer}>
+                      <View style={styles.llmProgressBar}>
+                        <View style={[styles.llmProgressFill, { width: `${llmProgress}%` }]} />
+                      </View>
+                      <Text style={[styles.llmProgressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Downloading AI model ({llmProgress.toFixed(0)}%)
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Model Ready indicator */}
+                  {llmReady && !llmLoading && (
+                    <View style={styles.llmReadyContainer}>
+                      <Ionicons name="checkmark-circle" size={16} color="#28A745" />
+                      <Text style={[styles.llmReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        On-device AI ready
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Not downloaded yet (online) */}
+                  {!llmReady && !llmLoading && isOnline && (
+                    <View style={styles.llmNotReadyContainer}>
+                      <Ionicons name="cloud-download" size={16} color="#2A7DE1" />
+                      <Text style={[styles.llmNotReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        On-device model downloading in background...
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Warning: Offline but LLM not ready */}
+                  {!isOnline && !llmReady && !llmLoading && (
+                    <View style={styles.llmOfflineWarning}>
+                      <Ionicons name="warning" size={16} color="#DC3545" />
+                      <Text style={[styles.llmOfflineWarningText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Offline. Connect to download on-device AI.
+                      </Text>
+                    </View>
+                  )}
+
+                  {llmError && (
+                    <Text style={[styles.llmErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      {llmError}
+                    </Text>
+                  )}
+                </View>
+              )}
 
               <TouchableOpacity
                 style={[
@@ -732,7 +912,7 @@ export default function SymptomAssessment() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {isProcessing ? "Processing..." : "Continue to Severity"}
+                    {isProcessing ? "Processing..." : "Continue"}
                   </Text>
                   {!isProcessing && (
                     <Ionicons name="arrow-forward" size={20} color="white" />
@@ -1144,5 +1324,172 @@ const styles = StyleSheet.create({
   },
   alertSecondaryButtonText: {
     color: COLORS.primary,
+  },
+  // AI Source Card Styles
+  aiSourceCard: {
+    backgroundColor: "#F8F9FA",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  aiSourceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  aiSourceTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginLeft: 8,
+  },
+  aiSourceToggle: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+  },
+  aiSourceOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    gap: 6,
+  },
+  aiSourceOptionActive: {
+    backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
+  },
+  aiSourceOptionDisabled: {
+    backgroundColor: "#F0F0F0",
+    borderColor: "#E0E0E0",
+  },
+  aiSourceOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1A1A1A",
+  },
+  aiSourceOptionTextActive: {
+    color: "#fff",
+  },
+  aiSourceOptionTextDisabled: {
+    color: "#999",
+  },
+  aiSourceOptionSubtext: {
+    fontSize: 11,
+    color: "#999",
+  },
+  aiSourceDescription: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  // LLM Status Card Styles (legacy, some still used)
+  llmStatusCard: {
+    backgroundColor: "#F8F9FA",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+  },
+  llmStatusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  llmStatusTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1A1A1A",
+    marginLeft: 8,
+    flex: 1,
+  },
+  llmDismissButton: {
+    padding: 4,
+  },
+  llmStatusDescription: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  llmProgressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+  },
+  llmProgressBar: {
+    flex: 1,
+    height: 8,
+    backgroundColor: "#E9ECEF",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  llmProgressFill: {
+    height: "100%",
+    backgroundColor: "#2A7DE1",
+    borderRadius: 4,
+  },
+  llmProgressText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2A7DE1",
+    marginLeft: 12,
+    minWidth: 40,
+  },
+  llmOfflineWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#FFF5F5",
+    borderRadius: 6,
+  },
+  llmOfflineWarningText: {
+    fontSize: 13,
+    color: "#DC3545",
+    marginLeft: 6,
+  },
+  llmErrorText: {
+    fontSize: 13,
+    color: "#DC3545",
+    marginTop: 8,
+  },
+  llmReadyBadge: {
+    marginLeft: 4,
+  },
+  llmReadyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#F0FFF4",
+    borderRadius: 6,
+  },
+  llmReadyText: {
+    fontSize: 13,
+    color: "#28A745",
+    marginLeft: 6,
+    fontWeight: "600",
+  },
+  llmNotReadyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: "#F0F8FF",
+    borderRadius: 6,
+  },
+  llmNotReadyText: {
+    fontSize: 13,
+    color: "#2A7DE1",
+    marginLeft: 6,
   },
 });

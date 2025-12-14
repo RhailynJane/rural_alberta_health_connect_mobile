@@ -13,7 +13,8 @@
     "additionalDirectories": [
       "/Users/yuezhou/projs/Papillon",
       "/Users/yuezhou/projs/ort-rn-basic-usage",
-      "/Users/yuezhou/.config/nvim"
+      "/Users/yuezhou/.config/nvim",
+      "/Users/yuezhou/projs/"
     ]
   }
 }

@@ -10,6 +10,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { database } from '../watermelon/database';
+import { LLMHost } from '../utils/llm/LLMHost';
 import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
@@ -255,6 +256,8 @@ export default function RootLayout() {
           <SyncProvider>
             <NotificationProvider>
               <SignUpFormProvider>
+                {/* LLM Host - singleton model manager (persists across tab switches) */}
+                <LLMHost />
                 <RootLayoutContent
                   notificationBanner={notificationBanner}
                   setNotificationBanner={setNotificationBanner}
