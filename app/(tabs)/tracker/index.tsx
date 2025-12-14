@@ -16,6 +16,7 @@ export default function Tracker() {
   const { isOnline } = useNetworkStatus();
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [anchorDate, setAnchorDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [entriesByDate, setEntriesByDate] = useState<{ [key: string]: any[] }>({});
 
@@ -112,17 +113,33 @@ export default function Tracker() {
                             </TouchableOpacity>
                           </View>
 
-                          {/* Month Navigation */}
+                          {/* Navigation Header */}
                           <View style={styles.monthHeader}>
-                            <TouchableOpacity onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}>
-                              <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{"<"}</Text>
-                            </TouchableOpacity>
-                            <Text style={[styles.monthTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                              {currentMonth.toLocaleString("default", { month: "long", year: "numeric" })}
-                            </Text>
-                            <TouchableOpacity onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}>
-                              <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{">"}</Text>
-                            </TouchableOpacity>
+                            {viewMode === "month" ? (
+                              <>
+                                <TouchableOpacity onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}>
+                                  <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{"<"}</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.monthTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  {currentMonth.toLocaleString("default", { month: "long", year: "numeric" })}
+                                </Text>
+                                <TouchableOpacity onPress={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}>
+                                  <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{">"}</Text>
+                                </TouchableOpacity>
+                              </>
+                            ) : (
+                              <>
+                                <TouchableOpacity onPress={() => setAnchorDate(new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() - 7))}>
+                                  <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{"<"}</Text>
+                                </TouchableOpacity>
+                                <Text style={[styles.monthTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  {`Week of ${anchorDate.toLocaleString("default", { month: "long", day: "numeric", year: "numeric" })}`}
+                                </Text>
+                                <TouchableOpacity onPress={() => setAnchorDate(new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + 7))}>
+                                  <Text style={{ color: "#2A7DE1", fontSize: 16 }}>{">"}</Text>
+                                </TouchableOpacity>
+                              </>
+                            )}
                           </View>
 
                           {/* Calendar Grid */}
@@ -131,29 +148,60 @@ export default function Tracker() {
                               <Text key={`header-${day}`} style={[styles.dayHeader, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day}</Text>
                             ))}
 
-                            {Array.from({ length: 42 }).map((_, index) => {
-                              const dayNumber = index - (new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay()) + 1;
-                              const inMonth = dayNumber > 0 && dayNumber <= (new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate());
-                              if (!inMonth) return <View key={`empty-${index}`} style={styles.dayCell} />;
-                              const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dayNumber);
-                              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                              const dayEntries = entriesByDate[key] || [];
-                              const hasEntries = dayEntries.length > 0;
-                              const isSelected = selectedDate === key;
-                              return (
-                                <TouchableOpacity
-                                  key={`day-${key}`}
-                                  style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
-                                  onPress={() => { if (hasEntries) setSelectedDate(isSelected ? null : key); }}
-                                  disabled={!hasEntries}
-                                >
-                                  <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
-                                  {hasEntries && (
-                                    <Text style={[styles.entryIndicator, isSelected && { color: "#FFF" }]}>{dayEntries.length > 1 ? `${dayEntries.length} entries` : "1 entry"}</Text>
-                                  )}
-                                </TouchableOpacity>
-                              );
-                            })}
+                            {viewMode === "month" ? (
+                              Array.from({ length: 42 }).map((_, index) => {
+                                const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
+                                const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+                                const dayNumber = index - firstDay + 1;
+                                const inMonth = dayNumber > 0 && dayNumber <= daysInMonth;
+                                if (!inMonth) return <View key={`empty-${index}`} style={styles.dayCell} />;
+                                const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dayNumber);
+                                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                const dayEntries = entriesByDate[key] || [];
+                                const hasEntries = dayEntries.length > 0;
+                                const isSelected = selectedDate === key;
+                                return (
+                                  <TouchableOpacity
+                                    key={`day-${key}`}
+                                    style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
+                                    onPress={() => { if (hasEntries) setSelectedDate(isSelected ? null : key); }}
+                                    disabled={!hasEntries}
+                                  >
+                                    <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
+                                    {hasEntries && (
+                                      <Text style={[styles.entryIndicator, isSelected && { color: "#FFF" }]}>{dayEntries.length > 1 ? `${dayEntries.length} entries` : "1 entry"}</Text>
+                                    )}
+                                  </TouchableOpacity>
+                                );
+                              })
+                            ) : (
+                              (() => {
+                                const start = new Date(anchorDate);
+                                start.setHours(0,0,0,0);
+                                start.setDate(anchorDate.getDate() - anchorDate.getDay()); // Sunday start
+                                return Array.from({ length: 7 }).map((_, i) => {
+                                  const d = new Date(start);
+                                  d.setDate(start.getDate() + i);
+                                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                                  const dayEntries = entriesByDate[key] || [];
+                                  const hasEntries = dayEntries.length > 0;
+                                  const isSelected = selectedDate === key;
+                                  return (
+                                    <TouchableOpacity
+                                      key={`day-${key}`}
+                                      style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
+                                      onPress={() => { if (hasEntries) setSelectedDate(isSelected ? null : key); }}
+                                      disabled={!hasEntries}
+                                    >
+                                      <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{d.getDate()}</Text>
+                                      {hasEntries && (
+                                        <Text style={[styles.entryIndicator, isSelected && { color: "#FFF" }]}>{dayEntries.length > 1 ? `${dayEntries.length} entries` : "1 entry"}</Text>
+                                      )}
+                                    </TouchableOpacity>
+                                  );
+                                });
+                              })()
+                            )}
                           </View>
                         </View>
 
