@@ -1,7 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -18,6 +17,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import DatePicker from "react-native-date-picker";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { safeWrite } from "../../../watermelon/utils/safeWrite";
@@ -350,23 +350,15 @@ export default function AddHealthEntry() {
   };
 
   // Handle date picker change
-  const handleDateChange = (event: any, date?: Date) => {
-    if (Platform.OS === "android") {
-      setShowDatePicker(false);
-    }
-    if (date) {
-      setSelectedDate(date);
-    }
+  const handleDateChange = (date: Date) => {
+    setSelectedDate(date);
+    setShowDatePicker(false);
   };
 
   // Handle time picker change
-  const handleTimeChange = (event: any, date?: Date) => {
-    if (Platform.OS === "android") {
-      setShowTimePicker(false);
-    }
-    if (date) {
-      setSelectedTime(date);
-    }
+  const handleTimeChange = (date: Date) => {
+    setSelectedTime(date);
+    setShowTimePicker(false);
   };
 
   // Create timestamp from date and time
@@ -919,47 +911,17 @@ export default function AddHealthEntry() {
                     {formatDate(selectedDate)}
                   </Text>
                 </TouchableOpacity>
-                {/* Date Picker - iOS Modal with backdrop dismissal */}
-                {showDatePicker && Platform.OS === "ios" && (
-                  <Modal
-                    visible={showDatePicker}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowDatePicker(false)}
-                  >
-                    <TouchableOpacity
-                      style={styles.datePickerModalOverlay}
-                      activeOpacity={1}
-                      onPress={() => setShowDatePicker(false)}
-                    >
-                      <View style={styles.datePickerContainer}>
-                        <View style={styles.datePickerHeader}>
-                          <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                            <Text style={styles.datePickerDoneButton}>Done</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                          value={selectedDate}
-                          mode="date"
-                          display="spinner"
-                          onChange={handleDateChange}
-                          maximumDate={new Date()}
-                          themeVariant="light"
-                          style={styles.dateTimePicker}
-                        />
-                      </View>
-                    </TouchableOpacity>
-                  </Modal>
-                )}
-                {showDatePicker && Platform.OS === "android" && (
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                  />
-                )}
+                <DatePicker
+                  modal
+                  open={showDatePicker}
+                  date={selectedDate}
+                  onDateChange={setSelectedDate}
+                  onConfirm={handleDateChange}
+                  onCancel={() => setShowDatePicker(false)}
+                  mode="date"
+                  maximumDate={new Date()}
+                  locale="en"
+                />
               </View>
 
               {/* Time selection */}
@@ -985,45 +947,16 @@ export default function AddHealthEntry() {
                     {formatTime(selectedTime)}
                   </Text>
                 </TouchableOpacity>
-                {/* Time Picker - iOS Modal with backdrop dismissal */}
-                {showTimePicker && Platform.OS === "ios" && (
-                  <Modal
-                    visible={showTimePicker}
-                    transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowTimePicker(false)}
-                  >
-                    <TouchableOpacity
-                      style={styles.datePickerModalOverlay}
-                      activeOpacity={1}
-                      onPress={() => setShowTimePicker(false)}
-                    >
-                      <View style={styles.datePickerContainer}>
-                        <View style={styles.datePickerHeader}>
-                          <TouchableOpacity onPress={() => setShowTimePicker(false)}>
-                            <Text style={styles.datePickerDoneButton}>Done</Text>
-                          </TouchableOpacity>
-                        </View>
-                        <DateTimePicker
-                          value={selectedTime}
-                          mode="time"
-                          display="spinner"
-                          onChange={handleTimeChange}
-                          themeVariant="light"
-                          style={styles.dateTimePicker}
-                        />
-                      </View>
-                    </TouchableOpacity>
-                  </Modal>
-                )}
-                {showTimePicker && Platform.OS === "android" && (
-                  <DateTimePicker
-                    value={selectedTime}
-                    mode="time"
-                    display="default"
-                    onChange={handleTimeChange}
-                  />
-                )}
+                <DatePicker
+                  modal
+                  open={showTimePicker}
+                  date={selectedTime}
+                  onDateChange={setSelectedTime}
+                  onConfirm={handleTimeChange}
+                  onCancel={() => setShowTimePicker(false)}
+                  mode="time"
+                  locale="en"
+                />
               </View>
 
               {/* Symptom Category Selection - Card based like AI Assess */}
@@ -1921,34 +1854,5 @@ const styles = StyleSheet.create({
   },
   alertSecondaryButtonText: {
     color: COLORS.primary,
-  },
-  // Date Picker Modal Styles
-  datePickerModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  datePickerContainer: {
-    backgroundColor: "white",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === "ios" ? 40 : 20,
-  },
-  datePickerHeader: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E9ECEF",
-  },
-  datePickerDoneButton: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.primary,
-    fontFamily: FONTS.BarlowSemiCondensed,
-  },
-  dateTimePicker: {
-    backgroundColor: "white",
-    height: 200,
   },
 });
