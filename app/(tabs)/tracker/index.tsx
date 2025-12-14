@@ -1,7 +1,7 @@
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import BottomNavigation from "../../components/bottomNavigation";
@@ -19,6 +19,12 @@ export default function Tracker() {
   const [anchorDate, setAnchorDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [entriesByDate, setEntriesByDate] = useState<{ [key: string]: any[] }>({});
+  const [searchQuery, setSearchQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
+  const [showEntryDetailModal, setShowEntryDetailModal] = useState(false);
 
   // Get reminder settings
   const reminderSettings = useQuery(
@@ -64,19 +70,61 @@ export default function Tracker() {
                 setEntriesByDate(grouped);
               }, [allEntries]);
 
-              // Entries to display based on selection/month
+              // Entries to display based on selection/month/filters
               const displayEntries = useMemo(() => {
+                let filtered = [];
                 if (selectedDate) {
-                  return entriesByDate[selectedDate] || [];
+                  filtered = entriesByDate[selectedDate] || [];
+                } else {
+                  filtered = allEntries.filter((entry: any) => {
+                    const dt = new Date(entry.timestamp);
+                    return (
+                      dt.getFullYear() === currentMonth.getFullYear() &&
+                      dt.getMonth() === currentMonth.getMonth()
+                    );
+                  });
                 }
-                return allEntries.filter((entry: any) => {
-                  const dt = new Date(entry.timestamp);
-                  return (
-                    dt.getFullYear() === currentMonth.getFullYear() &&
-                    dt.getMonth() === currentMonth.getMonth()
+                
+                // Apply search
+                if (searchQuery.trim()) {
+                  const q = searchQuery.toLowerCase();
+                  filtered = filtered.filter((e: any) => 
+                    (e.symptoms || "").toLowerCase().includes(q) ||
+                    (e.description || "").toLowerCase().includes(q) ||
+                    (e.notes || "").toLowerCase().includes(q)
                   );
-                });
-              }, [selectedDate, entriesByDate, allEntries, currentMonth]);
+                }
+                
+                // Apply severity filter
+                if (severityFilter) {
+                  filtered = filtered.filter((e: any) => e.severity === severityFilter);
+                }
+                
+                // Apply category filter
+                if (categoryFilter) {
+                  filtered = filtered.filter((e: any) => {
+                    // Check both 'type' and 'category' fields
+                    // Also check for matching display names from ai-assess categories
+                    const entryType = e.type || e.category || '';
+                    const normalizedType = entryType.toLowerCase().replace(/\s+/g, '_').replace(/&/g, '').replace(/_+/g, '_');
+                    const normalizedFilter = categoryFilter.toLowerCase();
+                    
+                    // Direct match or normalized match
+                    return entryType === categoryFilter || 
+                           normalizedType === normalizedFilter ||
+                           entryType === normalizedFilter ||
+                           // Match ai-assess categories to tracker categories
+                           (categoryFilter === 'burns_heat' && (entryType === 'Burns & Heat Injuries' || entryType === 'burns_heat')) ||
+                           (categoryFilter === 'trauma_injuries' && (entryType === 'Trauma & Injuries' || entryType === 'trauma_injuries')) ||
+                           (categoryFilter === 'infections' && (entryType === 'Infections' || entryType === 'infections')) ||
+                           (categoryFilter === 'skin_rash' && (entryType === 'Rash & Skin Conditions' || entryType === 'skin_rash')) ||
+                           (categoryFilter === 'cold_frostbite' && (entryType === 'Cold Weather Injuries' || entryType === 'cold_frostbite')) ||
+                           (categoryFilter === 'others' && (entryType === 'Custom' || entryType === 'others'));
+                  });
+                }
+                
+                return filtered;
+              }, [selectedDate, entriesByDate, allEntries, currentMonth, searchQuery, severityFilter, categoryFilter]);
 
               return (
                 <SafeAreaView style={styles.safeArea} edges={isOnline ? ["top", "bottom"] : ["bottom"]}>
@@ -95,6 +143,101 @@ export default function Tracker() {
                       />
 
                       <View style={styles.contentSection}>
+                        {/* Compact Toolbar */}
+                        <View style={styles.toolbar}>
+                          <TouchableOpacity style={styles.addButton} onPress={handleAddLogEntry}>
+                            <Text style={styles.addButtonIcon}>+</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={[styles.searchBar, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                            placeholder="Search entries..."
+                            placeholderTextColor="#999"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                          />
+                          <TouchableOpacity 
+                            style={[styles.filterButton, (severityFilter || categoryFilter) && styles.filterButtonActive]} 
+                            onPress={() => setShowFilterModal(true)}
+                          >
+                            <Text style={styles.filterIcon}>⚙</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Filter Modal */}
+                        <Modal
+                          visible={showFilterModal}
+                          transparent={true}
+                          animationType="fade"
+                          onRequestClose={() => setShowFilterModal(false)}
+                        >
+                          <TouchableOpacity 
+                            style={styles.modalOverlay} 
+                            activeOpacity={1} 
+                            onPress={() => setShowFilterModal(false)}
+                          >
+                            <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                              <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>Advanced Filters</Text>
+                                <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                                  <Text style={styles.modalClose}>✕</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              <ScrollView style={styles.modalScroll}>
+                                {/* Severity Filter */}
+                                <Text style={[styles.filterSectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>Severity</Text>
+                                <View style={styles.filterOptions}>
+                                  {["mild", "moderate", "severe"].map((sev) => (
+                                    <TouchableOpacity
+                                      key={sev}
+                                      style={[styles.filterOption, severityFilter === sev && styles.filterOptionActive]}
+                                      onPress={() => setSeverityFilter(severityFilter === sev ? null : sev)}
+                                    >
+                                      <Text style={[styles.filterOptionText, severityFilter === sev && styles.filterOptionTextActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                        {sev.charAt(0).toUpperCase() + sev.slice(1)}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+
+                                {/* Category Filter */}
+                                <Text style={[styles.filterSectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>Category</Text>
+                                <View style={styles.filterOptions}>
+                                  {[
+                                    { value: "burns_heat", label: "Burns & Heat" },
+                                    { value: "trauma_injuries", label: "Trauma & Injuries" },
+                                    { value: "infections", label: "Infections" },
+                                    { value: "skin_rash", label: "Skin and Rash" },
+                                    { value: "cold_frostbite", label: "Cold & Frostbite" },
+                                    { value: "others", label: "Others" }
+                                  ].map((cat) => (
+                                    <TouchableOpacity
+                                      key={cat.value}
+                                      style={[styles.filterOption, categoryFilter === cat.value && styles.filterOptionActive]}
+                                      onPress={() => setCategoryFilter(categoryFilter === cat.value ? null : cat.value)}
+                                    >
+                                      <Text style={[styles.filterOptionText, categoryFilter === cat.value && styles.filterOptionTextActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                        {cat.label}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+
+                                {/* Clear Filters Button */}
+                                <TouchableOpacity 
+                                  style={styles.clearFiltersButton}
+                                  onPress={() => {
+                                    setSeverityFilter(null);
+                                    setCategoryFilter(null);
+                                  }}
+                                >
+                                  <Text style={[styles.clearFiltersText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Clear All Filters</Text>
+                                </TouchableOpacity>
+                              </ScrollView>
+                            </View>
+                          </TouchableOpacity>
+                        </Modal>
+
                         {/* Calendar View */}
                         <View style={styles.calendarContainer}>
                           {/* View Mode Toggle */}
@@ -215,7 +358,14 @@ export default function Tracker() {
 
                           {displayEntries.length > 0 ? (
                             displayEntries.map((entry: any) => (
-                              <TouchableOpacity key={entry._id} style={styles.entryItem} onPress={() => router.push({ pathname: "/tracker/log-details", params: { entryId: entry._id, convexId: entry?.convexId || "" } })}>
+                              <TouchableOpacity 
+                                key={entry._id} 
+                                style={styles.entryItem} 
+                                onPress={() => {
+                                  setSelectedEntry(entry);
+                                  setShowEntryDetailModal(true);
+                                }}
+                              >
                                 <View style={styles.entryContent}>
                                   <View style={styles.entryHeader}>
                                     <Text style={[styles.entryDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{new Date(entry.timestamp).toLocaleString()}</Text>
@@ -230,28 +380,92 @@ export default function Tracker() {
                             <View style={styles.emptyState}><Text style={[styles.emptyStateText, { fontFamily: FONTS.BarlowSemiCondensed }]}>No entries</Text></View>
                           )}
                         </View>
-
-                        {/* Navigation card */}
-                        <View style={styles.navigationContainer}>
-                          <TouchableOpacity style={styles.navCard} onPress={navigateToHistory}>
-                            <Text style={[styles.navCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>History</Text>
-                            <Text style={[styles.navCardText, { fontFamily: FONTS.BarlowSemiCondensed }]}>View past entries and health trends</Text>
-                          </TouchableOpacity>
-                        </View>
                       </View>
                     </ScrollView>
 
-                    {/* Add Log Entry Button */}
-                    <View style={styles.addButtonContainer}>
-                      <TouchableOpacity style={styles.addEntryButton} onPress={handleAddLogEntry}>
-                        <Text style={[styles.addEntryButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Add Log Entry</Text>
+                    {/* Entry Detail Modal */}
+                    <Modal
+                      visible={showEntryDetailModal}
+                      transparent={true}
+                      animationType="fade"
+                      onRequestClose={() => setShowEntryDetailModal(false)}
+                    >
+                      <TouchableOpacity 
+                        style={styles.entryDetailOverlay}
+                        activeOpacity={1}
+                        onPress={() => setShowEntryDetailModal(false)}
+                      >
+                        <TouchableOpacity 
+                          style={styles.entryDetailCard}
+                          activeOpacity={1}
+                          onPress={(e) => e.stopPropagation()}
+                        >
+                          <View style={styles.entryDetailHeader}>
+                            <Text style={[styles.entryDetailDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                              {selectedEntry ? new Date(selectedEntry.timestamp).toLocaleString('default', { 
+                                month: 'long', 
+                                day: 'numeric',
+                                year: 'numeric'
+                              }) : ''}
+                            </Text>
+                            <TouchableOpacity onPress={() => setShowEntryDetailModal(false)}>
+                              <Text style={styles.entryDetailClose}>✕</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          <ScrollView 
+                            style={styles.entryDetailScroll}
+                            contentContainerStyle={styles.entryDetailContent}
+                            showsVerticalScrollIndicator={false}
+                          >
+                            {/* Symptom/Description */}
+                            <View style={styles.entryDetailSection}>
+                              <Text style={[styles.entryDetailLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>What Happened</Text>
+                              <View style={styles.entryDetailBox}>
+                                <Text style={[styles.entryDetailValue, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                  {selectedEntry?.symptoms || selectedEntry?.description || '(no description)'}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {/* Category Pills */}
+                            <View style={styles.entryDetailSection}>
+                              <View style={styles.categoryPills}>
+                                {selectedEntry?.type && (
+                                  <View style={styles.categoryPill}>
+                                    <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                      {selectedEntry.type === 'burns_heat' ? 'Burns & Heat' :
+                                       selectedEntry.type === 'trauma_injuries' ? 'Trauma & Injuries' :
+                                       selectedEntry.type === 'infections' ? 'Infections' :
+                                       selectedEntry.type === 'skin_rash' ? 'Skin and Rash' :
+                                       selectedEntry.type === 'cold_frostbite' ? 'Cold & Frostbite' :
+                                       selectedEntry.type === 'others' ? 'Others' : selectedEntry.type}
+                                    </Text>
+                                  </View>
+                                )}
+                                {selectedEntry?.severity && typeof selectedEntry.severity === 'string' && (
+                                  <View style={[
+                                    styles.categoryPill,
+                                    selectedEntry.severity === 'severe' && styles.severePill,
+                                    selectedEntry.severity === 'moderate' && styles.moderatePill,
+                                    selectedEntry.severity === 'mild' && styles.mildPill
+                                  ]}>
+                                    <Text style={[styles.categoryPillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                                      {selectedEntry.severity.charAt(0).toUpperCase() + selectedEntry.severity.slice(1)}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          </ScrollView>
+                        </TouchableOpacity>
                       </TouchableOpacity>
-                    </View>
+                    </Modal>
                   </CurvedBackground>
                   <BottomNavigation />
                 </SafeAreaView>
               );
-            }
+}
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -260,10 +474,151 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
+    paddingBottom: 120,
   },
   contentSection: {
     padding: 24,
     paddingTop: 40,
+    paddingBottom: 100,
+  },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  addButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#2A7DE1",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonIcon: {
+    fontSize: 28,
+    color: "#FFF",
+    fontWeight: "bold",
+  },
+  searchBar: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#333",
+  },
+  filterButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterButtonActive: {
+    backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
+  },
+  filterIcon: {
+    fontSize: 20,
+    color: "#666",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    maxHeight: "70%",
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E9ECEF",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#333",
+  },
+  modalClose: {
+    fontSize: 24,
+    color: "#666",
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  filterSectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  filterOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterOption: {
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  filterOptionActive: {
+    backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
+  },
+  filterOptionText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  filterOptionTextActive: {
+    color: "#FFF",
+    fontWeight: "600",
+  },
+  clearFiltersButton: {
+    backgroundColor: "#FFF",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  clearFiltersText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "600",
   },
   calendarContainer: {
     backgroundColor: "#F8F9FA",
@@ -403,6 +758,95 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#2A7DE1",
     fontWeight: "600",
+  },
+  // Entry Detail Modal Styles
+  entryDetailOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  entryDetailCard: {
+    backgroundColor: "#1F2937",
+    borderRadius: 20,
+    width: "90%",
+    maxWidth: 400,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  entryDetailHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#374151",
+  },
+  entryDetailDate: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  entryDetailClose: {
+    fontSize: 24,
+    color: "#9CA3AF",
+    fontWeight: "300",
+  },
+  entryDetailScroll: {
+    maxHeight: 400,
+  },
+  entryDetailContent: {
+    gap: 16,
+  },
+  entryDetailSection: {
+    gap: 8,
+  },
+  entryDetailLabel: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  entryDetailBox: {
+    backgroundColor: "#374151",
+    borderRadius: 12,
+    padding: 14,
+  },
+  entryDetailValue: {
+    fontSize: 15,
+    color: "#FFFFFF",
+    lineHeight: 22,
+  },
+  categoryPills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryPill: {
+    backgroundColor: "#4B5563",
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  categoryPillText: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  severePill: {
+    backgroundColor: "#DC2626",
+  },
+  moderatePill: {
+    backgroundColor: "#F59E0B",
+  },
+  mildPill: {
+    backgroundColor: "#10B981",
   },
   emptyState: {
     backgroundColor: "#F8F9FA",
