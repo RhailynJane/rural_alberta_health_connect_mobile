@@ -1,9 +1,10 @@
 import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ReminderSettings } from "../_utils/notifications";
 import NotificationBell from "./NotificationBell";
+import { useSideMenu } from "./SideMenuProvider";
 
 interface CurvedHeaderProps {
   title?: string;
@@ -45,6 +46,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
   });
+  const sideMenu = useSideMenu();
   
   if (!fontsLoaded) {
     return null;
@@ -56,13 +58,21 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
         children
       ) : (
         <View style={styles.headerContent}>
-          {showLogo && (
-            <Image 
-              source={require("../../assets/images/logo-no-name.png")} 
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          )}
+          <View style={styles.headerLeft}>
+            {showLogo && (
+              <Image 
+                source={require("../../assets/images/logo-no-name.png")} 
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            )}
+            {(title || subtitle) && (
+              <View style={styles.titleBlock}>
+                {title && <Text style={[styles.titleText, { color: textColor }]} numberOfLines={1}>{title}</Text>}
+                {subtitle && <Text style={[styles.subtitleText, { color: textColor }]} numberOfLines={1}>{subtitle}</Text>}
+              </View>
+            )}
+          </View>
           <View style={styles.headerRight}>
             {showNotificationBell && (
               <NotificationBell 
@@ -72,7 +82,7 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
             )}
             {showMenuButton && (
               <TouchableOpacity 
-                onPress={onMenuPress} 
+                onPress={onMenuPress ?? sideMenu.open} 
                 style={styles.menuButton} 
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
@@ -96,9 +106,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
   logo: {
     width: 50,
     height: 50,
+  },
+  titleBlock: {
+    flexShrink: 1,
+  },
+  titleText: {
+    fontSize: 20,
+    fontFamily: "BarlowSemiCondensed",
+    fontWeight: "700",
+  },
+  subtitleText: {
+    fontSize: 14,
+    fontFamily: "BarlowSemiCondensed",
+    opacity: 0.8,
   },
   headerRight: {
     flexDirection: "row",

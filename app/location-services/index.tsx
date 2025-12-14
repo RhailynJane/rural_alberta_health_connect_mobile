@@ -1,27 +1,33 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CurvedBackground from "./components/curvedBackground";
-import { FONTS } from "./constants/constants";
+import CurvedBackground from "../components/curvedBackground";
+import CurvedHeader from "../components/curvedHeader";
+import { FONTS } from "../constants/constants";
 
-export default function Resources() {
+export default function LocationServices() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground style={{ flex: 1 }}>
-        <View style={styles.container}>
+        <CurvedHeader
+          title="Location Services"
+          backgroundColor="transparent"
+          textColor="#1A1A1A"
+          showLogo
+          showNotificationBell
+        />
+        <View style={[styles.container, { paddingBottom: 130 }]}>
           <View style={styles.contentCard}>
-            <Text style={[styles.icon, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              📚
-            </Text>
+            <Text style={[styles.icon, { fontFamily: FONTS.BarlowSemiCondensed }]}>🚧</Text>
             <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Resources
+              Location Services
             </Text>
             <Text style={[styles.message, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               This feature is currently under development.
             </Text>
             <Text style={[styles.submessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Soon you&apos;ll have access to helpful health resources and information!
+              We&apos;re working hard to bring you location-based healthcare services soon!
             </Text>
           </View>
         </View>

@@ -29,7 +29,7 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
-import SideMenu from "../components/SideMenu";
+import { useSideMenu } from "../components/SideMenuProvider";
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -55,8 +55,7 @@ export default function Dashboard() {
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
   
-  // Side menu state
-  const [sideMenuVisible, setSideMenuVisible] = useState(false);
+  const sideMenu = useSideMenu();
 
   // Get current user data (allow offline access via cache)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
@@ -578,7 +577,7 @@ export default function Dashboard() {
           reminderEnabled={reminderSettings?.enabled || false}
           reminderSettings={reminderSettings || null}
           showMenuButton={true}
-          onMenuPress={() => setSideMenuVisible(true)}
+          onMenuPress={sideMenu.open}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
@@ -904,14 +903,7 @@ export default function Dashboard() {
       </CurvedBackground>
       <BottomNavigation />
 
-      {/* Side Menu */}
-      <SideMenu
-        visible={sideMenuVisible}
-        onClose={() => setSideMenuVisible(false)}
-        onSignOut={handleSignOut}
-        userName={userName}
-        userEmail={userEmail}
-      />
+      {/* Side Menu rendered globally via SideMenuProvider */}
 
       {/* StatusModal for alerts and confirmations */}
       <StatusModal
