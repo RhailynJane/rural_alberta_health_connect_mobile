@@ -1,6 +1,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
 import { useDatabase } from "@nozbe/watermelondb/hooks";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -9,6 +10,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Modal,
+  NativeModules,
   Platform,
   ScrollView,
   StyleSheet,
@@ -84,6 +86,9 @@ export default function AddHealthEntry() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [nativeDatePickerAvailable] = useState(
+    () => !!(NativeModules as any)?.RNDatePicker
+  );
 
   // Edit mode state - preserve original timestamp (Option A)
   const [originalTimestamp, setOriginalTimestamp] = useState<number | null>(null);
@@ -632,7 +637,6 @@ export default function AddHealthEntry() {
                 console.log('🧪 [WMDB DEBUG] (offline) health_entries schema columns seen in JS:', columnNames);
                 console.log('🧪 [WMDB DEBUG] (offline) Contains type?', 'type' in schemaColumns, 'lastEditedAt?', 'lastEditedAt' in schemaColumns, 'editCount?', 'editCount' in schemaColumns);
 
-                let primaryError: any = null;
                 try {
                   const updatedEntry = entry.prepareUpdate((e: any) => {
                     console.log('🔄 [OFFLINE] Inside prepareUpdate callback (dynamic column assignment)');
@@ -911,17 +915,36 @@ export default function AddHealthEntry() {
                     {formatDate(selectedDate)}
                   </Text>
                 </TouchableOpacity>
-                <DatePicker
-                  modal
-                  open={showDatePicker}
-                  date={selectedDate}
-                  onDateChange={setSelectedDate}
-                  onConfirm={handleDateChange}
-                  onCancel={() => setShowDatePicker(false)}
-                  mode="date"
-                  maximumDate={new Date()}
-                  locale="en"
-                />
+                {nativeDatePickerAvailable ? (
+                  <DatePicker
+                    modal
+                    open={showDatePicker}
+                    date={selectedDate}
+                    onDateChange={setSelectedDate}
+                    onConfirm={handleDateChange}
+                    onCancel={() => setShowDatePicker(false)}
+                    mode="date"
+                    maximumDate={new Date()}
+                    locale="en"
+                  />
+                ) : (
+                  showDatePicker && (
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      maximumDate={new Date()}
+                      onChange={(event, date) => {
+                        if (Platform.OS === "android") {
+                          setShowDatePicker(false);
+                        }
+                        if (date) {
+                          setSelectedDate(date);
+                        }
+                      }}
+                    />
+                  )
+                )}
               </View>
 
               {/* Time selection */}
@@ -947,16 +970,34 @@ export default function AddHealthEntry() {
                     {formatTime(selectedTime)}
                   </Text>
                 </TouchableOpacity>
-                <DatePicker
-                  modal
-                  open={showTimePicker}
-                  date={selectedTime}
-                  onDateChange={setSelectedTime}
-                  onConfirm={handleTimeChange}
-                  onCancel={() => setShowTimePicker(false)}
-                  mode="time"
-                  locale="en"
-                />
+                {nativeDatePickerAvailable ? (
+                  <DatePicker
+                    modal
+                    open={showTimePicker}
+                    date={selectedTime}
+                    onDateChange={setSelectedTime}
+                    onConfirm={handleTimeChange}
+                    onCancel={() => setShowTimePicker(false)}
+                    mode="time"
+                    locale="en"
+                  />
+                ) : (
+                  showTimePicker && (
+                    <DateTimePicker
+                      value={selectedTime}
+                      mode="time"
+                      display={Platform.OS === "ios" ? "spinner" : "default"}
+                      onChange={(event, date) => {
+                        if (Platform.OS === "android") {
+                          setShowTimePicker(false);
+                        }
+                        if (date) {
+                          setSelectedTime(date);
+                        }
+                      }}
+                    />
+                  )
+                )}
               </View>
 
               {/* Symptom Category Selection - Card based like AI Assess */}
