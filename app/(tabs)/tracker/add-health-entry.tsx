@@ -518,7 +518,6 @@ export default function AddHealthEntry() {
                     console.log('⚠️ [WMDB DEBUG] Unknown raw keys BEFORE update (not in schema):', unknownBefore);
                   }
 
-                  let primaryError: any = null;
                   try {
                     const updatedEntry = entry.prepareUpdate((record: any) => {
                       console.log('🔄 Inside prepareUpdate callback (dynamic column assignment)');
@@ -666,7 +665,6 @@ export default function AddHealthEntry() {
                   await database.batch(updatedEntry);
                   console.log('✅ [OFFLINE] Fields updated successfully via prepareUpdate');
                 } catch (e) {
-                  primaryError = e;
                   console.warn('⚠️ [WMDB DEBUG] (offline) Primary update failed, will attempt minimal fallback (non-fatal):', e);
                   try {
                     const minimalEntry = entry.prepareUpdate((record: any) => {
