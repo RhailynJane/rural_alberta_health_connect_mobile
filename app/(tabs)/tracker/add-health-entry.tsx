@@ -7,17 +7,16 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -84,18 +83,24 @@ export default function AddHealthEntry() {
   // State for picker visibility
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Edit mode state - preserve original timestamp (Option A)
   const [originalTimestamp, setOriginalTimestamp] = useState<number | null>(null);
-  const [isLoadingEntry, setLoadingEntry] = useState(false);
   const [watermelonRecordId, setWatermelonRecordId] = useState<string | null>(null);
 
-  // Severity options (1-10)
-  const severityOptions = Array.from({ length: 10 }, (_, i) =>
-    (i + 1).toString()
-  );
+  // Symptom category options (card-based like AI Assess)
+  const symptomCategories = [
+    { id: "burns_heat", label: "Burns & Heat", icon: "flame" },
+    { id: "trauma_injuries", label: "Trauma & Injuries", icon: "bandage" },
+    { id: "infections", label: "Infections", icon: "bug" },
+    { id: "skin_rash", label: "Skin & Rash", icon: "ellipsis-horizontal" },
+    { id: "cold_frostbite", label: "Cold & Frostbite", icon: "snow" },
+    { id: "others", label: "Something Else", icon: "help-circle-outline" },
+  ];
+
+  // Track selected symptom category
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Format date as YYYY-MM-DD using LOCAL date parts (not UTC)
   // This ensures the date shown matches the user's local timezone
@@ -403,9 +408,9 @@ export default function AddHealthEntry() {
       setAlertModalVisible(true);
     }
 
-    if (!symptoms.trim() || !severity) {
+    if (!symptoms.trim() || !severity || !notes.trim() || !selectedCategory) {
       setAlertModalTitle("Missing Information");
-      setAlertModalMessage("Please fill in symptoms and severity.");
+      setAlertModalMessage("Please fill in all required fields: category, symptoms, severity, and notes.");
       setAlertModalButtons([
         {
           label: "OK",
@@ -560,7 +565,6 @@ export default function AddHealthEntry() {
                       });
                       await database.batch(minimalEntry);
                       console.log('✅ [WMDB DEBUG] Minimal fallback update succeeded');
-                      primaryError = null;
                     } catch (fallbackErr) {
                       console.warn('⚠️ [WMDB DEBUG] Minimal fallback also failed. Attempting duplicate-record rescue strategy (non-fatal).', fallbackErr);
                       try {
@@ -592,7 +596,6 @@ export default function AddHealthEntry() {
                           }
                         }
                         console.log('🛟 [WMDB DEBUG] Rescue strategy completed. Duplicate will be treated as latest version.');
-                        primaryError = null;
                       } catch (duplicateErr) {
                         console.error('💥 [WMDB DEBUG] Rescue duplicate strategy failed:', duplicateErr);
                         throw duplicateErr;
@@ -684,7 +687,6 @@ export default function AddHealthEntry() {
                     });
                     await database.batch(minimalEntry);
                     console.log('✅ [WMDB DEBUG] (offline) Minimal fallback update succeeded');
-                    primaryError = null;
                   } catch (fallbackErr) {
                     console.warn('⚠️ [WMDB DEBUG] (offline) Minimal fallback also failed. Attempting duplicate-record rescue strategy (non-fatal).', fallbackErr);
                     try {
@@ -756,6 +758,7 @@ export default function AddHealthEntry() {
             severity: parseInt(severity),
             notes,
             photos: photos,
+            type: selectedCategory,
             createdBy: currentUser.firstName || "User",
           });
           console.log("✅ Manual entry saved online");
@@ -773,6 +776,7 @@ export default function AddHealthEntry() {
                 entry.symptoms = symptoms;
                 entry.severity = parseInt(severity);
                 entry.notes = notes || '';
+                entry.type = selectedCategory;
                 // @json decorator handles serialization - pass array directly
                 entry.photos = photos;
                 entry.type = 'manual_entry';
@@ -807,9 +811,9 @@ export default function AddHealthEntry() {
               entry.symptoms = symptoms;
               entry.severity = parseInt(severity);
               entry.notes = notes || '';
+              entry.type = selectedCategory;
               // @json decorator handles serialization - pass array directly
               entry.photos = [...photos, ...localPhotoUris];
-              entry.type = 'manual_entry';
               entry.isSynced = false; // Mark for sync when online
               entry.createdBy = currentUser?.firstName || 'User';
             });
@@ -1029,6 +1033,45 @@ export default function AddHealthEntry() {
                 )}
               </View>
 
+              {/* Symptom Category Selection - Card based like AI Assess */}
+              <View style={styles.inputGroup}>
+                <Text
+                  style={[
+                    styles.label,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  What&apos;s the Problem? *
+                </Text>
+                <View style={styles.categoryGrid}>
+                  {symptomCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.categoryCard,
+                        selectedCategory === cat.id && styles.categoryCardSelected,
+                      ]}
+                      onPress={() => setSelectedCategory(cat.id)}
+                    >
+                      <Ionicons
+                        name={cat.icon as any}
+                        size={28}
+                        color={selectedCategory === cat.id ? "#2A7DE1" : "#6B7280"}
+                      />
+                      <Text
+                        style={[
+                          styles.categoryCardText,
+                          selectedCategory === cat.id && styles.categoryCardTextSelected,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
               {/* Photo Upload Section */}
               <View style={styles.inputGroup}>
                 <Text
@@ -1146,23 +1189,24 @@ export default function AddHealthEntry() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Symptoms/Details
+                  Describe Symptoms *
                 </Text>
-                {/* Speech-to-text removed */}
                 <TextInput
                   style={[
                     styles.textInput,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
-                  placeholder="e.g: Headache, Fatigue"
+                  placeholder="e.g: Burning sensation, redness, pain"
                   placeholderTextColor="#999"
                   value={symptoms}
                   onChangeText={setSymptoms}
                   multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
                 />
               </View>
 
-              {/* Severity dropdown */}
+              {/* Severity - Dot based like AI Assess */}
               <View style={styles.inputGroup}>
                 <Text
                   style={[
@@ -1170,68 +1214,82 @@ export default function AddHealthEntry() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Severity (1-10)
+                  Rate Severity *
                 </Text>
-                <TouchableOpacity
-                  style={styles.pickerButton}
-                  onPress={() => setShowSeverityDropdown(true)}
+                <Text
+                  style={[
+                    styles.instruction,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
                 >
-                  <Text
-                    style={[
-                      styles.pickerText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {severity || "Select severity"}
-                  </Text>
-                </TouchableOpacity>
+                  How uncomfortable or concerning is it?
+                </Text>
 
-                {/* Dropdown modal */}
-                <Modal
-                  visible={showSeverityDropdown}
-                  transparent={true}
-                  animationType="fade"
-                  onRequestClose={() => setShowSeverityDropdown(false)}
-                >
-                  <TouchableWithoutFeedback
-                    onPress={() => setShowSeverityDropdown(false)}
-                  >
-                    <View style={styles.modalOverlay}>
-                      <View style={styles.dropdownContainer}>
-                        <ScrollView
-                          style={styles.dropdownScrollView}
-                          showsVerticalScrollIndicator={true}
+                {/* Scale with endpoint anchors */}
+                <View style={styles.scaleWrapper}>
+                  {/* Endpoint labels */}
+                  <View style={styles.endpointLabels}>
+                    <Text
+                      style={[
+                        styles.endpointLabel,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Mild
+                    </Text>
+                    <Text
+                      style={[
+                        styles.endpointLabel,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Severe
+                    </Text>
+                  </View>
+
+                  {/* Scale dots */}
+                  <View style={styles.scaleContainer}>
+                    {[...Array(10)].map((_, index) => {
+                      const dotLevel = index + 1;
+                      const isActive = severity && parseInt(severity) >= dotLevel;
+                      const isCurrentSelection = parseInt(severity || "0") === dotLevel;
+
+                      return (
+                        <TouchableOpacity
+                          key={index}
+                          style={styles.dotTouchArea}
+                          onPress={() => setSeverity(dotLevel.toString())}
+                          activeOpacity={0.7}
                         >
-                          {severityOptions.map((option) => (
-                            <TouchableOpacity
-                              key={option}
-                              style={[
-                                styles.dropdownItem,
-                                { backgroundColor: "white" },
-                              ]}
-                              onPress={() => {
-                                setSeverity(option);
-                                setShowSeverityDropdown(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.dropdownText,
-                                  { fontFamily: FONTS.BarlowSemiCondensed },
-                                ]}
-                              >
-                                {option}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    </View>
-                  </TouchableWithoutFeedback>
-                </Modal>
+                          <View
+                            style={[
+                              styles.dot,
+                              isActive && styles.dotActive,
+                              isCurrentSelection && styles.dotSelected,
+                            ]}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Severity descriptor */}
+                  <View style={styles.descriptorContainer}>
+                    {severity && (
+                      <Text
+                        style={[
+                          styles.severityDescriptor,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {parseInt(severity) <= 3 ? "Mild" : parseInt(severity) <= 7 ? "Moderate" : "Severe"}
+                      </Text>
+                    )}
+                  </View>
+                </View>
               </View>
 
-              {/* Additional notes */}
+              {/* Notes */}
               <View style={styles.inputGroup}>
                 <Text
                   style={[
@@ -1239,16 +1297,15 @@ export default function AddHealthEntry() {
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Notes
+                  Additional Notes *
                 </Text>
-                {/* Speech-to-text removed */}
                 <TextInput
                   style={[
                     styles.textInput,
                     styles.notesInput,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
-                  placeholder="Additional Details"
+                  placeholder="Relevant details (e.g., when it started, treatment tried, allergies)"
                   placeholderTextColor="#999"
                   value={notes}
                   onChangeText={setNotes}
@@ -1609,6 +1666,99 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Category Grid Styles
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  categoryCard: {
+    width: "48%",
+    backgroundColor: "#F8F9FA",
+    borderWidth: 2,
+    borderColor: "#E9ECEF",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    gap: 8,
+  },
+  categoryCardSelected: {
+    backgroundColor: "#E3F2FD",
+    borderColor: "#2A7DE1",
+  },
+  categoryCardText: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  categoryCardTextSelected: {
+    color: "#2A7DE1",
+    fontWeight: "600",
+  },
+  // Severity Dot Styles
+  instruction: {
+    fontSize: 15,
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  scaleWrapper: {
+    marginBottom: 24,
+  },
+  endpointLabels: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  endpointLabel: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+  scaleContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  dotTouchArea: {
+    padding: 8,
+  },
+  dot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  dotActive: {
+    backgroundColor: "#2A7DE1",
+  },
+  dotSelected: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#2A7DE1",
+    shadowColor: "#2A7DE1",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  descriptorContainer: {
+    alignItems: "center",
+    marginTop: 16,
+    minHeight: 24,
+  },
+  severityDescriptor: {
+    fontSize: 15,
+    color: "#4B5563",
+    fontWeight: "500",
+    letterSpacing: 0.2,
   },
   // Success Modal Styles
   successModalOverlay: {

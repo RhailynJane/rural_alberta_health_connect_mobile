@@ -38,10 +38,6 @@ export default function Tracker() {
                 router.push("/tracker/add-health-entry");
               };
 
-              const navigateToHistory = () => {
-                router.push("/tracker/history");
-              };
-
               // Date helpers
               const formatDate = (date: Date) => {
                 const y = date.getFullYear();
