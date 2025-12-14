@@ -10,13 +10,20 @@ import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Image,
-    Linking,
+    LayoutAnimation,
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    UIManager,
     View,
 } from "react-native";
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
@@ -114,59 +121,54 @@ const cleanGeminiResponse = (text: string): string => {
   return text.replace(/\*\*/g, "");
 };
 
-// Render assessment as separate cards: Summary, Severity, Recommendations, Red Flags, Next Steps
-function renderAssessmentCards(text: string | null) {
+// Render assessment as separate cards with priority sections at top and accordions for details
+function renderAssessmentCards(
+  text: string | null,
+  expandedSections: Record<string, boolean>,
+  toggleSection: (key: string) => void,
+  isPremium: boolean = false,
+  onUpgradePress?: () => void
+) {
   if (!text) return null;
-  
+
   console.log("=== Parsing Medical Triage Assessment ===");
   console.log("Raw text length:", text.length);
-  
+
   const lines = text.split(/\r?\n/).map((l) => l.trim());
-  
-  // Add debug logging to see actual content
-  console.log('=== Raw Assessment Text Sample (first 500 chars) ===');
-  console.log(text.substring(0, 500));
-  console.log('=== Lines with ** markers (potential headers) ===');
-  lines.forEach((line, idx) => {
-    if (line.includes('**') || line.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)*:$/)) {
-      console.log(`Line ${idx}: "${line}"`);
-    }
-  });
-  
-  type SectionKey = 
+
+  type SectionKey =
     | 'CLINICAL ASSESSMENT'
     | 'VISUAL FINDINGS'
     | 'CLINICAL INTERPRETATION'
     | 'BURN/WOUND GRADING'
     | 'INFECTION RISK'
-    | 'EMERGENCY RED FLAGS'
-    | 'RURAL GUIDANCE'
     | 'URGENCY ASSESSMENT'
     | 'RECOMMENDATIONS'
     | 'NEXT STEPS'
     | 'OTHER';
-    
-  const wantedOrder: SectionKey[] = [
+
+  // Layer 2: Next Steps - Most prominent, actionable guidance
+  const prioritySections: SectionKey[] = [
+    'NEXT STEPS',
+    'RECOMMENDATIONS',
+  ];
+
+  // Layer 3: Supporting Details - Collapsible accordions (default collapsed)
+  const accordionSections: SectionKey[] = [
     'CLINICAL ASSESSMENT',
     'VISUAL FINDINGS',
     'CLINICAL INTERPRETATION',
     'BURN/WOUND GRADING',
     'INFECTION RISK',
-    'EMERGENCY RED FLAGS',
-    'RURAL GUIDANCE',
     'URGENCY ASSESSMENT',
-    'RECOMMENDATIONS',
-    'NEXT STEPS'
   ];
-  
+
   const sections: Record<SectionKey, string[]> = {
     'CLINICAL ASSESSMENT': [],
     'VISUAL FINDINGS': [],
     'CLINICAL INTERPRETATION': [],
     'BURN/WOUND GRADING': [],
     'INFECTION RISK': [],
-    'EMERGENCY RED FLAGS': [],
-    'RURAL GUIDANCE': [],
     'URGENCY ASSESSMENT': [],
     'RECOMMENDATIONS': [],
     'NEXT STEPS': [],
@@ -176,95 +178,192 @@ function renderAssessmentCards(text: string | null) {
 
   const isHeader = (l: string): SectionKey | null => {
     const lower = l.toLowerCase().trim();
-    // Remove markdown bold markers and numbered prefixes (e.g., "1. ", "2. ")
     const cleaned = lower.replace(/\*\*/g, '').replace(/^\d+\.\s*/, '').trim();
-    
-    // Clinical Assessment (also matches variations like "Patient Assessment", "Initial Assessment")
+
     if (/^(clinical|patient|initial)\s+assessment\s*:?/i.test(cleaned)) return 'CLINICAL ASSESSMENT';
-    
-    // Visual Findings from Medical Images
     if (/^visual\s+findings?\s*(from\s+(medical\s+)?images?)?\s*:?/i.test(cleaned)) return 'VISUAL FINDINGS';
     if (/^image\s+analysis\s*:?/i.test(cleaned)) return 'VISUAL FINDINGS';
-    
-    // Clinical Interpretation and Differential Considerations
     if (/^clinical\s+interpretation\s*(and\s+differential\s+considerations?)?\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
     if (/^differential\s+(diagnosis|considerations?)\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
     if (/^interpretation\s*:?/i.test(cleaned)) return 'CLINICAL INTERPRETATION';
-    
-    // Burn/Wound/Injury Grading
     if (/^(burn|wound|injury)\s*[\/,]?\s*(wound|injury)?\s*[\/,]?\s*(injury)?\s*(grading|classification|severity)\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
     if (/^severity\s+(grading|classification|level)\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
     if (/^grading\s*:?/i.test(cleaned)) return 'BURN/WOUND GRADING';
-    
-    // Infection Risk Assessment
     if (/^infection\s+risk\s*(assessment)?\s*:?/i.test(cleaned)) return 'INFECTION RISK';
     if (/^risk\s+of\s+infection\s*:?/i.test(cleaned)) return 'INFECTION RISK';
-    
-    // Specific Emergency Red Flags
-    if (/^(specific\s+)?emergency\s+red\s+flags?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
-    if (/^red\s+flags?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
-    if (/^warning\s+signs?\s*:?/i.test(cleaned)) return 'EMERGENCY RED FLAGS';
-    
-    // Rural Specific Resource Guidance
-  if (/^rural[-\s]?specific\s+resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural[-\s]?specific\s+resource\s+guideline\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural\s+(specific\s+)?(resource\s+)?guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural\s+(considerations?|resources?)\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural\s+resource\s+guidance\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-  if (/^rural\s+resources?\s*:?$/i.test(cleaned)) return 'RURAL GUIDANCE';
-    
-    // Urgency Assessment
     if (/^urgency\s+(assessment|level)\s*:?/i.test(cleaned)) return 'URGENCY ASSESSMENT';
     if (/^urgency\s*:?/i.test(cleaned)) return 'URGENCY ASSESSMENT';
-    
-    // Recommendations
-  if (/^recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
-  if (/^treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
-  if (/^time[-\s]?sensitive\s+treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
-    
-    // Next Steps
+    if (/^recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
+    if (/^treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
+    if (/^time[-\s]?sensitive\s+treatment\s+recommendations?\s*:?/i.test(cleaned)) return 'RECOMMENDATIONS';
     if (/^next\s+steps?\s*:?/i.test(cleaned)) return 'NEXT STEPS';
     if (/^action\s+plan\s*:?/i.test(cleaned)) return 'NEXT STEPS';
-    
+
+    // Skip Rural and Emergency Red Flags sections (removed per requirements)
+    if (/^rural/i.test(cleaned)) return null;
+    if (/^(emergency\s+)?red\s+flags?/i.test(cleaned)) return null;
+    if (/^warning\s+signs?/i.test(cleaned)) return null;
+
     return null;
   };
 
   for (const l of lines) {
     if (!l) continue;
     const hdr = isHeader(l);
-    if (hdr) { 
-      console.log(`✅ Found header: "${l}" → ${hdr}`);
+    if (hdr) {
       current = hdr;
-      continue; 
+      continue;
     }
+    // Skip lines that look like rural or emergency headers we want to ignore
+    const lowerLine = l.toLowerCase();
+    if (lowerLine.includes('rural') && (lowerLine.includes('guidance') || lowerLine.includes('resource'))) continue;
+    if (lowerLine.includes('red flag') || lowerLine.includes('warning sign')) continue;
+
     const content = l.replace(/^[-•*]\s+/, '').replace(/^\d+\.\s+/, '');
     if (content) {
       sections[current].push(content);
     }
   }
-  
+
   console.log("=== Parsed Medical Sections ===");
   Object.keys(sections).forEach(key => {
     console.log(`${key}: ${sections[key as SectionKey].length} items`);
   });
 
-  const Card = ({ title, items, icon, iconColor = "#2A7DE1" }: { 
-    title: string; 
-    items: string[]; 
-    icon: React.ReactNode;
-    iconColor?: string;
-  }) => (
-    <View style={styles.assessmentCard}>
-      <View style={styles.cardHeader}>
-        {icon}
-        <Text style={[styles.cardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+  // Categorize Next Steps into primary actions vs conditional escalation
+  const categorizeNextSteps = (items: string[]) => {
+    const categorized = {
+      primaryActions: [] as string[],
+      conditionalEscalation: [] as string[],
+      followUpHint: null as string | null,
+    };
+
+    items.forEach(item => {
+      const lower = item.toLowerCase();
+
+      // Conditional escalation patterns (collapsed section)
+      if (lower.includes('if symptoms') || lower.includes('seek') || lower.includes('worsen') ||
+          lower.includes('persist') || lower.includes('go to') || lower.includes('contact') ||
+          lower.includes('call 911') || lower.includes('emergency') || lower.includes('urgent')) {
+        const cleaned = item
+          .replace(/^(if symptoms?[^:]*:|seek[^:]*:|urgent[^:]*:|when to[^:]*:)\s*/i, '')
+          .trim();
+        categorized.conditionalEscalation.push(cleaned);
+      }
+      // Follow-up timing patterns (becomes hint text)
+      else if (lower.includes('reassess') || lower.includes('follow up') || lower.includes('follow-up') ||
+               (lower.includes('within') && (lower.includes('hour') || lower.includes('day')))) {
+        if (!categorized.followUpHint) {
+          categorized.followUpHint = item.replace(/^(follow[- ]?up:?|reassess:?)\s*/i, '').trim();
+        } else {
+          categorized.primaryActions.push(item.replace(/^(today:|now:)\s*/i, '').trim());
+        }
+      }
+      // Primary actions (main visible content)
+      else {
+        categorized.primaryActions.push(item.replace(/^(today:|now:|immediately:)\s*/i, '').trim());
+      }
+    });
+
+    return categorized;
+  };
+
+  // Next Steps Card - Primary path + collapsed conditional + follow-up hint
+  const NextStepsCard = ({ items }: { items: string[] }) => {
+    const [showConditional, setShowConditional] = useState(false);
+    const { primaryActions, conditionalEscalation, followUpHint } = categorizeNextSteps(items);
+
+    const toggleConditional = () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setShowConditional(!showConditional);
+    };
+
+    // Limit primary actions to 2 for clarity
+    const visibleActions = primaryActions.slice(0, 2);
+
+    return (
+      <View style={styles.nextStepsContainer}>
+        {/* Primary Path Block */}
+        <View style={styles.primaryPathCard}>
+          <Text style={[styles.primaryPathTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            What to do now
+          </Text>
+          <View style={styles.primaryPathActions}>
+            {visibleActions.map((action, idx) => (
+              <View key={idx} style={styles.primaryActionRow}>
+                <View style={styles.primaryActionBullet} />
+                <Text style={[styles.primaryActionText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {action}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Conditional Escalation - Collapsed by default */}
+        {conditionalEscalation.length > 0 && (
+          <View style={styles.conditionalSection}>
+            <TouchableOpacity
+              style={styles.conditionalHeader}
+              onPress={toggleConditional}
+              activeOpacity={0.7}
+            >
+              <View style={styles.conditionalHeaderLeft}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={16}
+                  color="#9CA3AF"
+                />
+                <Text style={[styles.conditionalHeaderText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  If symptoms change
+                </Text>
+              </View>
+              <Ionicons
+                name={showConditional ? "chevron-up" : "chevron-down"}
+                size={16}
+                color="#9CA3AF"
+              />
+            </TouchableOpacity>
+            {showConditional && (
+              <View style={styles.conditionalContent}>
+                {conditionalEscalation.map((item, idx) => (
+                  <Text
+                    key={idx}
+                    style={[styles.conditionalText, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                  >
+                    {item}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Time-based Follow-up Hint */}
+        {followUpHint && (
+          <Text style={[styles.followUpHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Reassess within 24–48 hours
+          </Text>
+        )}
       </View>
-      {items.map((it, idx) => (
+    );
+  };
+
+  // Standard Card Component (for Recommendations)
+  const PrimaryCard = ({ title, items, icon }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+  }) => (
+    <View style={styles.primaryAssessmentCard}>
+      <View style={styles.primaryCardHeader}>
+        {icon}
+        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+      </View>
+      {items.slice(0, 4).map((it, idx) => (
         <View key={idx} style={styles.cardItem}>
           <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
             {it}
           </Text>
         </View>
@@ -272,35 +371,181 @@ function renderAssessmentCards(text: string | null) {
     </View>
   );
 
+  // Accordion Component with Premium Gating (for secondary sections)
+  const AccordionCard = ({ title, items, icon, sectionKey }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+    sectionKey: string;
+  }) => {
+    const isExpanded = expandedSections[sectionKey] || false;
+    const previewCount = 2; // Show 2 items as preview
+    const hasMoreContent = items.length > previewCount;
+    const previewItems = items.slice(0, previewCount);
+    const showUpgrade = !isPremium && hasMoreContent && isExpanded;
+
+    return (
+      <View style={[
+        styles.accordionCard,
+        !isPremium && styles.accordionCardPremium
+      ]}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleSection(sectionKey)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionHeaderLeft}>
+            {icon}
+            <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+            {!isPremium && hasMoreContent && (
+              <View style={styles.premiumBadge}>
+                <Text style={[styles.premiumBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Advanced
+                </Text>
+              </View>
+            )}
+          </View>
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6B7280"
+          />
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={styles.accordionContent}>
+            {/* Show preview items (always visible) */}
+            {(isPremium ? items : previewItems).map((it, idx) => (
+              <View key={idx} style={styles.cardItem}>
+                <Text style={styles.bulletPoint}>•</Text>
+                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))}
+
+            {/* Premium upgrade prompt - soft, non-aggressive */}
+            {showUpgrade && (
+              <View style={styles.premiumUpgradeContainer}>
+                <Text style={[styles.premiumMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {items.length - previewCount} more insights available
+                </Text>
+                <TouchableOpacity
+                  style={styles.premiumUpgradeLink}
+                  onPress={onUpgradePress}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.premiumUpgradeLinkText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    See upgrade options →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
     'CLINICAL ASSESSMENT': { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
     'VISUAL FINDINGS': { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
     'CLINICAL INTERPRETATION': { icon: <Ionicons name="clipboard" size={20} color="#3498DB" />, color: "#3498DB" },
     'BURN/WOUND GRADING': { icon: <Ionicons name="fitness" size={20} color="#E67E22" />, color: "#E67E22" },
     'INFECTION RISK': { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" />, color: "#E74C3C" },
-    'EMERGENCY RED FLAGS': { icon: <Ionicons name="warning" size={20} color="#DC3545" />, color: "#DC3545" },
-    'RURAL GUIDANCE': { icon: <Ionicons name="location" size={20} color="#16A085" />, color: "#16A085" },
     'URGENCY ASSESSMENT': { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" />, color: "#FF6B35" },
     'RECOMMENDATIONS': { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" />, color: "#28A745" },
     'NEXT STEPS': { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
     'OTHER': { icon: <Ionicons name="information-circle" size={20} color="#6C757D" />, color: "#6C757D" },
   };
 
+  const displayNames: Record<SectionKey, string> = {
+    'CLINICAL ASSESSMENT': 'Clinical Assessment',
+    'VISUAL FINDINGS': 'Visual Findings',
+    'CLINICAL INTERPRETATION': 'Clinical Interpretation',
+    'BURN/WOUND GRADING': 'Wound Grading',
+    'INFECTION RISK': 'Infection Risk',
+    'URGENCY ASSESSMENT': 'Urgency Level',
+    'RECOMMENDATIONS': 'Recommendations',
+    'NEXT STEPS': 'Next Steps',
+    'OTHER': 'Additional Information',
+  };
+
+  // Check if there are any accordion sections with content
+  const hasAccordionContent = accordionSections.some(key => sections[key] && sections[key].length > 0);
+
   return (
     <View>
-      {wantedOrder.map((key) => (
-        sections[key] && sections[key].length > 0 ? (
-          <Card 
-            key={key} 
-            title={key} 
-            items={sections[key]} 
+      {/* Priority Sections - Next Steps uses 3-step layout, others use standard cards */}
+      {prioritySections.map((key) => {
+        if (!sections[key] || sections[key].length === 0) return null;
+
+        // Use 3-step action layout for Next Steps
+        if (key === 'NEXT STEPS') {
+          return <NextStepsCard key={key} items={sections[key]} />;
+        }
+
+        // Standard card for Recommendations
+        return (
+          <PrimaryCard
+            key={key}
+            title={displayNames[key]}
+            items={sections[key]}
             icon={icons[key].icon}
-            iconColor={icons[key].color}
           />
-        ) : null
-      ))}
+        );
+      })}
+
+      {/* Subtle disclaimer below main actions */}
+      <View style={styles.disclaimer}>
+        <Ionicons name="information-circle-outline" size={14} color="#9CA3AF" />
+        <Text style={[styles.disclaimerText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          This guidance is informational only. For medical emergencies, call 911. Always consult a healthcare provider for diagnosis and treatment.
+        </Text>
+      </View>
+
+      {/* Accordion Sections - Collapsible (Premium gated) */}
+      {hasAccordionContent && (
+        <View style={styles.accordionContainer}>
+          <View style={styles.accordionSectionHeader}>
+            <View style={styles.accordionLabelRow}>
+              <Ionicons name="layers-outline" size={14} color="#6B7280" style={{ marginRight: 6 }} />
+              <Text style={[styles.accordionSectionLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Want to understand more?
+              </Text>
+            </View>
+            {!isPremium && (
+              <View style={styles.previewBadge}>
+                <Text style={[styles.previewBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Preview
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text style={[styles.accordionIntro, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Explore clinical context behind this assessment
+          </Text>
+          {accordionSections.map((key) => (
+            sections[key] && sections[key].length > 0 ? (
+              <AccordionCard
+                key={key}
+                title={displayNames[key]}
+                items={sections[key]}
+                icon={icons[key].icon}
+                sectionKey={key}
+              />
+            ) : null
+          ))}
+        </View>
+      )}
+
+      {/* Other content */}
       {sections['OTHER'] && sections['OTHER'].length > 0 && (
-        <Card title="OTHER" items={sections['OTHER']} icon={icons['OTHER'].icon} />
+        <AccordionCard
+          title={displayNames['OTHER']}
+          items={sections['OTHER']}
+          icon={icons['OTHER'].icon}
+          sectionKey="OTHER"
+        />
       )}
     </View>
   );
@@ -317,6 +562,25 @@ export default function AssessmentResults() {
   const [actualSeverity, setActualSeverity] = useState(5);
   const [isLogged, setIsLogged] = useState(false);
   const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false);
+
+  // Accordion expanded state for collapsible sections
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+
+  // Premium state (TODO: integrate with actual subscription system)
+  const [isPremium, setIsPremium] = useState(false);
+
+  const toggleSection = (key: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedSections(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleUpgradePress = () => {
+    // TODO: Navigate to subscription/upgrade screen
+    router.push("/(tabs)/profile");
+  };
 
   // YOLO Detection State
   const [yoloResult, setYoloResult] = useState<PipelineResult | null>(null);
@@ -941,30 +1205,38 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
     };
   };
 
-  const handleCall911 = () => Linking.openURL("tel:911");
-  const handleCall811 = () => Linking.openURL("tel:811");
-  const handleNewAssessment = () => router.replace("/(tabs)/ai-assess");
   const handleReturnHome = () => router.replace("/(tabs)/dashboard");
 
-  const getUrgencyColor = (severity: number) => {
-    if (severity >= 9) return "#DC3545";
-    if (severity >= 7) return "#FF6B35";
-    if (severity >= 4) return "#FFC107";
-    return "#28A745";
-  };
-
-  const getUrgencyText = (severity: number) => {
-    if (severity >= 9) return "Critical Emergency";
-    if (severity >= 7) return "Severe - Urgent Care";
-    if (severity >= 4) return "Moderate - Prompt Care";
-    return "Mild - Self Care";
-  };
-
-  const getUrgencyIcon = (severity: number) => {
-    if (severity >= 9) return "alert-circle";
-    if (severity >= 7) return "warning";
-    if (severity >= 4) return "information-circle";
-    return "checkmark-circle";
+  // Calm, clinical care level indicators (not alarming)
+  const getCareLevel = (severity: number) => {
+    if (severity >= 9) return {
+      text: "Seek immediate care",
+      subtext: "Professional evaluation recommended now",
+      color: "#B91C1C", // Muted red
+      bgColor: "#FEF2F2",
+      icon: "medical" as const
+    };
+    if (severity >= 7) return {
+      text: "Schedule care soon",
+      subtext: "Consider seeing a healthcare provider today",
+      color: "#C2410C", // Muted orange
+      bgColor: "#FFF7ED",
+      icon: "calendar" as const
+    };
+    if (severity >= 4) return {
+      text: "Monitor and follow guidance",
+      subtext: "Home care may be appropriate with watchful attention",
+      color: "#1D4ED8", // Calm blue
+      bgColor: "#EFF6FF",
+      icon: "eye" as const
+    };
+    return {
+      text: "Self-care recommended",
+      subtext: "Your symptoms suggest manageable home care",
+      color: "#047857", // Muted green
+      bgColor: "#ECFDF5",
+      icon: "checkmark-circle" as const
+    };
   };
 
   const ResultCard = ({
@@ -986,20 +1258,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
         </Text>
       </View>
       {children}
-    </View>
-  );
-
-  const EmergencyItem = ({ text }: { text: string }) => (
-    <View style={styles.emergencyItem}>
-      <Ionicons name="warning" size={16} color="#DC3545" />
-      <Text
-        style={[
-          styles.emergencyText,
-          { fontFamily: FONTS.BarlowSemiCondensed },
-        ]}
-      >
-        {text}
-      </Text>
     </View>
   );
 
@@ -1027,32 +1285,35 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                AI Health Assessment
-              </Text>
-
-              <View style={styles.urgencyContainer}>
-                <View
-                  style={[
-                    styles.urgencyIndicator,
-                    { backgroundColor: getUrgencyColor(actualSeverity) },
-                  ]}
-                >
-                  <Ionicons
-                    name={getUrgencyIcon(actualSeverity) as any}
-                    size={24}
-                    color="white"
-                  />
-                  <Text style={styles.urgencyText}>
-                    {getUrgencyText(actualSeverity)}
-                  </Text>
-                </View>
-              </View>
+              {/* Layer 1: Primary Outcome - Calm care level conclusion */}
+              {(() => {
+                const careLevel = getCareLevel(actualSeverity);
+                return (
+                  <View style={[styles.careLevelContainer, { backgroundColor: careLevel.bgColor }]}>
+                    <View style={styles.careLevelIconContainer}>
+                      <Ionicons name={careLevel.icon} size={28} color={careLevel.color} />
+                    </View>
+                    <View style={styles.careLevelContent}>
+                      <Text
+                        style={[
+                          styles.careLevelText,
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: careLevel.color },
+                        ]}
+                      >
+                        {careLevel.text}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.careLevelSubtext,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                        ]}
+                      >
+                        {careLevel.subtext}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })()}
 
               {/* YOLO Wound Detection Results - SHOWN FIRST for immediate value */}
               {displayPhotos.length > 0 && (
@@ -1180,16 +1441,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                 </ResultCard>
               )}
 
-              {/* Medical Triage Assessment - Separated into Cards */}
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 16, marginTop: 8 },
-                ]}
-              >
-                Medical Triage Assessment
-              </Text>
-              
+              {/* Layer 2 & 3: Assessment Content */}
               {isLoading ? (
                 <View style={styles.loadingCard}>
                   <ActivityIndicator size="large" color="#2A7DE1" />
@@ -1215,19 +1467,14 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
               ) : (
                 <>
                   {usedOfflineLLM && (
-                    <View style={styles.offlineAssessmentBanner}>
-                      <Ionicons name="hardware-chip" size={18} color="#FF6B35" />
-                      <View style={styles.offlineAssessmentBannerText}>
-                        <Text style={[styles.offlineAssessmentTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          Offline Assessment
-                        </Text>
-                        <Text style={[styles.offlineAssessmentSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          Generated by on-device AI while offline
-                        </Text>
-                      </View>
+                    <View style={styles.offlineNotice}>
+                      <Ionicons name="cloud-offline-outline" size={14} color="#6B7280" />
+                      <Text style={[styles.offlineNoticeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        Generated offline
+                      </Text>
                     </View>
                   )}
-                  {renderAssessmentCards(symptomContext)}
+                  {renderAssessmentCards(symptomContext, expandedSections, toggleSection, isPremium, handleUpgradePress)}
                   {assessmentError && (
                     <View style={styles.errorNote}>
                       <Ionicons
@@ -1249,203 +1496,30 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                 </>
               )}
 
-              {/* Rest of your JSX remains the same */}
-              {aiContext && (
-                <ResultCard title="Symptom Summary" icon="document-text">
-                  <View style={styles.summaryGrid}>
-                    <View style={styles.summaryItem}>
-                      <Text
-                        style={[
-                          styles.summaryLabel,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Category
-                      </Text>
-                      <Text
-                        style={[
-                          styles.summaryValue,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        {aiContext.category}
-                      </Text>
-                    </View>
-                    <View style={styles.summaryItem}>
-                      <Text
-                        style={[
-                          styles.summaryLabel,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Duration
-                      </Text>
-                      <Text
-                        style={[
-                          styles.summaryValue,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        {getDurationDisplay(params.duration as string)}
-                      </Text>
-                    </View>
-                    <View style={styles.summaryItem}>
-                      <Text
-                        style={[
-                          styles.summaryLabel,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Severity
-                      </Text>
-                      <Text
-                        style={[
-                          styles.summaryValue,
-                          {
-                            fontFamily: FONTS.BarlowSemiCondensed,
-                            color: getUrgencyColor(actualSeverity),
-                            fontWeight: "700",
-                          },
-                        ]}
-                      >
-                        {actualSeverity}/10
-                      </Text>
-                    </View>
-                    {aiContext.symptoms?.length > 0 && (
-                      <View style={styles.summaryFullWidth}>
-                        <Text
-                          style={[
-                            styles.summaryLabel,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Key Symptoms
-                        </Text>
-                        <Text
-                          style={[
-                            styles.summaryValue,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          {aiContext.symptoms.slice(0, 5).join(", ")}
-                          {aiContext.symptoms.length > 5 && "..."}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </ResultCard>
-              )}
-
-              <ResultCard title="Rural Alberta Considerations" icon="location">
-                <View style={styles.recommendationList}>
-                  <Text
-                    style={[
-                      styles.listItem,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    • Nearest hospital may be 30+ minutes away - plan travel
-                    accordingly
-                  </Text>
-                  <Text
-                    style={[
-                      styles.listItem,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    • Weather conditions may impact road access to medical
-                    facilities
-                  </Text>
-                  <Text
-                    style={[
-                      styles.listItem,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    • Keep emergency kit and communication devices charged and
-                    ready
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.healthLinkButton}
-                    onPress={handleCall811}
-                  >
-                    <Ionicons name="call" size={18} color="#2A7DE1" />
-                    <Text
-                      style={[
-                        styles.healthLinkText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Health Link Alberta (811) - 24/7 Nursing Advice
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </ResultCard>
-
-              <ResultCard title="Emergency Red Flags" icon="warning">
-                  <View style={styles.emergencyList}>
-                    <EmergencyItem text="Severe difficulty breathing or chest pain" />
-                    <EmergencyItem text="Signs of stroke (face drooping, arm weakness, speech difficulty)" />
-                    <EmergencyItem text="Heavy bleeding that won't stop" />
-                    <EmergencyItem text="Severe burns or traumatic injury" />
-                    <EmergencyItem text="Loss of consciousness or confusion" />
-                    <EmergencyItem text="Severe allergic reaction with swelling or breathing trouble" />
-                  </View>
-                  <TouchableOpacity
-                    style={styles.emergencyButton}
-                    onPress={handleCall911}
-                  >
-                    <Ionicons name="call" size={22} color="white" />
-                    <Text
-                      style={[
-                        styles.emergencyButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Call 911 Now
-                    </Text>
-                  </TouchableOpacity>
-              </ResultCard>
-
+              {/* Single Primary CTA */}
               <View style={styles.actionButtons}>
                 <TouchableOpacity
-                  style={styles.newAssessmentButton}
-                  onPress={handleNewAssessment}
-                >
-                  <Ionicons name="document-text" size={20} color="white" />
-                  <Text
-                    style={[
-                      styles.newAssessmentText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    New Assessment
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.trackerButton}
+                  style={styles.primaryCTA}
                   onPress={() => router.push("/(tabs)/tracker")}
                 >
-                  <Ionicons name="fitness" size={20} color="white" />
                   <Text
                     style={[
-                      styles.trackerButtonText,
+                      styles.primaryCTAText,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    Go to Health Tracker
+                    Track Your Health
                   </Text>
+                  <Ionicons name="arrow-forward" size={20} color="white" />
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.homeButton}
+                  style={styles.secondaryCTA}
                   onPress={handleReturnHome}
                 >
-                  <Ionicons name="home" size={20} color="#2A7DE1" />
                   <Text
                     style={[
-                      styles.homeButtonText,
+                      styles.secondaryCTAText,
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
@@ -1475,43 +1549,32 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   contentSection: {
-    padding: 24,
-    paddingTop: 24,
+    padding: 20,
+    paddingTop: 16,
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  urgencyContainer: {
-    marginBottom: 20,
-  },
-  urgencyIndicator: {
+  // Layer 1: Calm care level indicator
+  careLevelContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     padding: 16,
     borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    marginBottom: 20,
   },
-  urgencyText: {
-    color: "white",
+  careLevelIconContainer: {
+    marginRight: 14,
+  },
+  careLevelContent: {
+    flex: 1,
+  },
+  careLevelText: {
     fontSize: 18,
-    fontWeight: "700",
-    marginLeft: 8,
-    marginRight: 12,
-  },
-  severityText: {
-    color: "white",
-    fontSize: 14,
     fontWeight: "600",
-    opacity: 0.9,
+    marginBottom: 2,
+  },
+  careLevelSubtext: {
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
   },
   resultCard: {
     backgroundColor: "white",
@@ -1571,30 +1634,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  summaryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  summaryItem: {
-    width: "48%",
-    marginBottom: 12,
-  },
-  summaryFullWidth: {
-    width: "100%",
-    marginBottom: 12,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 14,
-    color: "#1A1A1A",
-    fontWeight: "600",
-  },
   photoContainer: {
     alignItems: "center",
     marginRight: 12,
@@ -1609,109 +1648,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#666",
   },
-  recommendationList: {
-    marginLeft: 8,
-  },
-  listItem: {
-    fontSize: 14,
-    color: "#1A1A1A",
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  healthLinkButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
-  },
-  healthLinkText: {
-    fontSize: 14,
-    color: "#2A7DE1",
-    marginLeft: 8,
-    fontWeight: "600",
-  },
-  emergencyList: {
-    marginBottom: 16,
-  },
-  emergencyItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  emergencyText: {
-    fontSize: 14,
-    color: "#DC3545",
-    fontWeight: "500",
-    marginLeft: 8,
-    flex: 1,
-  },
-  emergencyButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#DC3545",
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  emergencyButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 8,
-  },
   actionButtons: {
-    marginTop: 8,
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
   },
-  newAssessmentButton: {
+  primaryCTA: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2A7DE1",
-    padding: 16,
-    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 30,
     marginBottom: 12,
   },
-  newAssessmentText: {
+  primaryCTAText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
-    marginLeft: 8,
+    marginRight: 8,
   },
-  trackerButton: {
-    flexDirection: "row",
+  secondaryCTA: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#28A745",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    paddingVertical: 12,
   },
-  trackerButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  homeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
-  },
-  homeButtonText: {
-    color: "#2A7DE1",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
+  secondaryCTAText: {
+    color: "#6B7280",
+    fontSize: 14,
+    fontWeight: "500",
   },
   // Assessment Card Styles (like vision-test)
   assessmentCard: {
@@ -1732,11 +1699,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingLeft: 4,
   },
+  cardItemTimeBased: {
+    flexDirection: "column",
+    marginBottom: 12,
+    paddingLeft: 0,
+  },
   bulletPoint: {
     fontSize: 16,
     color: "#1A1A1A",
     marginRight: 8,
     marginTop: 2,
+  },
+  timePrefix: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2A7DE1",
+    marginBottom: 2,
+    letterSpacing: 0.2,
   },
   cardItemText: {
     flex: 1,
@@ -1862,28 +1841,240 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontWeight: "500",
   },
-  offlineAssessmentBanner: {
+  // Subtle offline notice
+  offlineNotice: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF5EB",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#FFD4B3",
+    justifyContent: "center",
+    marginBottom: 12,
   },
-  offlineAssessmentBannerText: {
+  offlineNoticeText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginLeft: 6,
+  },
+  // Primary Assessment Card Styles (for key sections)
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  primaryCardTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1F2937",
     marginLeft: 10,
+  },
+  // Accordion Styles (for secondary sections)
+  accordionContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  accordionSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  accordionLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  accordionSectionLabel: {
+    fontSize: 14,
+    color: "#4B5563",
+    fontWeight: "500",
+  },
+  previewBadge: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  previewBadgeText: {
+    fontSize: 10,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  accordionIntro: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+    fontStyle: "italic",
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  accordionCardPremium: {
+    backgroundColor: "#FAFBFC",
+  },
+  // Premium badge and upgrade styles
+  premiumBadge: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  premiumBadgeText: {
+    fontSize: 10,
+    color: "#6B7280",
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+  premiumUpgradeContainer: {
+    marginTop: 8,
+    paddingTop: 10,
+    alignItems: "flex-start",
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  premiumMoreText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginBottom: 6,
+  },
+  premiumUpgradeLink: {
+    paddingVertical: 4,
+  },
+  premiumUpgradeLinkText: {
+    fontSize: 13,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
-  offlineAssessmentTitle: {
+  accordionTitle: {
     fontSize: 15,
-    fontWeight: "600",
-    color: "#E65100",
+    fontWeight: "500",
+    color: "#374151",
+    marginLeft: 10,
   },
-  offlineAssessmentSubtitle: {
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  // Next Steps - Primary Path + Conditional Escalation
+  nextStepsContainer: {
+    marginBottom: 16,
+  },
+  primaryPathCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryPathTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 16,
+    letterSpacing: 0.1,
+  },
+  primaryPathActions: {
+    gap: 12,
+  },
+  primaryActionRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  primaryActionBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#D1D5DB",
+    marginTop: 8,
+    marginRight: 12,
+  },
+  primaryActionText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#374151",
+    lineHeight: 24,
+  },
+  // Conditional Escalation - Collapsed by default
+  conditionalSection: {
+    marginTop: 12,
+  },
+  conditionalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  conditionalHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  conditionalHeaderText: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    marginLeft: 6,
+  },
+  conditionalContent: {
+    paddingLeft: 26,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  conditionalText: {
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 21,
+    marginBottom: 6,
+  },
+  // Follow-up Hint
+  followUpHint: {
     fontSize: 13,
-    color: "#FF6B35",
-    marginTop: 2,
+    color: "#9CA3AF",
+    marginTop: 14,
+    paddingHorizontal: 4,
+  },
+  // Disclaimer styles
+  disclaimer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginTop: 8,
+  },
+  disclaimerText: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    lineHeight: 16,
+    marginLeft: 6,
+    flex: 1,
   },
 });
