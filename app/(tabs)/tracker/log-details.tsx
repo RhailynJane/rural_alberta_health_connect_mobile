@@ -22,8 +22,12 @@ import StatusModal from "../../components/StatusModal";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
-// Renders AI assessment text into separate cards (mirrors assessment-results)
-function renderAssessmentCards(text: string | null) {
+// Renders AI assessment text matching assessment-results UI (priority + accordions)
+function renderAssessmentCards(
+  text: string | null,
+  expandedSections: Record<string, boolean>,
+  toggleSection: (key: string) => void
+) {
   if (!text) return null;
 
   type SectionKey =
@@ -32,24 +36,19 @@ function renderAssessmentCards(text: string | null) {
     | "CLINICAL INTERPRETATION"
     | "BURN/WOUND GRADING"
     | "INFECTION RISK"
-    | "EMERGENCY RED FLAGS"
-    | "RURAL GUIDANCE"
     | "URGENCY ASSESSMENT"
     | "RECOMMENDATIONS"
     | "NEXT STEPS"
     | "OTHER";
 
-  const wantedOrder: SectionKey[] = [
+  const prioritySections: SectionKey[] = ["NEXT STEPS", "RECOMMENDATIONS"];
+  const accordionSections: SectionKey[] = [
     "CLINICAL ASSESSMENT",
     "VISUAL FINDINGS",
     "CLINICAL INTERPRETATION",
     "BURN/WOUND GRADING",
     "INFECTION RISK",
-    "EMERGENCY RED FLAGS",
-    "RURAL GUIDANCE",
     "URGENCY ASSESSMENT",
-    "RECOMMENDATIONS",
-    "NEXT STEPS",
   ];
 
   const sections: Record<SectionKey, string[]> = {
@@ -58,8 +57,6 @@ function renderAssessmentCards(text: string | null) {
     "CLINICAL INTERPRETATION": [],
     "BURN/WOUND GRADING": [],
     "INFECTION RISK": [],
-    "EMERGENCY RED FLAGS": [],
-    "RURAL GUIDANCE": [],
     "URGENCY ASSESSMENT": [],
     "RECOMMENDATIONS": [],
     "NEXT STEPS": [],
@@ -81,17 +78,6 @@ function renderAssessmentCards(text: string | null) {
     if (/^grading\s*:?/i.test(cleaned)) return "BURN/WOUND GRADING";
     if (/^infection\s+risk\s*(assessment)?\s*:?/i.test(cleaned)) return "INFECTION RISK";
     if (/^risk\s+of\s+infection\s*:?/i.test(cleaned)) return "INFECTION RISK";
-    if (/^(specific\s+)?emergency\s+red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^warning\s+signs?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^rural[-\s]?specific\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural[-\s]?specific\s+resource\s+guideline\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(specific\s+)?(resource\s+)?guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(considerations?|resources?)\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resources?\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
     if (/^urgency\s+(assessment|level)\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^urgency\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^recommendations?\s*:?/i.test(cleaned)) return "RECOMMENDATIONS";
@@ -115,44 +101,123 @@ function renderAssessmentCards(text: string | null) {
     if (content) sections[current].push(content);
   }
 
-  const Card = ({ title, items, icon }: { title: string; items: string[]; icon: React.ReactNode }) => (
-    <View style={styles.assessmentCard}>
-      <View style={styles.cardHeader}>
+  const PrimaryCard = ({ title, items, icon, sectionKey }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+    sectionKey: string;
+  }) => (
+    <View style={styles.primaryAssessmentCard}>
+      <View style={styles.primaryCardHeader}>
         {icon}
-        <Text style={[styles.cardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
       </View>
-      {items.map((it, idx) => (
-        <View key={idx} style={styles.cardItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{it}</Text>
-        </View>
-      ))}
+      {sectionKey === "NEXT STEPS"
+        ? items.slice(0, 4).map((it, idx) => (
+            <View key={idx} style={styles.stepRow}>
+              <View style={styles.stepNumberContainer}>
+                <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                  {it.split(':')[0] || `Step ${idx + 1}`}
+                </Text>
+                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                  {it.replace(/^.*?:\s*/, '') || it}
+                </Text>
+              </View>
+            </View>
+          ))
+        : items.slice(0, 4).map((it, idx) => (
+            <View key={idx} style={styles.cardItem}>
+              <Text style={styles.bulletPoint}>•</Text>
+              <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                {it}
+              </Text>
+            </View>
+          ))}
     </View>
   );
 
-  const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
-    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
-    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" />, color: "#3498DB" },
-    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" />, color: "#E67E22" },
-    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" />, color: "#E74C3C" },
-    "EMERGENCY RED FLAGS": { icon: <Ionicons name="warning" size={20} color="#DC3545" />, color: "#DC3545" },
-    "RURAL GUIDANCE": { icon: <Ionicons name="location" size={20} color="#16A085" />, color: "#16A085" },
-    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" />, color: "#FF6B35" },
-    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" />, color: "#28A745" },
-    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" />, color: "#6C757D" },
+  const AccordionCard = ({ title, items, icon, sectionKey }: {
+    title: string;
+    items: string[];
+    icon: React.ReactNode;
+    sectionKey: string;
+  }) => {
+    const isExpanded = expandedSections[sectionKey] || false;
+    const previewCount = 2;
+    const previewItems = items.slice(0, previewCount);
+    return (
+      <View style={styles.accordionCard}>
+        <TouchableOpacity
+          style={styles.accordionHeader}
+          onPress={() => toggleSection(sectionKey)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionHeaderLeft}>
+            {icon}
+            <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          </View>
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6B7280"
+          />
+        </TouchableOpacity>
+        {isExpanded && (
+          <View style={styles.accordionContent}>
+            {(items.length > 0 ? items : previewItems).map((it, idx) => (
+              <View key={idx} style={styles.cardItem}>
+                <Text style={styles.bulletPoint}>•</Text>
+                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const icons: Record<SectionKey, { icon: React.ReactNode }> = {
+    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" /> },
+    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" /> },
+    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" /> },
+    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" /> },
+    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" /> },
+    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" /> },
+    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" /> },
+    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" /> },
+    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" /> },
   };
 
   return (
     <View>
-      {wantedOrder.map((key) =>
+      {prioritySections.map((key) =>
         sections[key] && sections[key].length > 0 ? (
-          <Card key={key} title={key} items={sections[key]} icon={icons[key].icon} />
+          <PrimaryCard key={key} title={key} items={sections[key]} icon={icons[key].icon} sectionKey={key} />
+        ) : null
+      )}
+      {accordionSections.map((key) =>
+        sections[key] && sections[key].length > 0 ? (
+          <AccordionCard
+            key={key}
+            title={key}
+            items={sections[key]}
+            icon={icons[key].icon}
+            sectionKey={key}
+          />
         ) : null
       )}
       {sections["OTHER"] && sections["OTHER"].length > 0 && (
-        <Card title="OTHER" items={sections["OTHER"]} icon={icons["OTHER"].icon} />
+        <AccordionCard
+          title="OTHER"
+          items={sections["OTHER"]}
+          icon={icons["OTHER"].icon}
+          sectionKey="OTHER"
+        />
       )}
     </View>
   );
@@ -167,12 +232,17 @@ export default function LogDetails() {
   const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
   const [offlineTried, setOfflineTried] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // Metadata state to track both IDs explicitly
   const [entryMetadata, setEntryMetadata] = useState<{
     watermelonId: string | null;
     convexId: string | null;
   }>({ watermelonId: null, convexId: null });
+
+  const toggleSection = (key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Convert string to Convex ID type - but only if it looks like a Convex ID
   // Convex IDs start with 'k' or 'j' and are longer than 20 chars
@@ -779,7 +849,7 @@ export default function LogDetails() {
               {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(resolvedEntry.aiContext)}
+                  {renderAssessmentCards(resolvedEntry.aiContext, expandedSections, toggleSection)}
                 </View>
               )}
 
@@ -1082,6 +1152,102 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+  },
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  primaryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  primaryCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  accordionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  // Next Steps timeline (match assessment-results)
+  stepRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  stepNumberContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
   },
   cardItem: {
     flexDirection: "row",
