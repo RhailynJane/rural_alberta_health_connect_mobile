@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
+  LayoutAnimation,
   Modal,
   Platform,
   ScrollView,
@@ -380,22 +381,26 @@ export default function SymptomAssessment() {
     }
   };
 
-  const getCategoryColor = (category: SymptomCategory) => {
-    switch (category) {
-      case "Cold Weather Injuries":
-        return "#2A7DE1";
-      case "Burns & Heat Injuries":
-        return "#FF6B35";
-      case "Trauma & Injuries":
-        return "#DC3545";
-      case "Rash & Skin Conditions":
-        return "#8A2BE2";
-      case "Infections":
-        return "#28A745";
-      default:
-        return "#6C757D";
-    }
+  const getCategoryColor = (_category: SymptomCategory) => {
+    // Monochrome palette - single accent color for calm, clinical feel
+    return "#6B7280";
   };
+
+  // Category data for grid rendering - ordered by clinical urgency
+  // Row 1: Time-sensitive (Burns, Trauma)
+  // Row 2: Common concerns (Infections, Skin)
+  // Row 3: Situational (Cold, Other)
+  const categories: { id: SymptomCategory; name: string; icon: string }[] = [
+    { id: "Burns & Heat Injuries", name: "Burns & Heat", icon: "flame" },
+    { id: "Trauma & Injuries", name: "Trauma & Injuries", icon: "bandage" },
+    { id: "Infections", name: "Infections", icon: "bug" },
+    { id: "Rash & Skin Conditions", name: "Skin & Rash", icon: "ellipsis-horizontal" },
+    { id: "Cold Weather Injuries", name: "Cold & Frostbite", icon: "snow" },
+    { id: "Custom", name: "Something Else", icon: "help-circle-outline" },
+  ];
+
+  // State for collapsed search section
+  const [showDescribeInput, setShowDescribeInput] = useState(false);
 
   const getFileName = (uri: string) => {
     return uri.split("/").pop() || "photo.jpg";
@@ -428,452 +433,134 @@ export default function SymptomAssessment() {
             onScrollBeginDrag={() => Keyboard.dismiss()}
           >
             <View style={styles.contentSection}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Describe Your Symptoms
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Select a category or describe what you&apos;re experiencing
+              {/* Primary Question - Direct, human */}
+              <Text style={[styles.primaryQuestion, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                What&apos;s bothering you?
               </Text>
 
-              {/* AI Source Selection Card */}
-              {Platform.OS === 'android' && llmAvailable && (
-                <View style={styles.aiSourceCard}>
-                  <View style={styles.aiSourceHeader}>
-                    <Ionicons name="settings" size={20} color="#2A7DE1" />
-                    <Text style={[styles.aiSourceTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      AI Assessment Engine
-                    </Text>
-                  </View>
-
-                  {/* Toggle Buttons */}
-                  <View style={styles.aiSourceToggle}>
+              {/* 2-Column Category Grid - THE primary action */}
+              <View style={styles.categoryGrid}>
+                {categories.map((cat, index) => (
+                  <View key={cat.id} style={styles.categoryTile}>
                     <TouchableOpacity
                       style={[
-                        styles.aiSourceOption,
-                        aiSource === "cloud" && styles.aiSourceOptionActive,
-                        !isOnline && styles.aiSourceOptionDisabled,
+                        styles.categoryTileInner,
+                        selectedCategory === cat.id && styles.categoryTileSelected,
+                        // Subtle emphasis on first row (urgent categories)
+                        index < 2 && styles.categoryTileUrgent,
                       ]}
-                      onPress={() => isOnline && setAiSource("cloud")}
-                      disabled={!isOnline}
+                      onPress={() => handleCategorySelect(cat.id)}
+                      activeOpacity={0.7}
                     >
                       <Ionicons
-                        name="cloud"
-                        size={18}
-                        color={aiSource === "cloud" ? "#fff" : (isOnline ? "#2A7DE1" : "#999")}
+                        name={cat.icon as any}
+                        size={28}
+                        color={selectedCategory === cat.id ? "#2A7DE1" : "#6B7280"}
                       />
-                      <Text style={[
-                        styles.aiSourceOptionText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        aiSource === "cloud" && styles.aiSourceOptionTextActive,
-                        !isOnline && styles.aiSourceOptionTextDisabled,
-                      ]}>
-                        Cloud AI
+                      <Text
+                        style={[
+                          styles.categoryTileText,
+                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          selectedCategory === cat.id && styles.categoryTileTextSelected,
+                        ]}
+                      >
+                        {cat.name}
                       </Text>
-                      {!isOnline && (
-                        <Text style={[styles.aiSourceOptionSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          (offline)
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.aiSourceOption,
-                        aiSource === "device" && styles.aiSourceOptionActive,
-                        !llmReady && styles.aiSourceOptionDisabled,
-                      ]}
-                      onPress={() => llmReady && setAiSource("device")}
-                      disabled={!llmReady}
-                    >
-                      <Ionicons
-                        name="hardware-chip"
-                        size={18}
-                        color={aiSource === "device" ? "#fff" : (llmReady ? "#FF6B35" : "#999")}
-                      />
-                      <Text style={[
-                        styles.aiSourceOptionText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        aiSource === "device" && styles.aiSourceOptionTextActive,
-                        !llmReady && styles.aiSourceOptionTextDisabled,
-                      ]}>
-                        On-Device
-                      </Text>
-                      {/* Status indicator */}
-                      {llmReady ? (
-                        <View style={styles.llmReadyBadge}>
-                          <Ionicons name="checkmark-circle" size={14} color="#28A745" />
-                        </View>
-                      ) : (
-                        <Text style={[styles.aiSourceOptionSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {llmLoading ? `${llmProgress.toFixed(0)}%` : ""}
-                        </Text>
-                      )}
                     </TouchableOpacity>
                   </View>
+                ))}
+              </View>
 
-                  {/* Status Message */}
-                  <Text style={[styles.aiSourceDescription, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {aiSource === "cloud"
-                      ? "Gemini AI: comprehensive medical assessment."
-                      : "On-device AI: private, works offline."}
+              {/* Secondary fallback - Collapsed describe option */}
+              <TouchableOpacity
+                style={styles.describeToggle}
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setShowDescribeInput(!showDescribeInput);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.describeToggleText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Not sure? Describe it instead
+                </Text>
+                <Ionicons
+                  name={showDescribeInput ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#6B7280"
+                />
+              </TouchableOpacity>
+
+              {/* Expanded describe input - Only shows when toggled */}
+              {showDescribeInput && (
+                <View style={styles.describeSection}>
+                  <TextInput
+                    style={[styles.describeInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                    placeholder='e.g., "burn on my hand, blistering"'
+                    placeholderTextColor="#9CA3AF"
+                    value={symptomDescription}
+                    onChangeText={setSymptomDescription}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    returnKeyType="done"
+                    blurOnSubmit
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                  />
+                  <Text style={[styles.describeHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    Plain language works—no medical terms needed.
                   </Text>
-
-                  {/* Download Progress (if downloading) */}
-                  {llmLoading && (
-                    <View style={styles.llmProgressContainer}>
-                      <View style={styles.llmProgressBar}>
-                        <View style={[styles.llmProgressFill, { width: `${llmProgress}%` }]} />
-                      </View>
-                      <Text style={[styles.llmProgressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Downloading AI model ({llmProgress.toFixed(0)}%)
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Model Ready indicator */}
-                  {llmReady && !llmLoading && (
-                    <View style={styles.llmReadyContainer}>
-                      <Ionicons name="checkmark-circle" size={16} color="#28A745" />
-                      <Text style={[styles.llmReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        On-device AI ready
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Not downloaded yet (online) */}
-                  {!llmReady && !llmLoading && isOnline && (
-                    <View style={styles.llmNotReadyContainer}>
-                      <Ionicons name="cloud-download" size={16} color="#2A7DE1" />
-                      <Text style={[styles.llmNotReadyText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        On-device model downloading in background...
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Warning: Offline but LLM not ready */}
-                  {!isOnline && !llmReady && !llmLoading && (
-                    <View style={styles.llmOfflineWarning}>
-                      <Ionicons name="warning" size={16} color="#DC3545" />
-                      <Text style={[styles.llmOfflineWarningText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Offline. Connect to download on-device AI.
-                      </Text>
-                    </View>
-                  )}
-
-                  {llmError && (
-                    <Text style={[styles.llmErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {llmError}
-                    </Text>
-                  )}
                 </View>
               )}
 
-              <TouchableOpacity
-                style={[
-                  styles.categoryCard,
-                  selectedCategory === "Cold Weather Injuries" &&
-                    styles.categoryCardSelected,
-                ]}
-                onPress={() => handleCategorySelect("Cold Weather Injuries")}
-              >
-                <View style={styles.categoryHeader}>
-                  <Ionicons
-                    name={getCategoryIcon("Cold Weather Injuries")}
-                    size={24}
-                    color={getCategoryColor("Cold Weather Injuries")}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Cold Weather Injuries
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.categoryItems,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Frostbite, Hypothermia, Chilblains, Cold-induced asthma, Dry
-                  skin/cracking, Windburn
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryCard,
-                  selectedCategory === "Burns & Heat Injuries" &&
-                    styles.categoryCardSelected,
-                ]}
-                onPress={() => handleCategorySelect("Burns & Heat Injuries")}
-              >
-                <View style={styles.categoryHeader}>
-                  <Ionicons
-                    name={getCategoryIcon("Burns & Heat Injuries")}
-                    size={24}
-                    color={getCategoryColor("Burns & Heat Injuries")}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Burns & Heat Injuries
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.categoryItems,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Thermal burns, Chemical burns, Electrical burns, Sunburn, Heat
-                  exhaustion, Heat stroke
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryCard,
-                  selectedCategory === "Trauma & Injuries" &&
-                    styles.categoryCardSelected,
-                ]}
-                onPress={() => handleCategorySelect("Trauma & Injuries")}
-              >
-                <View style={styles.categoryHeader}>
-                  <Ionicons
-                    name={getCategoryIcon("Trauma & Injuries")}
-                    size={24}
-                    color={getCategoryColor("Trauma & Injuries")}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Trauma & Injuries
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.categoryItems,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Farm equipment injury, Animal-related injury, Motor vehicle
-                  accident, Fall from height, Crush Injury, Laceration/Cuts
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryCard,
-                  selectedCategory === "Rash & Skin Conditions" &&
-                    styles.categoryCardSelected,
-                ]}
-                onPress={() => handleCategorySelect("Rash & Skin Conditions")}
-              >
-                <View style={styles.categoryHeader}>
-                  <Ionicons
-                    name={getCategoryIcon("Rash & Skin Conditions")}
-                    size={24}
-                    color={getCategoryColor("Rash & Skin Conditions")}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Rash & Skin Conditions
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.categoryItems,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Contact dermatitis, Eczema, Psoriasis, Hives, Heat rash,
-                  Allergic reactions, Poison ivy/oak
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryCard,
-                  selectedCategory === "Infections" &&
-                    styles.categoryCardSelected,
-                ]}
-                onPress={() => handleCategorySelect("Infections")}
-              >
-                <View style={styles.categoryHeader}>
-                  <Ionicons
-                    name={getCategoryIcon("Infections")}
-                    size={24}
-                    color={getCategoryColor("Infections")}
-                    style={styles.categoryIcon}
-                  />
-                  <Text
-                    style={[
-                      styles.categoryTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Infections
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.categoryItems,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Cellulitis, Abscess, Infected wounds, Fungal infections,
-                  Bacterial infections, Viral rashes, Sepsis signs
-                </Text>
-              </TouchableOpacity>
-
-              <Text
-                style={[
-                  styles.orText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Or describe your symptoms:
-              </Text>
-
-
-
-              <TextInput
-                style={[
-                  styles.symptomInput,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-                placeholder="I have been experiencing... (include location, appearance, and any other details)"
-                placeholderTextColor="#999"
-                value={symptomDescription}
-                onChangeText={setSymptomDescription}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-                returnKeyType="done"
-                blurOnSubmit
-                onSubmitEditing={() => Keyboard.dismiss()}
-              />
-
-              <View style={styles.photoSection}>
-                <Text
-                  style={[
-                    styles.photoTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Add Photos for AI Analysis
-                </Text>
-                <Text
-                  style={[
-                    styles.photoDescription,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Clear, well-lit photos help AI assess your condition
-                  accurately. Include different angles and close-ups.
-                </Text>
-
-                {uploadedPhotos.length > 0 && (
-                  <View style={styles.uploadedPhotosContainer}>
-                    <Text
-                      style={[
-                        styles.uploadedPhotosTitle,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Photos for AI Analysis ({uploadedPhotos.length})
-                    </Text>
-                    {uploadedPhotos.map((photo, index) => (
-                      <View key={index} style={styles.uploadedPhotoItem}>
-                        <Image
-                          source={{ uri: photo }}
-                          style={styles.photoThumbnail}
-                        />
-                        <View style={styles.photoInfo}>
-                          <Text
-                            style={[
-                              styles.uploadedPhotoText,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            {getFileName(photo)}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.photoSizeText,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            Photo {index + 1} - Ready for AI analysis
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => handleRemovePhoto(photo)}
-                        >
-                          <Ionicons
-                            name="close-circle"
-                            size={24}
-                            color="#DC3545"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <View style={styles.photoButtons}>
+              {/* Photo Upload - Compact, asset-like */}
+              <View style={styles.photoUploadSection}>
+                {uploadedPhotos.length === 0 ? (
+                  // Empty state - subtle prompt
                   <TouchableOpacity
-                    style={[
-                      styles.photoButton,
-                      uploadedPhotos.length >= 3 && styles.photoButtonDisabled,
-                    ]}
+                    style={styles.photoPrompt}
                     onPress={handleUploadPhoto}
-                    disabled={uploadedPhotos.length >= 3}
+                    activeOpacity={0.7}
                   >
-                    <Ionicons 
-                      name="image" 
-                      size={20} 
-                      color={uploadedPhotos.length >= 3 ? "#999" : "#2A7DE1"} 
-                    />
-                    <Text
-                      style={[
-                        styles.photoButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                        uploadedPhotos.length >= 3 && styles.photoButtonTextDisabled,
-                      ]}
-                    >
-                      Upload Photo
+                    <View style={styles.photoPromptIcon}>
+                      <Ionicons name="camera-outline" size={20} color="#9CA3AF" />
+                    </View>
+                    <Text style={[styles.photoPromptText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Add a photo
+                    </Text>
+                    <Text style={[styles.photoPromptHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      optional
                     </Text>
                   </TouchableOpacity>
-                </View>
+                ) : (
+                  // Photos added - thumbnail strip
+                  <View style={styles.photoStrip}>
+                    <View style={styles.photoThumbnails}>
+                      {uploadedPhotos.map((photo, index) => (
+                        <View key={index} style={styles.photoThumbWrapper}>
+                          <Image source={{ uri: photo }} style={styles.photoThumb} />
+                          <TouchableOpacity
+                            style={styles.photoRemoveBtn}
+                            onPress={() => handleRemovePhoto(photo)}
+                          >
+                            <Ionicons name="close" size={12} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                      {uploadedPhotos.length < 3 && (
+                        <TouchableOpacity
+                          style={styles.photoAddMore}
+                          onPress={handleUploadPhoto}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add" size={20} color="#9CA3AF" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <Text style={[styles.photoCount, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      {uploadedPhotos.length}/3 photos
+                    </Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.buttonContainer}>
@@ -1012,22 +699,170 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   contentSection: {
-    padding: 24,
-    paddingTop: 24,
+    padding: 20,
+    paddingTop: 8,
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1A1A1A",
+  // Primary Question
+  primaryQuestion: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  // 2-Column Category Grid
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
     marginBottom: 8,
+  },
+  categoryTile: {
+    width: "50%",
+    paddingHorizontal: 6,
+    marginBottom: 12,
+  },
+  categoryTileInner: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  categoryTileUrgent: {
+    // Subtle emphasis for urgent categories (top row)
+    borderColor: "#E5E7EB",
+  },
+  categoryTileSelected: {
+    borderColor: "#2A7DE1",
+    borderWidth: 2,
+    backgroundColor: "#F8FAFC",
+  },
+  categoryTileText: {
+    fontSize: 14,
+    color: "#374151",
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 18,
+    fontWeight: "500",
+  },
+  categoryTileTextSelected: {
+    color: "#2A7DE1",
+    fontWeight: "600",
+  },
+  // Describe Toggle (Secondary fallback)
+  describeToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    marginBottom: 4,
+  },
+  describeToggleText: {
+    fontSize: 15,
+    color: "#6B7280",
+    marginRight: 6,
+  },
+  // Describe Section (Expanded)
+  describeSection: {
+    marginBottom: 16,
+  },
+  describeInput: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 80,
+    textAlignVertical: "top",
+    fontSize: 15,
+    color: "#1F2937",
+    lineHeight: 22,
+  },
+  describeHint: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginTop: 8,
     textAlign: "center",
   },
-  sectionSubtitle: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 32,
+  // Photo Upload - Compact, asset-like
+  photoUploadSection: {
+    marginBottom: 20,
   },
+  photoPrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderStyle: "dashed",
+  },
+  photoPromptIcon: {
+    marginRight: 8,
+  },
+  photoPromptText: {
+    fontSize: 15,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  photoPromptHint: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginLeft: 8,
+  },
+  photoStrip: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    padding: 12,
+  },
+  photoThumbnails: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  photoThumbWrapper: {
+    position: "relative",
+    marginRight: 10,
+  },
+  photoThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  photoRemoveBtn: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#6B7280",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoAddMore: {
+    width: 56,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoCount: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 8,
+  },
+  // Legacy styles kept for compatibility
   categoryCard: {
     backgroundColor: "white",
     padding: 16,
