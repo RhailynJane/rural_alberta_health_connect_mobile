@@ -1,6 +1,7 @@
 import { Barlow_600SemiBold, useFonts } from "@expo-google-fonts/barlow";
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Dimensions, Image, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { ReminderSettings } from "../_utils/notifications";
 import NotificationBell from "./NotificationBell";
@@ -25,6 +26,10 @@ interface CurvedHeaderProps {
   showNotificationBell?: boolean; // New prop to show notification bell
   reminderEnabled?: boolean; // New prop to pass reminder status
   reminderSettings?: ReminderSettings | null; // New prop to pass full reminder settings
+  showMenuButton?: boolean;
+  showProfileButton?: boolean;
+  onMenuPress?: () => void;
+  onProfilePress?: () => void;
 }
 
 const CurvedHeader: React.FC<CurvedHeaderProps> = ({
@@ -40,6 +45,10 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
   showNotificationBell = false,
   reminderEnabled = false,
   reminderSettings = null,
+  showMenuButton = true,
+  showProfileButton = false,
+  onMenuPress,
+  onProfilePress,
 }) => {
   const [fontsLoaded] = useFonts({
     BarlowSemiCondensed: Barlow_600SemiBold,
@@ -74,11 +83,6 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
 
       {/* Content */}
       <View style={styles.content}>
-        {showNotificationBell && (
-          <View style={styles.notificationBellContainer}>
-            <NotificationBell reminderEnabled={reminderEnabled} reminderSettings={reminderSettings} />
-          </View>
-        )}
         {children ? (
           children
         ) : (
@@ -86,18 +90,31 @@ const CurvedHeader: React.FC<CurvedHeaderProps> = ({
             styles.headerContent, 
             screenType === 'signin' ? styles.signinLayout : styles.onboardingLayout
           ]}>
-            {showLogo && (
-              <Image 
-                source={require("../../assets/images/logo-no-name.png")} 
-                style={[
-                  screenType === 'signin' ? styles.signinLogo : styles.onboardingLogo
-                ]}
-                resizeMode="contain"
-              />
-            )}
-            <View style={[
-              screenType === 'signin' ? styles.signinTextContainer : styles.onboardingTextContainer
-            ]}>
+            <View style={styles.topBar}>
+                  <View style={styles.leftBar}>
+                    {showLogo && (
+                      <Image 
+                        source={require("../../assets/images/logo-no-name.png")} 
+                        style={screenType === 'signin' ? styles.signinLogo : styles.onboardingLogo}
+                        resizeMode="contain"
+                      />
+                    )}
+                  </View>
+                  <View style={styles.rightBar}>
+                    {showNotificationBell && (
+                      <View style={{ marginRight: 10 }}>
+                        <NotificationBell reminderEnabled={reminderEnabled} reminderSettings={reminderSettings} />
+                      </View>
+                    )}
+                    {showMenuButton && (
+                      <TouchableOpacity onPress={onMenuPress} style={styles.iconButton} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Ionicons name="menu" size={26} color={textColor} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+            </View>
+
+                <View style={screenType === 'signin' ? styles.signinTextContainer : styles.onboardingTextContainer}>
               {title && (
                 <Text 
                   style={[
@@ -220,6 +237,24 @@ const styles = StyleSheet.create({
     top: 10,
     right: 16,
     zIndex: 10,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 10,
+  },
+  leftBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rightBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    paddingHorizontal: 4,
   },
 });
 
