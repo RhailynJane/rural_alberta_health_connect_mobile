@@ -25,7 +25,6 @@ import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
-import HealthStatusTag from "../components/HealthStatusTag";
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -41,7 +40,7 @@ export default function Dashboard() {
   const [localWeeklyEntries, setLocalWeeklyEntries] = useState<any[]>([]);
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(6);
   const [chartSize, setChartSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
-  const [pillTooltip, setPillTooltip] = useState<null | "Stable" | "Cautious" | "Critical" | "No data">(null);
+  const [pillTooltip, setPillTooltip] = useState<null | "Mild" | "Moderate" | "Severe" | "No data">(null);
   const [healthTooltipOpen, setHealthTooltipOpen] = useState<boolean>(false);
   const queryArgs = isAuthenticated && !isLoading ? {} : "skip";
   
@@ -370,10 +369,10 @@ export default function Dashboard() {
       const status = count === 0
         ? "No data"
         : avgSeverity <= 3
-          ? "Stable"
+          ? "Mild"
           : avgSeverity <= 6
-            ? "Cautious"
-            : "Critical";
+            ? "Moderate"
+            : "Severe";
 
       return {
         label: date.toLocaleDateString("en-US", { weekday: "short" }),
@@ -395,21 +394,36 @@ export default function Dashboard() {
     return (displayedWeeklyEntries || []).reduce(
       (acc, entry: any) => {
         const severity = entry.severity ?? 0;
-        if (severity <= 3) acc.stable += 1;
-        else if (severity <= 6) acc.cautious += 1;
-        else acc.critical += 1;
+        if (severity <= 3) acc.mild += 1;
+        else if (severity <= 6) acc.moderate += 1;
+        else acc.severe += 1;
         return acc;
       },
-      { stable: 0, cautious: 0, critical: 0 }
+      { mild: 0, moderate: 0, severe: 0 }
     );
   }, [displayedWeeklyEntries]);
 
   const statusCopy: Record<string, string> = {
-    Stable: "Severity 0-3. Mild or no symptoms logged.",
-    Cautious: "Severity 4-6. Monitor symptoms and follow care plan.",
-    Critical: "Severity 7-10. Consider contacting care or 811/911 as needed.",
+    Mild: "Severity 0-3. Mild or no symptoms logged.",
+    Moderate: "Severity 4-6. Monitor symptoms and follow care plan.",
+    Severe: "Severity 7-10. Consider contacting care or 811/911 as needed.",
     "No data": "No logs for this day. Add a health entry to stay on track.",
   };
+
+  const statusPalette = useMemo((): { gradient: [string, string]; text: string } => {
+    switch (healthStatus) {
+      case "Excellent":
+        return { gradient: ["#38d39f", "#2fa87b"], text: "#ffffff" };
+      case "Good":
+        return { gradient: ["#4fa3ff", "#2f80ed"], text: "#ffffff" };
+      case "Fair":
+        return { gradient: ["#ffb347", "#ff8f39"], text: "#1a1a1a" };
+      case "Poor":
+        return { gradient: ["#ff6b6b", "#e63946"], text: "#ffffff" };
+      default:
+        return { gradient: ["#9baec8", "#7a8aa1"], text: "#ffffff" };
+    }
+  }, [healthStatus]);
 
   const selectedDay = weeklyLog.days[selectedDayIndex] ?? weeklyLog.days[weeklyLog.days.length - 1];
 
@@ -558,29 +572,33 @@ export default function Dashboard() {
                   Welcome, {userName}!
                 </Text>
                 <LinearGradient
-                  colors={["#2f80ed", "#6aa7ff"]}
+                  colors={statusPalette.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.healthStatusContainer}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text
-                      style={[
-                        styles.healthStatusLabel,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Health Status
-                    </Text>
-                    <Text style={[styles.healthStatusHeadline, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {healthStatus}
-                    </Text>
+                    <View style={styles.healthStatusHeaderRow}>
+                      <Text
+                        style={[
+                          styles.healthStatusLabel,
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text },
+                        ]}
+                      >
+                        Health Status
+                      </Text>
+                      <Text
+                        style={[
+                          styles.healthStatusBadge,
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text },
+                        ]}
+                      >
+                        {healthStatus}
+                      </Text>
+                    </View>
                     <TouchableOpacity onPress={() => setHealthTooltipOpen((prev) => !prev)}>
-                      <Text style={[styles.healthStatusInfo, { fontFamily: FONTS.BarlowSemiCondensed }]}>How is this decided?</Text>
+                      <Text style={[styles.healthStatusInfo, { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text }]}>How is this decided?</Text>
                     </TouchableOpacity>
-                  </View>
-                  <View style={styles.healthStatusTagWrapper}>
-                    <HealthStatusTag status={healthStatus} />
                   </View>
                 </LinearGradient>
                 {healthTooltipOpen && (
@@ -595,7 +613,7 @@ export default function Dashboard() {
               {/* Weekly Health Log Chart */}
               <View style={styles.weeklyCard}>
                 <LinearGradient
-                  colors={["#e9f0ff", "#ffffff"]}
+                  colors={["#e9f0ff", "#ffffff"] as [string, string]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.weeklyCardGradient}
@@ -613,17 +631,17 @@ export default function Dashboard() {
                   </View>
 
                   <View style={styles.statusPillsRow}>
-                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Stable" ? null : "Stable")}>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Mild" ? null : "Mild")}>
                       <View style={[styles.dot, { backgroundColor: "#34c759" }]} />
-                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Stable {statusBuckets.stable}</Text>
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Mild {statusBuckets.mild}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Cautious" ? null : "Cautious")}>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Moderate" ? null : "Moderate")}>
                       <View style={[styles.dot, { backgroundColor: "#f5a524" }]} />
-                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Cautious {statusBuckets.cautious}</Text>
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Moderate {statusBuckets.moderate}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Critical" ? null : "Critical")}>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Severe" ? null : "Severe")}>
                       <View style={[styles.dot, { backgroundColor: "#ff3b30" }]} />
-                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Critical {statusBuckets.critical}</Text>
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Severe {statusBuckets.severe}</Text>
                     </TouchableOpacity>
                   </View>
                   {pillTooltip && (
@@ -707,7 +725,7 @@ export default function Dashboard() {
                       <Text style={[styles.dayDetailDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.label} • {selectedDay?.dateLabel}</Text>
                     </View>
                     <View style={styles.badgeGroup}>
-                      <View style={[styles.badge, selectedDay?.status === "Stable" && styles.badgeStable, selectedDay?.status === "Cautious" && styles.badgeCautious, selectedDay?.status === "Critical" && styles.badgeCritical]}>
+                      <View style={[styles.badge, selectedDay?.status === "Mild" && styles.badgeStable, selectedDay?.status === "Moderate" && styles.badgeCautious, selectedDay?.status === "Severe" && styles.badgeCritical]}>
                         <Text style={[styles.badgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.status}</Text>
                       </View>
                       <Text style={[styles.dayCountText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.count ?? 0} logged</Text>
@@ -908,22 +926,21 @@ const styles = StyleSheet.create({
   },
   healthStatusLabel: {
     fontSize: 14,
-    color: "#e7f0ff",
     marginBottom: 4,
   },
-  healthStatusHeadline: {
-    fontSize: 24,
+  healthStatusHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  healthStatusBadge: {
+    fontSize: 18,
     fontWeight: "800",
-    color: "#ffffff",
-    marginBottom: 4,
   },
   healthStatusInfo: {
     fontSize: 12,
-    color: "#e7f0ff",
     textDecorationLine: "underline",
-  },
-  healthStatusTagWrapper: {
-    marginLeft: 12,
   },
   // Health Score Card Styles
   healthScoreCard: {
@@ -1023,6 +1040,7 @@ const styles = StyleSheet.create({
   statusPillsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    columnGap: 8,
     marginBottom: 14,
   },
   statusPill: {
@@ -1047,6 +1065,7 @@ const styles = StyleSheet.create({
   },
   tooltipCard: {
     marginTop: 8,
+    marginBottom: 10,
     backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 12,
