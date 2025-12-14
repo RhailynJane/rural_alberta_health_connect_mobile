@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -233,6 +233,7 @@ export default function LogDetails() {
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
   const [offlineTried, setOfflineTried] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [photoIndex, setPhotoIndex] = useState(0);
 
   // Metadata state to track both IDs explicitly
   const [entryMetadata, setEntryMetadata] = useState<{
@@ -721,6 +722,14 @@ export default function LogDetails() {
   }
 
   const dateTime = formatDateTime(resolvedEntry.timestamp);
+  const heroPhotos: string[] = resolvedEntry.photos || [];
+  const heroWidth = Dimensions.get("window").width - 32;
+
+  const handleHeroScroll = (event: any) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const idx = Math.round(contentOffset.x / layoutMeasurement.width);
+    setPhotoIndex(idx);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
@@ -741,10 +750,43 @@ export default function LogDetails() {
           <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.contentSection}>
               {/* Back Button */}
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={20} color="#2A7DE1" />
-                <Text style={styles.backButtonText}>Back to Log</Text>
+              <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+                <Ionicons name="arrow-back" size={18} color="#1F2937" />
+                <Text style={styles.backLinkText}>Back to log</Text>
               </TouchableOpacity>
+
+              {/* Hero photo carousel */}
+              {heroPhotos.length > 0 && (
+                <View>
+                  <View style={styles.heroImageCard}>
+                    <ScrollView
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      onMomentumScrollEnd={handleHeroScroll}
+                    >
+                      {heroPhotos.map((uri, idx) => (
+                        <Image
+                          key={`${uri}-${idx}`}
+                          source={{ uri }}
+                          style={[styles.heroImage, { width: heroWidth }]}
+                        />
+                      ))}
+                    </ScrollView>
+                    <View style={styles.heroOverlay}>
+                      <Text style={styles.heroOverlayText}>{`Photo ${photoIndex + 1} of ${heroPhotos.length}`}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.heroDots}>
+                    {heroPhotos.map((_, idx) => (
+                      <View
+                        key={`dot-${idx}`}
+                        style={[styles.heroDot, idx === photoIndex && styles.heroDotActive]}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
 
               {/* Entry Header */}
               <View style={styles.headerCard}>
@@ -814,34 +856,31 @@ export default function LogDetails() {
                 )}
               </View>
 
-              {/* Symptoms */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="medical" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Symptoms & Description</Text>
-                </View>
-                <Text style={styles.cardContent}>{resolvedEntry.symptoms}</Text>
-              </View>
-
-              {/* Category */}
-              {resolvedEntry.category && (
+              {/* Health overview */}
+              {(resolvedEntry.symptoms || resolvedEntry.category || resolvedEntry.duration) && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
-                    <Ionicons name="pricetag" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Category</Text>
+                    <Ionicons name="pulse" size={20} color="#2563EB" />
+                    <Text style={styles.cardTitle}>Health details</Text>
                   </View>
-                  <Text style={styles.cardContent}>{resolvedEntry.category}</Text>
-                </View>
-              )}
-
-              {/* Duration */}
-              {resolvedEntry.duration && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="time" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Duration</Text>
-                  </View>
-                  <Text style={styles.cardContent}>{resolvedEntry.duration}</Text>
+                  {resolvedEntry.symptoms ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Symptoms</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.symptoms}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.category ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Category</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.category}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.duration ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Duration</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.duration}</Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
 
@@ -864,51 +903,7 @@ export default function LogDetails() {
                 </View>
               )}
 
-              {/* Photos */}
-              {resolvedEntry.photos && resolvedEntry.photos.length > 0 && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="camera" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Photos ({resolvedEntry.photos.length})</Text>
-                  </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.photosContainer}>
-                      {resolvedEntry.photos.map((photo: string, index: number) => (
-                        <View key={index} style={styles.photoItem}>
-                          <Image source={{ uri: photo }} style={styles.photo} />
-                          <Text style={styles.photoLabel}>Photo {index + 1}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              )}
 
-              {/* Technical Details */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="information-circle" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Technical Details</Text>
-                </View>
-                <View style={styles.techDetails}>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry ID:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry._id}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Timestamp:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.timestamp}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Date Key:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.date}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry Type:</Text>
-                    <Text style={styles.techValue}>{resolvedEntry.type || "manual_entry"}</Text>
-                  </View>
-                </View>
-              </View>
             </View>
           </ScrollView>
         </View>
@@ -998,22 +993,69 @@ const styles = StyleSheet.create({
     color: "#666",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
-  backButton: {
+  backLink: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
-    padding: 10,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
+    marginBottom: 14,
+    gap: 6,
   },
-  backButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: "#2A7DE1",
+  backLinkText: {
+    fontSize: 15,
+    color: "#1F2937",
     fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroImageCard: {
+    borderRadius: 14,
+    overflow: "hidden",
+    marginBottom: 16,
+    backgroundColor: "#F3F4F6",
+  },
+  heroImage: {
+    width: "100%",
+    height: 220,
+  },
+  heroOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroOverlayText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroOverlaySubtext: {
+    color: "#E5E7EB",
+    fontSize: 12,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  heroDots: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 6,
+    gap: 8,
+  },
+  heroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#D1D5DB",
+  },
+  heroDotActive: {
+    width: 14,
+    borderRadius: 7,
+    backgroundColor: "#2A7DE1",
   },
   headerCard: {
     backgroundColor: "white",
@@ -1022,11 +1064,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   headerRow: {
     flexDirection: "row",
@@ -1114,12 +1151,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensed,
   },
   detailCard: {
-    backgroundColor: "white",
+    backgroundColor: "#FFFFFF",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E9ECEF",
+    borderColor: "#E5E7EB",
   },
   cardHeader: {
     flexDirection: "row",
@@ -1139,6 +1176,26 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: FONTS.BarlowSemiCondensed,
   },
+  infoRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2F4F7",
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontWeight: "600",
+  },
+  infoValue: {
+    fontSize: 15,
+    color: "#111827",
+    lineHeight: 22,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
   // Assessment card styles (match assessment-results)
   assessmentCard: {
     backgroundColor: "#F0F8FF",
@@ -1147,11 +1204,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#2A7DE1",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   primaryAssessmentCard: {
     backgroundColor: "#FFFFFF",
@@ -1160,11 +1212,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
   },
   primaryCardHeader: {
     flexDirection: "row",
@@ -1184,11 +1231,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
   },
   accordionHeader: {
     flexDirection: "row",

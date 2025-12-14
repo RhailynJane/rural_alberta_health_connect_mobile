@@ -316,15 +316,26 @@ export default function Tracker() {
                                 return (
                                   <TouchableOpacity
                                     key={`day-${key}`}
-                                    style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
+                                    style={styles.dayCell}
                                     onPress={() => {
                                       setClickedDate(key);
                                       setSelectedDate(key);
                                     }}
+                                    activeOpacity={0.8}
                                   >
-                                    <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
-                                    {hasEntries && (
-                                      <Text style={[styles.entryIndicator, isSelected && { color: "#FFF" }]}>{dayEntries.length > 1 ? `${dayEntries.length} entries` : "1 entry"}</Text>
+                                    {hasEntries ? (
+                                      <View style={[styles.dayPill, isSelected && styles.dayPillSelected]}>
+                                        <Text style={[styles.dayPillNumber, isSelected && styles.dayPillNumberSelected, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
+                                        <Text
+                                          style={[styles.dayPillCount, isSelected && styles.dayPillCountSelected, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                                          numberOfLines={1}
+                                          ellipsizeMode="tail"
+                                        >
+                                          {`${dayEntries.length}x`}
+                                        </Text>
+                                      </View>
+                                    ) : (
+                                      <Text style={[styles.dayNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{dayNumber}</Text>
                                     )}
                                   </TouchableOpacity>
                                 );
@@ -344,15 +355,26 @@ export default function Tracker() {
                                   return (
                                     <TouchableOpacity
                                       key={`day-${key}`}
-                                      style={[styles.dayCell, hasEntries && styles.dayCellWithEntries, isSelected && styles.dayCellSelected]}
+                                      style={styles.dayCell}
                                       onPress={() => {
                                         setClickedDate(key);
                                         setSelectedDate(key);
                                       }}
+                                      activeOpacity={0.8}
                                     >
-                                      <Text style={[styles.dayNumber, hasEntries && styles.dayNumberWithEntries, isSelected && { color: "#FFF" }, { fontFamily: FONTS.BarlowSemiCondensed }]}>{d.getDate()}</Text>
-                                      {hasEntries && (
-                                        <Text style={[styles.entryIndicator, isSelected && { color: "#FFF" }]}>{dayEntries.length > 1 ? `${dayEntries.length} entries` : "1 entry"}</Text>
+                                      {hasEntries ? (
+                                        <View style={[styles.dayPill, isSelected && styles.dayPillSelected]}>
+                                          <Text style={[styles.dayPillNumber, isSelected && styles.dayPillNumberSelected, { fontFamily: FONTS.BarlowSemiCondensed }]}>{d.getDate()}</Text>
+                                          <Text
+                                            style={[styles.dayPillCount, isSelected && styles.dayPillCountSelected, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                                            numberOfLines={1}
+                                            ellipsizeMode="tail"
+                                          >
+                                            {`${dayEntries.length}x`}
+                                          </Text>
+                                        </View>
+                                      ) : (
+                                        <Text style={[styles.dayNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{d.getDate()}</Text>
                                       )}
                                     </TouchableOpacity>
                                   );
@@ -745,32 +767,48 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: "14.28%",
-    aspectRatio: 1,
-    justifyContent: "center",
+    paddingVertical: 4,
     alignItems: "center",
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  dayCellWithEntries: {
-    backgroundColor: "#E3F2FD",
-    borderWidth: 2,
-    borderColor: "#2A7DE1",
-  },
-  dayCellSelected: {
-    backgroundColor: "#2A7DE1",
+    marginBottom: 6,
   },
   dayNumber: {
     fontSize: 14,
     fontWeight: "600",
     color: "#666",
   },
-  dayNumberWithEntries: {
-    color: "#2A7DE1",
-    fontWeight: "700",
+  dayPill: {
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    backgroundColor: "#E8F1FF",
+    borderWidth: 1,
+    borderColor: "#2A7DE1",
+    alignItems: "center",
+    gap: 2,
+    minWidth: 44,
+    maxWidth: "100%",
+    alignSelf: "center",
   },
-  entryIndicator: {
+  dayPillSelected: {
+    backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
+  },
+  dayPillNumber: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  dayPillCount: {
     fontSize: 10,
-    color: "#2A7DE1",
+    fontWeight: "600",
+    color: "#1D4ED8",
+    textAlign: "center",
+  },
+  dayPillNumberSelected: {
+    color: "#FFF",
+  },
+  dayPillCountSelected: {
+    color: "#EFF6FF",
   },
   entriesList: {
     marginTop: 8,
