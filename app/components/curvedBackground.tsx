@@ -28,41 +28,31 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
       >
         <Defs>
           <RadialGradient id="bgGradient1" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#ffffff" stopOpacity="0.6" />
-            <Stop offset="100%" stopColor="#f8f9fa" stopOpacity="0.3" />
+            <Stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+            <Stop offset="100%" stopColor="#e9eef8" stopOpacity="0.5" />
           </RadialGradient>
           <RadialGradient id="bgGradient2" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="#e9ecef" stopOpacity="0.4" />
-            <Stop offset="100%" stopColor="#dee2e6" stopOpacity="0.2" />
+            <Stop offset="0%" stopColor="#d7e3ff" stopOpacity="0.55" />
+            <Stop offset="100%" stopColor="#c7d5f1" stopOpacity="0.3" />
           </RadialGradient>
         </Defs>
-        
-        {/* Static ellipses - no animations */}
+        {/* Static ellipses - minimal, soft tint */}
         <Ellipse
-          cx={screenWidth * 0.2}
-          cy={screenHeight * 0.25}
-          rx={screenWidth * 0.35}
-          ry={screenHeight * 0.3}
+          cx={screenWidth * 0.18}
+          cy={screenHeight * 0.2}
+          rx={screenWidth * 0.32}
+          ry={screenHeight * 0.26}
           fill="url(#bgGradient1)"
-          opacity="0.6"
+          opacity="0.72"
         />
-        
+
         <Ellipse
-          cx={screenWidth * 0.8}
-          cy={screenHeight * 0.15}
-          rx={screenWidth * 0.25}
-          ry={screenHeight * 0.2}
+          cx={screenWidth * 0.78}
+          cy={screenHeight * 0.18}
+          rx={screenWidth * 0.22}
+          ry={screenHeight * 0.18}
           fill="url(#bgGradient2)"
-          opacity="0.4"
-        />
-        
-        <Ellipse
-          cx={screenWidth * 0.4}
-          cy={screenHeight * 0.7}
-          rx={screenWidth * 0.3}
-          ry={screenHeight * 0.25}
-          fill="url(#bgGradient1)"
-          opacity="0.3"
+          opacity="0.48"
         />
       </Svg>
       {children}
@@ -73,7 +63,7 @@ const CurvedBackground: React.FC<CurvedBackgroundProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#d4cdcdff",
+    backgroundColor: "#eef2f8",
   },
 });
 

@@ -9,13 +9,14 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
 import { View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { database } from '../watermelon/database';
 import { LLMHost } from '../utils/llm/LLMHost';
+import { database } from '../watermelon/database';
 import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 import { NotificationBanner } from "./components/NotificationBanner";
 import { NotificationProvider } from "./components/NotificationContext";
 import { OfflineBanner } from "./components/OfflineBanner";
+import SideMenuProvider from "./components/SideMenuProvider";
 import { SyncProvider } from "./components/SyncProvider";
 import { useNetworkStatus } from "./hooks/useNetworkStatus";
 import {
@@ -149,48 +150,50 @@ function RootLayoutContent({
 
   return (
     <SafeAreaProvider>
-      {/* In-app notification banner */}
-      {notificationBanner && (
-        <NotificationBanner
-          title={notificationBanner.title}
-          body={notificationBanner.body}
-          onDismiss={() => setNotificationBanner(null)}
-          onPress={() => {
-            setNotificationBanner(null);
-            // Handle navigation based on notification type
-          }}
-        />
-      )}
-      <View style={{ flex: 1 }}>
-        {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
-        {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
-        
-        {/* Conditional rendering: Show auth stack if not authenticated, otherwise show app stack */}
-        {!isAuthenticated && !isLoading ? (
-          <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
-            <Stack.Screen name="index" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="auth/signin" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="auth/signup" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="auth/personal-info" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="auth/emergency-contact" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="auth/medical-history" options={{ gestureEnabled: false }} />
-          </Stack>
-        ) : (
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+      <SideMenuProvider>
+        {/* In-app notification banner */}
+        {notificationBanner && (
+          <NotificationBanner
+            title={notificationBanner.title}
+            body={notificationBanner.body}
+            onDismiss={() => setNotificationBanner(null)}
+            onPress={() => {
+              setNotificationBanner(null);
+              // Handle navigation based on notification type
+            }}
+          />
         )}
-      </View>
-      {/* React Buoy DevTools - only in development */}
-      {__DEV__ && (
-        <FloatingDevTools
-          environment="local"
-          userRole="admin"
-          disableHints
-        />
-      )}
+        <View style={{ flex: 1 }}>
+          {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
+          {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
+          
+          {/* Conditional rendering: Show auth stack if not authenticated, otherwise show app stack */}
+          {!isAuthenticated && !isLoading ? (
+            <Stack screenOptions={{ headerShown: false, gestureEnabled: false }}>
+              <Stack.Screen name="index" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth/signin" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth/signup" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth/personal-info" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth/emergency-contact" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="auth/medical-history" options={{ gestureEnabled: false }} />
+            </Stack>
+          ) : (
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          )}
+        </View>
+        {/* React Buoy DevTools - only in development */}
+        {__DEV__ && (
+          <FloatingDevTools
+            environment="local"
+            userRole="admin"
+            disableHints
+          />
+        )}
+      </SideMenuProvider>
     </SafeAreaProvider>
   );
 }

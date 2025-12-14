@@ -1,9 +1,9 @@
 import { api } from '@/convex/_generated/api';
+import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
 import { checkAndUpdateAnyReminderDue, getReminders, initializeNotificationsOnce, isBellUnread, ReminderSettings } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
@@ -81,10 +81,10 @@ export default function NotificationBell({ reminderEnabled = false, reminderSett
         onPress={handlePress}
         style={styles.bellContainer}
       >
-        <Icon 
-          name={hasUnread ? "notifications-active" : "notifications-none"} 
-          size={28} 
-          color={COLORS.darkText} 
+        <Ionicons 
+          name={hasUnread ? "notifications" : "notifications-outline"}
+          size={26}
+          color={hasUnread ? COLORS.primary : COLORS.darkText}
         />
         {hasUnread && (
           <View style={styles.badge}>
