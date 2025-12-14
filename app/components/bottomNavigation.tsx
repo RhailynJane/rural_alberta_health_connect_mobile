@@ -1,7 +1,6 @@
 // components/BottomNavigation.tsx
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { usePathname, useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FONTS } from '../constants/constants';
 
@@ -9,8 +8,8 @@ interface Tab {
   name: string;
   label: string;
   route: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  iconNameFocused: keyof typeof Ionicons.glyphMap;
+  iconSource: any;
+  iconSourceFocused: any;
 }
 
 const tabs: Tab[] = [
@@ -18,36 +17,36 @@ const tabs: Tab[] = [
     name: 'Home',
     label: 'Home',
     route: '/dashboard',
-    iconName: 'home-outline',
-    iconNameFocused: 'home'
+    iconSource: require('../../assets/images/home-icon.png'),
+    iconSourceFocused: require('../../assets/images/home-icon.png'),
   },
   {
     name: 'AIAssess',
     label: 'AI Assess',
     route: '/ai-assess',
-    iconName: 'medical-outline',
-    iconNameFocused: 'medical'
+    iconSource: require('../../assets/images/assess-icon.png'),
+    iconSourceFocused: require('../../assets/images/assess-icon.png'),
   },
   {
     name: 'Tracker',
     label: 'Tracker',
     route: '/tracker',
-    iconName: 'stats-chart-outline',
-    iconNameFocused: 'stats-chart'
+    iconSource: require('../../assets/images/tracker-icon.png'),
+    iconSourceFocused: require('../../assets/images/tracker-icon.png'),
   },
   {
     name: 'Emergency',
     label: 'Emergency',
     route: '/emergency',
-    iconName: 'alert-circle-outline',
-    iconNameFocused: 'alert-circle'
+    iconSource: require('../../assets/images/emergency-icon.png'),
+    iconSourceFocused: require('../../assets/images/emergency-icon.png'),
   },
   {
     name: 'Profile',
     label: 'Profile',
     route: '/profile',
-    iconName: 'person-outline',
-    iconNameFocused: 'person'
+    iconSource: require('../../assets/images/profile-icon.png'),
+    iconSourceFocused: require('../../assets/images/profile-icon.png'),
   },
 ];
 
@@ -82,10 +81,10 @@ const BottomNavigation: React.FC = () => {
             onPress={onPress}
             style={[styles.tab, isFocused && styles.tabFocused]}
           >
-            <Ionicons 
-              name={isFocused ? tab.iconNameFocused : tab.iconName} 
-              size={24} 
-              color={isFocused ? '#2A7DE1' : '#666'} 
+            <Image 
+              source={isFocused ? tab.iconSourceFocused : tab.iconSource} 
+              style={{ width: 24, height: 24, tintColor: isFocused ? '#2A7DE1' : '#666' }}
+              resizeMode='contain'
             />
             <Text 
               style={[styles.tabText, isFocused && styles.tabTextFocused]}

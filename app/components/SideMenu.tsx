@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+// Using PNG icons from assets for menu items
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -45,13 +45,13 @@ const SideMenu: React.FC<SideMenuProps> = ({
   };
 
   const menuItems = [
-    { label: "Home", icon: "home-outline", route: "/(tabs)/dashboard" },
-    { label: "AI Assessment", icon: "medical-outline", route: "/(tabs)/ai-assess" },
-    { label: "Tracker", icon: "stats-chart-outline", route: "/(tabs)/tracker" },
-    { label: "Emergency Services", icon: "alert-circle-outline", route: "/(tabs)/emergency" },
-    { label: "Location Services", icon: "location-outline", route: "/location-services" },
-    { label: "Resources", icon: "library-outline", route: "/resources" },
-    { label: "Profile", icon: "person-outline", route: "/(tabs)/profile" },
+    { label: "Home", iconSource: require("../../assets/images/home-icon.png"), route: "/(tabs)/dashboard" },
+    { label: "AI Assessment", iconSource: require("../../assets/images/assess-icon.png"), route: "/(tabs)/ai-assess" },
+    { label: "Tracker", iconSource: require("../../assets/images/tracker-icon.png"), route: "/(tabs)/tracker" },
+    { label: "Emergency Services", iconSource: require("../../assets/images/emergency-icon.png"), route: "/(tabs)/emergency" },
+    { label: "Location Services", iconSource: require("../../assets/images/location-icon.png"), route: "/location-services" },
+    { label: "Resources", iconSource: require("../../assets/images/resources-icon.png"), route: "/resources" },
+    { label: "Profile", iconSource: require("../../assets/images/profile-icon.png"), route: "/(tabs)/profile" },
   ];
 
   return (
@@ -75,7 +75,11 @@ const SideMenu: React.FC<SideMenuProps> = ({
                 <Image source={{ uri: userAvatar }} style={styles.avatar} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={40} color="#fff" />
+                  <Image 
+                    source={require('../../assets/images/profile-icon.png')} 
+                    style={{ width: 40, height: 40, tintColor: '#fff' }} 
+                    resizeMode="contain"
+                  />
                 </View>
               )}
             </View>
@@ -94,7 +98,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleNavigation(item.route)}
               >
-                <Ionicons name={item.icon as any} size={22} color="#2A7DE1" />
+                <Image source={item.iconSource} style={{ width: 22, height: 22 }} resizeMode="contain" />
                 <Text style={[styles.menuItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                   {item.label}
                 </Text>

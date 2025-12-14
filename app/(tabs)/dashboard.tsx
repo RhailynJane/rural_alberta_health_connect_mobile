@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
+  Image,
   Linking,
   ScrollView,
   StyleSheet,
@@ -16,6 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, Polyline, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
+// PNG icons from assets
+// If filenames differ, update the require() paths below accordingly.
+
 import { api } from "../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
 import { analyzeDuplicates, dedupeHealthEntries } from "../../watermelon/utils/dedupeHealthEntries";
@@ -584,16 +588,8 @@ export default function Dashboard() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.contentSection}>
-              {/* Welcome Section */}
-              <View style={styles.welcomeContainer}>
-                <Text
-                  style={[
-                    styles.welcomeText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Welcome, {userName}!
-                </Text>
+              {/* Health Status Card */}
+              <View>
                 <LinearGradient
                   colors={statusPalette.gradient}
                   start={{ x: 0, y: 0 }}
@@ -754,13 +750,6 @@ export default function Dashboard() {
                       <Text style={[styles.dayCountText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.count ?? 0} logged</Text>
                     </View>
                   </View>
-
-                  <View style={styles.trendRow}>
-                    <Text style={[styles.trendLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>Day-over-day</Text>
-                    <Text style={[styles.trendValue, { color: weeklyLog.trend >= 0 ? "#1f9d55" : "#d7263d", fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {weeklyLog.trend >= 0 ? `+${weeklyLog.trend}` : weeklyLog.trend} entries vs yesterday
-                    </Text>
-                  </View>
                 </LinearGradient>
               </View>
 
@@ -780,9 +769,18 @@ export default function Dashboard() {
                     style={styles.quickActionButton}
                     onPress={handleSymptomAssessment}
                   >
-                    <View style={styles.quickActionIcon}>
-                      <Text style={styles.quickActionEmoji}>🤖</Text>
-                    </View>
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/assess-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
                     <Text
                       style={[
                         styles.quickActionText,
@@ -797,16 +795,25 @@ export default function Dashboard() {
                     style={styles.quickActionButton}
                     onPress={navigateToDailyLog}
                   >
-                    <View style={styles.quickActionIcon}>
-                      <Text style={styles.quickActionEmoji}>📝</Text>
-                    </View>
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/tracker-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
                     <Text
                       style={[
                         styles.quickActionText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      Daily Log
+                      Health Tracker
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -933,16 +940,6 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     padding: 24,
-  },
-  welcomeContainer: {
-    marginBottom: 10,
-    marginTop: -20,
-  },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 10,
   },
   healthStatusContainer: {
     flexDirection: "row",
@@ -1216,64 +1213,49 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1A1A1A",
   },
-  trendRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  trendLabel: {
-    fontSize: 13,
-    color: "#6c7080",
-  },
-  trendValue: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
   // Quick Actions Styles
   quickActionsContainer: {
     marginBottom: 20,
   },
   quickActionsTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#1A1A1A",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   quickActionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 12,
   },
   quickActionButton: {
     backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
+    padding: 20,
+    borderRadius: 16,
     alignItems: "center",
     flex: 1,
-    marginHorizontal: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: "#2A7DE1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  quickActionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#F0F8FF",
+  quickActionIconGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  quickActionEmoji: {
-    fontSize: 24,
+  quickActionIcon: {
+    width: 32,
+    height: 32,
   },
   quickActionText: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#2A7DE1",
+    fontWeight: "600",
+    color: "#1A1A1A",
     textAlign: "center",
   },
   assessmentButton: {
