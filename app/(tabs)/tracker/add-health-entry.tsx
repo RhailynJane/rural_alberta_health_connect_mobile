@@ -128,7 +128,6 @@ export default function AddHealthEntry() {
    * @param id - WatermelonDB ID or Convex ID of the entry to edit
    */
   const loadEntryForEdit = useCallback(async (id: string) => {
-    setLoadingEntry(true);
     try {
       const healthCollection = database.get('health_entries');
       let entry: any = null;
@@ -228,8 +227,6 @@ export default function AddHealthEntry() {
         },
       ]);
       setAlertModalVisible(true);
-    } finally {
-      setLoadingEntry(false);
     }
   }, [database]);
 
@@ -545,7 +542,6 @@ export default function AddHealthEntry() {
                     await database.batch(updatedEntry);
                     console.log('✅ Fields updated successfully via prepareUpdate (full)');
                   } catch (e) {
-                    primaryError = e;
                     console.warn('⚠️ [WMDB DEBUG] Primary update failed, will attempt minimal fallback (non-fatal):', e);
                     const rawKeysAfterPrimary = Object.keys((entry as any)?._raw || {});
                     console.log('🧪 [WMDB DEBUG] Raw entry keys AFTER primary failure:', rawKeysAfterPrimary);
@@ -719,7 +715,6 @@ export default function AddHealthEntry() {
                         }
                       }
                       console.log('🛟 [WMDB DEBUG] (offline) Rescue strategy completed. Duplicate will be treated as latest version.');
-                      primaryError = null;
                     } catch (duplicateErr) {
                       console.error('💥 [WMDB DEBUG] (offline) Rescue duplicate strategy failed:', duplicateErr);
                       throw duplicateErr;
