@@ -90,6 +90,7 @@ export default function TTSHighlightedText({
             asBulletList={asBulletList}
             bulletChar={bulletChar}
             getTextStyleFn={getTextStyle}
+            parentPadding={parentPadding}
           />
         );
       })}
