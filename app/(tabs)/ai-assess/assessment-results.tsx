@@ -6,12 +6,13 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Dimensions,
     Image,
     LayoutAnimation,
+    LayoutChangeEvent,
     NativeScrollEvent,
     NativeSyntheticEvent,
     Platform,
@@ -730,7 +731,97 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CAROUSEL_PADDING = 40; // 20px padding on each side
 const IMAGE_WIDTH = SCREEN_WIDTH - CAROUSEL_PADDING;
 
+// Calculate where image renders within container using "contain" mode
+function calculateContainLayout(
+  containerWidth: number,
+  containerHeight: number,
+  imageWidth: number,
+  imageHeight: number
+) {
+  if (!containerWidth || !containerHeight || !imageWidth || !imageHeight) {
+    return null;
+  }
+
+  const containerAspect = containerWidth / containerHeight;
+  const imageAspect = imageWidth / imageHeight;
+
+  let renderedWidth: number;
+  let renderedHeight: number;
+
+  if (imageAspect > containerAspect) {
+    // Image is wider - fit to width
+    renderedWidth = containerWidth;
+    renderedHeight = containerWidth / imageAspect;
+  } else {
+    // Image is taller - fit to height
+    renderedHeight = containerHeight;
+    renderedWidth = containerHeight * imageAspect;
+  }
+
+  return {
+    offsetX: (containerWidth - renderedWidth) / 2,
+    offsetY: (containerHeight - renderedHeight) / 2,
+    scaleX: renderedWidth / imageWidth,
+    scaleY: renderedHeight / imageHeight,
+  };
+}
+
+// Get color for detection class (same as ScanningOverlay)
+function getDetectionColor(className: string): string {
+  const colorMap: Record<string, string> = {
+    '1st degree burn': '#FF9500',
+    '2nd degree burn': '#FF6B00',
+    '3rd degree burn': '#FF3B30',
+    'Rashes': '#FF2D92',
+    'abrasion': '#34C759',
+    'bruise': '#AF52DE',
+    'cut': '#30D158',
+    'frostbite': '#5AC8FA',
+  };
+  return colorMap[className] || '#2A7DE1';
+}
+
 function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: ImageCarouselProps) {
+  // Track container layout and image dimensions for label positioning
+  const [containerLayout, setContainerLayout] = useState({ width: 0, height: 0 });
+  const [imageDimensions, setImageDimensions] = useState<Record<number, { width: number; height: number }>>({});
+
+  // Fetch image dimensions for all photos
+  useEffect(() => {
+    photos.forEach((uri, index) => {
+      // For annotated images (base64), get dimensions from the result
+      const result = yoloResult?.results[index];
+      if (result?.annotatedImageBase64) {
+        // Use original image dimensions from preprocessing if available
+        const originalDims = result.originalDimensions;
+        if (originalDims) {
+          setImageDimensions(prev => ({
+            ...prev,
+            [index]: { width: originalDims.width, height: originalDims.height },
+          }));
+          return;
+        }
+      }
+      // Fallback: get dimensions from URI
+      Image.getSize(
+        uri,
+        (width, height) => {
+          setImageDimensions(prev => ({
+            ...prev,
+            [index]: { width, height },
+          }));
+        },
+        () => {} // Ignore errors
+      );
+    });
+  }, [photos, yoloResult]);
+
+  // Handle container layout
+  const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setContainerLayout({ width, height });
+  }, []);
+
   // Get image source for each photo (annotated if available, original otherwise)
   const getImageSource = (index: number) => {
     const result = yoloResult?.results[index];
@@ -749,6 +840,59 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
     }
   };
 
+  // Render detection labels for an image
+  const renderDetectionLabels = (index: number) => {
+    const result = yoloResult?.results[index];
+    const detections = result?.detections || [];
+    const dims = imageDimensions[index];
+
+    if (!detections.length || !dims || !containerLayout.width || !containerLayout.height) {
+      return null;
+    }
+
+    // Account for imageWrapper padding (8px on each side)
+    const WRAPPER_PADDING = 8;
+    const imageContainerWidth = containerLayout.width - WRAPPER_PADDING * 2;
+    const imageContainerHeight = 260; // Fixed image height
+
+    const layout = calculateContainLayout(
+      imageContainerWidth,
+      imageContainerHeight,
+      dims.width,
+      dims.height
+    );
+
+    if (!layout) return null;
+
+    const { offsetX, offsetY, scaleX, scaleY } = layout;
+
+    return detections.map((detection, idx) => {
+      const { x1, y1 } = detection.boxCorners;
+      // Position label at top-left of bounding box
+      // Add WRAPPER_PADDING to account for the padding offset
+      const labelX = WRAPPER_PADDING + offsetX + x1 * scaleX;
+      const labelY = WRAPPER_PADDING + offsetY + y1 * scaleY;
+
+      return (
+        <View
+          key={idx}
+          style={[
+            carouselStyles.detectionLabel,
+            {
+              backgroundColor: getDetectionColor(detection.className),
+              left: labelX,
+              top: Math.max(WRAPPER_PADDING, labelY - 22), // Position above the box
+            },
+          ]}
+        >
+          <Text style={carouselStyles.detectionLabelText}>
+            {detection.className}
+          </Text>
+        </View>
+      );
+    });
+  };
+
   return (
     <View style={carouselStyles.container}>
       {/* Horizontal Image Scroll */}
@@ -764,12 +908,14 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
       >
         {photos.map((_, index) => (
           <View key={index} style={[carouselStyles.imageContainer, { width: IMAGE_WIDTH }]}>
-            <View style={carouselStyles.imageWrapper}>
+            <View style={carouselStyles.imageWrapper} onLayout={handleContainerLayout}>
               <Image
                 source={getImageSource(index)}
                 style={carouselStyles.image}
                 resizeMode="contain"
               />
+              {/* Detection labels overlay */}
+              {renderDetectionLabels(index)}
             </View>
           </View>
         ))}
@@ -813,11 +959,24 @@ const carouselStyles = StyleSheet.create({
     backgroundColor: "#F8F9FA",
     padding: 8,
     borderRadius: 10,
+    position: "relative",
   },
   image: {
     width: "100%",
     height: 260,
     borderRadius: 8,
+  },
+  detectionLabel: {
+    position: "absolute",
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    zIndex: 10,
+  },
+  detectionLabelText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "600",
   },
   indicators: {
     flexDirection: "row",
