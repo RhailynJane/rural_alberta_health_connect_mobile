@@ -212,14 +212,14 @@ function ChunkItem({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
-    // Remove any extra margin so backgrounds can extend to card edges
-    marginHorizontal: 0,
+    // Allow backgrounds to extend beyond container via negative margins
+    overflow: 'visible',
   },
   chunkContainer: {
     position: 'relative',
     marginBottom: 4,
-    // No border radius - let it fill full width of parent card
-    // Parent card already has rounded corners
+    // Allow background overlay to extend via negative margins
+    overflow: 'visible',
   },
   backgroundOverlay: {
     ...StyleSheet.absoluteFillObject,
