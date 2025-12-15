@@ -918,18 +918,20 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
         ))}
       </ScrollView>
 
-      {/* Floating Page Indicators */}
+      {/* Floating Page Indicators - Frosted Glass Pill */}
       {photos.length > 1 && (
         <View style={carouselStyles.indicatorsOverlay}>
-          {photos.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                carouselStyles.indicator,
-                index === activeIndex && carouselStyles.indicatorActive,
-              ]}
-            />
-          ))}
+          <View style={carouselStyles.indicatorsPill}>
+            {photos.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  carouselStyles.indicator,
+                  index === activeIndex && carouselStyles.indicatorActive,
+                ]}
+              />
+            ))}
+          </View>
         </View>
       )}
     </View>
@@ -939,7 +941,6 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
 // Carousel-specific styles
 const carouselStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#F8F9FA",
     borderRadius: 16,
     overflow: "hidden",
     position: "relative",
@@ -950,7 +951,6 @@ const carouselStyles = StyleSheet.create({
   image: {
     width: "100%",
     height: 280,
-    borderRadius: 16,
   },
   detectionLabel: {
     position: "absolute",
@@ -966,23 +966,42 @@ const carouselStyles = StyleSheet.create({
   },
   indicatorsOverlay: {
     position: "absolute",
-    bottom: 12,
+    bottom: 16,
+    alignSelf: "center",
     left: 0,
     right: 0,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+  },
+  // Frosted glass pill container
+  indicatorsPill: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    // Shadow for depth
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    // Subtle border for glass edge
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.5)",
   },
   indicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
   },
   indicatorActive: {
-    backgroundColor: "#FFFFFF",
-    width: 18,
+    backgroundColor: "#2A7DE1",
+    width: 20,
     borderRadius: 3,
   },
 });
