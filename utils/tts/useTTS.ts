@@ -10,6 +10,23 @@ import { DEFAULT_VOICE_ID, VoiceId } from './voices';
 const TTS_MODEL_DOWNLOADED_KEY = '@tts_model_downloaded';
 const TTS_ENABLED_KEY = '@tts_enabled';
 
+// Global TTS coordination - ensures only one TTS plays at a time
+type TTSStopCallback = () => void;
+const ttsInstances = new Set<TTSStopCallback>();
+
+function registerTTSInstance(stopCallback: TTSStopCallback) {
+  ttsInstances.add(stopCallback);
+  return () => ttsInstances.delete(stopCallback);
+}
+
+function stopAllOtherTTS(exceptCallback?: TTSStopCallback) {
+  ttsInstances.forEach((callback) => {
+    if (callback !== exceptCallback) {
+      callback();
+    }
+  });
+}
+
 export type TTSStatus =
   | 'checking'        // Checking availability
   | 'not_available'   // Platform doesn't support ONNX
