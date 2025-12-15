@@ -191,11 +191,15 @@ function ChunkItem({
 
   return (
     <View style={styles.chunkContainer}>
-      {/* Animated background overlay - rounded, stays within bounds */}
+      {/* Animated background overlay - extends to parent card edges via negative margins */}
       <Animated.View
         style={[
           styles.backgroundOverlay,
-          { backgroundColor: bgColor },
+          {
+            backgroundColor: bgColor,
+            marginHorizontal: -parentPadding,
+            paddingHorizontal: parentPadding,
+          },
           animatedStyle,
         ]}
       />
