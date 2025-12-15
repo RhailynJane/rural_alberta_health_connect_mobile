@@ -261,12 +261,15 @@ function renderAssessmentCards(
       chunkStates: ttsChunkStates,
       isAvailable: ttsAvailable,
       hasPlayed: ttsHasPlayed,
+      isOtherPlaying,
     } = useTTS();
 
     const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
 
     // Different colors: Cyan for new, Green for replay
-    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
+    // Gray when disabled (another TTS playing)
+    const isDisabled = isOtherPlaying;
+    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
     const handleTTSPress = async () => {
       if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
