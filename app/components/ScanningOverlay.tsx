@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   Image,
+  LayoutChangeEvent,
   StyleSheet,
   Text,
   View,
@@ -12,6 +13,50 @@ import { FONTS } from '../constants/constants';
 import type { PipelineResult } from '../../utils/yolo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface ImageLayout {
+  containerWidth: number;
+  containerHeight: number;
+  imageWidth: number;
+  imageHeight: number;
+}
+
+// Calculate where the image renders within container using "contain" mode
+function calculateContainLayout(layout: ImageLayout) {
+  const { containerWidth, containerHeight, imageWidth, imageHeight } = layout;
+
+  if (!containerWidth || !containerHeight || !imageWidth || !imageHeight) {
+    return null;
+  }
+
+  const containerAspect = containerWidth / containerHeight;
+  const imageAspect = imageWidth / imageHeight;
+
+  let renderedWidth: number;
+  let renderedHeight: number;
+
+  if (imageAspect > containerAspect) {
+    // Image is wider than container - fit to width
+    renderedWidth = containerWidth;
+    renderedHeight = containerWidth / imageAspect;
+  } else {
+    // Image is taller than container - fit to height
+    renderedHeight = containerHeight;
+    renderedWidth = containerHeight * imageAspect;
+  }
+
+  const offsetX = (containerWidth - renderedWidth) / 2;
+  const offsetY = (containerHeight - renderedHeight) / 2;
+
+  return {
+    renderedWidth,
+    renderedHeight,
+    offsetX,
+    offsetY,
+    scaleX: renderedWidth / imageWidth,
+    scaleY: renderedHeight / imageHeight,
+  };
+}
 
 interface ScanningOverlayProps {
   visible: boolean;
@@ -65,6 +110,10 @@ export default function ScanningOverlay({
   // Fallback timer ref
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Layout tracking for proper bounding box positioning
+  const [containerLayout, setContainerLayout] = useState({ width: 0, height: 0 });
+  const [imageDimensions, setImageDimensions] = useState<Record<number, { width: number; height: number }>>({});
+
   // Reset state when overlay becomes visible
   useEffect(() => {
     if (visible) {
@@ -85,6 +134,32 @@ export default function ScanningOverlay({
       }
     };
   }, [visible, imageOpacity, detectionsOpacity, overlayOpacity]);
+
+  // Fetch image dimensions for all images
+  useEffect(() => {
+    if (visible && images.length > 0) {
+      images.forEach((uri, index) => {
+        Image.getSize(
+          uri,
+          (width, height) => {
+            setImageDimensions((prev) => ({
+              ...prev,
+              [index]: { width, height },
+            }));
+          },
+          (error) => {
+            console.warn(`Failed to get image size for index ${index}:`, error);
+          }
+        );
+      });
+    }
+  }, [visible, images]);
+
+  // Handle container layout changes
+  const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setContainerLayout({ width, height });
+  }, []);
 
   // Fallback timer: if onLoopEnd doesn't fire, proceed after estimated duration
   useEffect(() => {
@@ -250,42 +325,65 @@ export default function ScanningOverlay({
   const detections = getCurrentDetections();
   const detectionCount = detections.length;
 
+  // Calculate contain layout for current image
+  const currentImageDims = imageDimensions[currentIndex];
+  const containLayout = currentImageDims
+    ? calculateContainLayout({
+        containerWidth: containerLayout.width,
+        containerHeight: containerLayout.height,
+        imageWidth: currentImageDims.width,
+        imageHeight: currentImageDims.height,
+      })
+    : null;
+
   return (
     <Animated.View style={[styles.container, { opacity: overlayOpacity }]}>
-      {/* Progress indicator at top */}
-      <View style={styles.progressContainer}>
-        <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Analyzing image {currentIndex + 1} of {images.length}
-        </Text>
-        <View style={styles.progressDots}>
-          {images.map((_, idx) => (
-            <View
-              key={idx}
-              style={[
-                styles.progressDot,
-                idx === currentIndex && styles.progressDotActive,
-                idx < currentIndex && styles.progressDotComplete,
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-
       {/* Image container - fills available space */}
-      <Animated.View style={[styles.imageContainer, { opacity: imageOpacity }]}>
-        {/* The actual image with cover mode */}
+      <Animated.View
+        style={[styles.imageContainer, { opacity: imageOpacity }]}
+        onLayout={handleContainerLayout}
+      >
+        {/* The actual image with contain mode for proper bounding box alignment */}
         <Image
           source={{ uri: currentImage }}
           style={styles.image}
-          resizeMode="cover"
+          resizeMode="contain"
         />
 
+        {/* Floating progress indicator pill */}
+        <View style={styles.progressPill}>
+          <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Analyzing image {currentIndex + 1} of {images.length}
+          </Text>
+          {images.length > 1 && (
+            <View style={styles.progressDots}>
+              {images.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.progressDot,
+                    idx === currentIndex && styles.progressDotActive,
+                    idx < currentIndex && styles.progressDotComplete,
+                  ]}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Detection boxes overlay */}
-        {showDetections && (
+        {showDetections && containLayout && (
           <Animated.View style={[styles.detectionsContainer, { opacity: detectionsOpacity }]}>
             {detections.map((detection, idx) => {
-              // For now, use simplified positioning
-              // In production, you'd calculate based on actual image dimensions
+              // Calculate proper screen coordinates based on contain layout
+              const { offsetX, offsetY, scaleX, scaleY } = containLayout;
+
+              // Detection coords are in original image space, transform to screen space
+              const screenX1 = offsetX + detection.x1 * scaleX;
+              const screenY1 = offsetY + detection.y1 * scaleY;
+              const screenWidth = (detection.x2 - detection.x1) * scaleX;
+              const screenHeight = (detection.y2 - detection.y1) * scaleY;
+
               return (
                 <View
                   key={idx}
@@ -293,12 +391,11 @@ export default function ScanningOverlay({
                     styles.detectionBox,
                     {
                       borderColor: getClassColor(detection.className),
-                      // Simplified positioning - will need adjustment
                       position: 'absolute',
-                      left: `${(detection.x1 / 640) * 100}%`,
-                      top: `${(detection.y1 / 640) * 100}%`,
-                      width: `${((detection.x2 - detection.x1) / 640) * 100}%`,
-                      height: `${((detection.y2 - detection.y1) / 640) * 100}%`,
+                      left: screenX1,
+                      top: screenY1,
+                      width: screenWidth,
+                      height: screenHeight,
                     },
                   ]}
                 >
@@ -359,30 +456,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  progressContainer: {
-    paddingTop: 20,
-    paddingBottom: 16,
+  progressPill: {
+    position: 'absolute',
+    top: 16,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     alignItems: 'center',
+    zIndex: 10,
   },
   progressText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
-    marginBottom: 12,
   },
   progressDots: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
+    marginTop: 8,
   },
   progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
   },
   progressDotActive: {
     backgroundColor: '#2A7DE1',
-    width: 24,
+    width: 18,
   },
   progressDotComplete: {
     backgroundColor: '#34C759',
@@ -391,6 +494,8 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   image: {
     width: '100%',
