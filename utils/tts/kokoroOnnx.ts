@@ -1306,15 +1306,50 @@ class KokoroOnnx {
     // Update state: current chunk is now playing
     chunkStates[chunkIndex] = 'playing';
 
-    return new Promise<void>((resolve, reject) => {
-      Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true },
-        (status) => {
-          if (onProgress && status.isLoaded) {
-            const chunkProgress = status.positionMillis / (status.durationMillis || 1);
-            const overallProgress = (chunkIndex + chunkProgress) / totalChunks;
+    // Stop any existing sound BEFORE creating new one to prevent overlap
+    if (this.streamingSound) {
+      try {
+        await this.streamingSound.stopAsync();
+        await this.streamingSound.unloadAsync();
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.streamingSound = null;
+    }
 
+    // Create sound WITHOUT auto-play first, so we can store reference before playing
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: audioUri },
+      { shouldPlay: false }
+    );
+
+    // Store reference BEFORE starting playback (fixes race condition)
+    this.streamingSound = sound;
+
+    // Use Promise that resolves when playback finishes (via status callback)
+    await new Promise<void>((resolve) => {
+      let resolved = false;
+
+      const safeResolve = () => {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      };
+
+      // Set up status callback - this is the proper way to detect playback completion
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!this.isStreaming) {
+          // Playback was stopped externally
+          safeResolve();
+          return;
+        }
+
+        if (status.isLoaded) {
+          const chunkProgress = status.positionMillis / (status.durationMillis || 1);
+          const overallProgress = (chunkIndex + chunkProgress) / totalChunks;
+
+          if (onProgress) {
             onProgress({
               progress: chunkProgress,
               tokensPerSecond,
@@ -1332,24 +1367,23 @@ class KokoroOnnx {
             });
           }
 
-          if (status.isLoaded && status.didJustFinish) {
+          // Check if playback finished
+          if (status.didJustFinish) {
             // Mark chunk as completed
             chunkStates[chunkIndex] = 'completed';
 
-            // Send callback with completed state so UI can update
+            // Send final callback with completed state
             if (onProgress) {
-              const overallProgress = (chunkIndex + 1) / totalChunks;
               onProgress({
                 progress: 1,
-                status: 'playing',
+                tokensPerSecond,
+                timeToFirstToken,
                 position: status.positionMillis || 0,
                 duration: status.durationMillis || 0,
                 phonemes: '',
-                avgTokensPerSecond: tokensPerSecond,
-                timeToFirstToken,
                 currentChunk: chunkIndex + 1,
                 totalChunks,
-                overallProgress,
+                overallProgress: (chunkIndex + 1) / totalChunks,
                 phase: 'playing',
                 generationProgress: 1,
                 chunks,
@@ -1357,22 +1391,29 @@ class KokoroOnnx {
               });
             }
 
-            resolve();
+            safeResolve();
           }
+        } else if (!status.isLoaded) {
+          // Sound was unloaded (stopped externally)
+          safeResolve();
         }
-      ).then(({ sound }) => {
-        this.streamingSound = sound;
-      }).catch(reject);
-    }).finally(async () => {
-      if (this.streamingSound) {
-        try {
-          await this.streamingSound.unloadAsync();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-        this.streamingSound = null;
-      }
+      });
+
+      // Start playback
+      sound.playAsync().catch(() => {
+        safeResolve();
+      });
     });
+
+    // Cleanup after playback
+    if (this.streamingSound === sound) {
+      try {
+        await sound.unloadAsync();
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.streamingSound = null;
+    }
   }
 
   /**
