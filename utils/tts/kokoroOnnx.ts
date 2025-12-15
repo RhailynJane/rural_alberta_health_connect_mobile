@@ -124,6 +124,90 @@ export interface StreamStatus {
   phonemes: string;
 }
 
+export interface ChunkedStreamStatus extends StreamStatus {
+  currentChunk: number;
+  totalChunks: number;
+  overallProgress: number;
+}
+
+/**
+ * Split text into chunks that are safe for TTS processing
+ * Splits on sentence boundaries first, then on phrases if needed
+ */
+export function splitTextIntoChunks(text: string, maxChunkLength: number = SAFE_CHUNK_CHAR_LENGTH): string[] {
+  if (!text || text.length <= maxChunkLength) {
+    return text ? [text] : [];
+  }
+
+  const chunks: string[] = [];
+
+  // First, split by sentences (., !, ?)
+  const sentences = text.split(/(?<=[.!?])\s+/);
+
+  let currentChunk = '';
+
+  for (const sentence of sentences) {
+    const trimmedSentence = sentence.trim();
+    if (!trimmedSentence) continue;
+
+    // If adding this sentence would exceed limit
+    if (currentChunk.length + trimmedSentence.length + 1 > maxChunkLength) {
+      // Save current chunk if it has content
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+        currentChunk = '';
+      }
+
+      // If sentence itself is too long, split on commas/semicolons
+      if (trimmedSentence.length > maxChunkLength) {
+        const phrases = trimmedSentence.split(/(?<=[,;:])\s+/);
+
+        for (const phrase of phrases) {
+          const trimmedPhrase = phrase.trim();
+          if (!trimmedPhrase) continue;
+
+          if (currentChunk.length + trimmedPhrase.length + 1 > maxChunkLength) {
+            if (currentChunk.trim()) {
+              chunks.push(currentChunk.trim());
+              currentChunk = '';
+            }
+
+            // If phrase is still too long, force split by words
+            if (trimmedPhrase.length > maxChunkLength) {
+              const words = trimmedPhrase.split(/\s+/);
+              for (const word of words) {
+                if (currentChunk.length + word.length + 1 > maxChunkLength) {
+                  if (currentChunk.trim()) {
+                    chunks.push(currentChunk.trim());
+                  }
+                  currentChunk = word;
+                } else {
+                  currentChunk = currentChunk ? `${currentChunk} ${word}` : word;
+                }
+              }
+            } else {
+              currentChunk = trimmedPhrase;
+            }
+          } else {
+            currentChunk = currentChunk ? `${currentChunk} ${trimmedPhrase}` : trimmedPhrase;
+          }
+        }
+      } else {
+        currentChunk = trimmedSentence;
+      }
+    } else {
+      currentChunk = currentChunk ? `${currentChunk} ${trimmedSentence}` : trimmedSentence;
+    }
+  }
+
+  // Don't forget the last chunk
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks;
+}
+
 class KokoroOnnx {
   private session: InferenceSession | null = null;
   private isModelLoaded: boolean = false;
