@@ -244,4 +244,9 @@ const styles = StyleSheet.create({
   readyText: {
     color: '#22D3EE',
   },
+
+  // Disabled state (another TTS is playing)
+  disabledButton: {
+    opacity: 0.5,
+  },
 });
