@@ -163,6 +163,10 @@ function renderAssessmentCards(
     const isExpanded = expandedSections[sectionKey] || false;
     const previewCount = 2;
     const previewItems = items.slice(0, previewCount);
+
+    // Prepare text for TTS
+    const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
+
     return (
       <View style={styles.accordionCard}>
         <TouchableOpacity
@@ -182,6 +186,11 @@ function renderAssessmentCards(
         </TouchableOpacity>
         {isExpanded && (
           <View style={styles.accordionContent}>
+            {ttsText && (
+              <View style={styles.accordionTTSRow}>
+                <TTSButton text={ttsText} compact style={styles.accordionTTSButton} />
+              </View>
+            )}
             {(items.length > 0 ? items : previewItems).map((it, idx) => (
               <View key={idx} style={styles.cardItem}>
                 <Text style={styles.bulletPoint}>•</Text>
