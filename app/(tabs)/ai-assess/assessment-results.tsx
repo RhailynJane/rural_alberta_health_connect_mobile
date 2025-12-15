@@ -310,11 +310,25 @@ function renderAssessmentCards(
     // Calculate step numbers dynamically based on which steps have content
     let stepNum = 0;
 
+    // Prepare text for TTS - combine all steps
+    const allStepsText = [
+      ...steps.doNow.map(s => `Do now: ${s}`),
+      ...steps.within48.map(s => `Within 24 to 48 hours: ${s}`),
+      ...steps.seekCare.map(s => `Seek care if: ${s}`),
+    ];
+    const ttsText = prepareNextStepsForTTS(allStepsText);
+
     return (
       <View style={styles.nextStepsCard}>
-        <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Next Steps
-        </Text>
+        <View style={styles.nextStepsHeader}>
+          <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Next Steps
+          </Text>
+          {/* TTS Button - subtle, right-aligned */}
+          {ttsText && (
+            <TTSButton text={ttsText} compact style={styles.ttsButton} />
+          )}
+        </View>
         {steps.doNow.length > 0 && (
           <StepRow stepNumber={++stepNum} label="Do now" content={steps.doNow} />
         )}
