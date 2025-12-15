@@ -6,12 +6,10 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Keyboard,
   LayoutAnimation,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,13 +19,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
+import { useWoundLLM } from "../../../utils/llm";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
-import { useWoundLLM } from "../../../utils/llm";
 
 // AI Context Types
 type SymptomCategory =
