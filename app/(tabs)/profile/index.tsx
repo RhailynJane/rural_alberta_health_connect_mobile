@@ -9,8 +9,8 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Image,
-  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View
@@ -316,6 +316,11 @@ export default function Profile() {
   // Reminders manager (local)
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [showTimeSelectModal, setShowTimeSelectModal] = useState(false);
+
+  // Notification frequency and time picker states
+  const [notificationFrequencyModalVisible, setNotificationFrequencyModalVisible] = useState(false);
+  const [notificationTimePickerVisible, setNotificationTimePickerVisible] = useState(false);
+  const [selectedNotificationTime, setSelectedNotificationTime] = useState<string>("09:00");
 
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
@@ -1031,7 +1036,7 @@ export default function Profile() {
           }}
         />
         <DueReminderBanner topOffset={120} />
-        <ScrollView style={styles.container}>
+        <View style={styles.container}>
           {/* Profile Header */}
           <View style={styles.headerSection}>
             <View style={styles.headerCard}>
@@ -1104,7 +1109,7 @@ export default function Profile() {
             </View>
           </View>
 
-          {/* List Tiles */}
+          {/* Profile Information Tile */}
           <View style={styles.listCard}>
             <TouchableOpacity style={styles.listItem} onPress={() => router.push("/profile/profile-information" as any)} activeOpacity={0.85}>
               <View style={styles.listIconWrap}><Icon name="person" size={20} color={COLORS.primary} /></View>
@@ -1114,27 +1119,78 @@ export default function Profile() {
               </View>
               <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.listItem} onPress={() => router.push("/profile/app-settings" as any)} activeOpacity={0.85}>
-              <View style={styles.listIconWrap}><Icon name="notifications" size={20} color={COLORS.primary} /></View>
-              <View style={styles.listTextWrap}>
-                <Text style={styles.listTitle}>Notifications</Text>
-                <Text style={styles.listSubtitle}>Manage alerts & reminders</Text>
-              </View>
-              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
-            </TouchableOpacity>
+          </View>
+
+          {/* Notifications Toggle */}
+          <View style={styles.toggleCard}>
+            <View style={styles.toggleIconWrap}>
+              <Icon name="notifications" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.toggleTextWrap}>
+              <Text style={styles.toggleTitle}>Notifications</Text>
+              <Text style={styles.toggleSubtitle}>Reminder alerts</Text>
+            </View>
+            <Switch
+              value={userData.reminderEnabled}
+              onValueChange={async (value) => {
+                if (value) {
+                  // Show frequency chooser when enabling
+                  setNotificationFrequencyModalVisible(true);
+                } else {
+                  // Disable directly
+                  setUserData(prev => ({ ...prev, reminderEnabled: false }));
+                  if (isOnline) {
+                    try {
+                      await updateReminderSettings({ enabled: false });
+                    } catch (error) {
+                      console.error("Failed to update reminder settings:", error);
+                    }
+                  }
+                }
+              }}
+              trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+              thumbColor={COLORS.white}
+            />
+          </View>
+
+          {/* Location Services Toggle */}
+          <View style={styles.toggleCard}>
+            <View style={styles.toggleIconWrap}>
+              <Icon name="location-on" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.toggleTextWrap}>
+              <Text style={styles.toggleTitle}>Location Services</Text>
+              <Text style={styles.toggleSubtitle}>Enable location tracking</Text>
+            </View>
+            <Switch
+              value={userData.locationServices}
+              onValueChange={async (value) => {
+                // Update local state
+                setUserData(prev => ({ ...prev, locationServices: value }));
+                // Persist to backend if online
+                if (isOnline) {
+                  try {
+                    await toggleLocationServices({ enabled: value });
+                  } catch (error) {
+                    console.error("Failed to update location services:", error);
+                  }
+                }
+              }}
+              trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+              thumbColor={COLORS.white}
+            />
           </View>
 
           {/* Sign Out */}
           <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} activeOpacity={0.9}>
-            <Icon name="exit-to-app" size={18} color={COLORS.white} style={styles.signOutIcon} />
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <Icon name="logout" size={20} color={COLORS.error} />
           </TouchableOpacity>
 
           {/* Privacy footnote */}
           <View style={styles.privacyFootnote}>
             <Text style={styles.privacyFootnoteText}>Your data stays on your device and is encrypted.</Text>
           </View>
-        </ScrollView>
+        </View>
       </CurvedBackground>
       <BottomNavigation />
 
@@ -1149,6 +1205,99 @@ export default function Profile() {
         onClose={() => setModalVisible(false)}
         buttons={modalButtons.length > 0 ? modalButtons : undefined}
       />
+
+      {/* Notification Frequency Chooser Modal */}
+      <StatusModal
+        visible={notificationFrequencyModalVisible}
+        type="info"
+        title="Reminder Frequency"
+        message="How often should you be reminded?"
+        onClose={() => setNotificationFrequencyModalVisible(false)}
+        buttons={[
+          {
+            label: "Daily",
+            variant: "primary",
+            onPress: async () => {
+              setNotificationFrequencyModalVisible(false);
+              setUserData(prev => ({ ...prev, reminderFrequency: 'daily' }));
+              // Show time picker
+              setSelectedNotificationTime("09:00");
+              setNotificationTimePickerVisible(true);
+            },
+          },
+          {
+            label: "Cancel",
+            variant: "secondary",
+            onPress: () => setNotificationFrequencyModalVisible(false),
+          },
+        ]}
+      />
+
+      {/* Notification Time Picker Modal */}
+      <StatusModal
+        visible={notificationTimePickerVisible}
+        type="info"
+        title="Select Time"
+        message="What time should you be reminded?"
+        onClose={() => setNotificationTimePickerVisible(false)}
+        buttons={[
+          {
+            label: "Set Time",
+            variant: "primary",
+            onPress: async () => {
+              setNotificationTimePickerVisible(false);
+              setUserData(prev => ({ ...prev, reminderEnabled: true, reminderTime: selectedNotificationTime + ' AM' }));
+              // Update backend with full settings
+              if (isOnline) {
+                try {
+                  await updateReminderSettings({
+                    enabled: true,
+                    frequency: 'daily',
+                    time: selectedNotificationTime,
+                  });
+                } catch (error) {
+                  console.error("Failed to update reminder settings:", error);
+                }
+              }
+            },
+          },
+          {
+            label: "Cancel",
+            variant: "secondary",
+            onPress: () => setNotificationTimePickerVisible(false),
+          },
+        ]}
+      />
+
+      {/* Time Input for Notifications */}
+      {notificationTimePickerVisible && (
+        <View style={styles.timePickerContainer}>
+          <Text style={styles.timePickerLabel}>Enter time (HH:MM)</Text>
+          <View style={styles.timeInputRow}>
+            <TouchableOpacity
+              style={styles.timeButton}
+              onPress={() => {
+                const [h, m] = selectedNotificationTime.split(':');
+                const newH = Math.max(0, parseInt(h) - 1).toString().padStart(2, '0');
+                setSelectedNotificationTime(newH + ':' + m);
+              }}
+            >
+              <Icon name="remove" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Text style={styles.timeDisplay}>{selectedNotificationTime}</Text>
+            <TouchableOpacity
+              style={styles.timeButton}
+              onPress={() => {
+                const [h, m] = selectedNotificationTime.split(':');
+                const newH = Math.min(23, parseInt(h) + 1).toString().padStart(2, '0');
+                setSelectedNotificationTime(newH + ':' + m);
+              }}
+            >
+              <Icon name="add" size={20} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Legacy reminder modals removed in favor of inline manager */}
 
@@ -1178,7 +1327,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   container: {
-    flex: 1,
     paddingHorizontal: 16,
     paddingTop: 0,
     paddingBottom: 16,
@@ -1631,6 +1779,41 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     flex: 1,
   },
+  toggleCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggleIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  toggleSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
   editButton: {
     color: COLORS.primary,
     fontFamily: FONTS.BarlowSemiCondensedBold,
@@ -1723,23 +1906,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   signOutButton: {
-    backgroundColor: COLORS.error,
-    flexDirection: "row",
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: COLORS.error,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 100,
-    marginTop: 8,
-  },
-  signOutText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  signOutIcon: {
-    marginRight: 8,
+    marginBottom: 16,
+    marginTop: 16,
   },
   addButton: {
     flexDirection: 'row',
@@ -1853,4 +2029,50 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     fontSize: 16,
   },
+  timePickerContainer: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 1000,
+  },
+  timePickerLabel: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  timeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  timeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#E8F1FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  timeDisplay: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 24,
+    color: COLORS.darkText,
+    minWidth: 80,
+    textAlign: 'center',
+  },
 });
+
