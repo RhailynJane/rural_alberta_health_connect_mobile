@@ -626,6 +626,168 @@ class KokoroOnnx {
     }
   }
 
+  /**
+   * Stream audio from chunked text - handles long text by splitting into chunks
+   * and playing them sequentially
+   */
+  async streamChunkedAudio(
+    text: string,
+    voiceId: string = 'af_heart',
+    speed: number = 1.0,
+    onProgress: ((status: ChunkedStreamStatus) => void) | null = null
+  ): Promise<{ tokensPerSecond: number; timeToFirstToken: number; totalTokens: number; totalChunks: number }> {
+    if (this.isStreaming) {
+      await this.stopStreaming();
+    }
+
+    if (!this.isOnnxAvailable) {
+      throw new Error('ONNX Runtime is not available on this platform');
+    }
+
+    if (!this.isModelLoaded || !this.session) {
+      throw new Error('Model not loaded. Call loadModel() first.');
+    }
+
+    // Split text into chunks
+    const chunks = splitTextIntoChunks(text);
+    const totalChunks = chunks.length;
+
+    console.log(`[TTS] Split text into ${totalChunks} chunks`);
+
+    if (totalChunks === 0) {
+      return { tokensPerSecond: 0, timeToFirstToken: 0, totalTokens: 0, totalChunks: 0 };
+    }
+
+    // If only one chunk, use regular streaming
+    if (totalChunks === 1) {
+      const result = await this.streamAudio(text, voiceId, speed, (status) => {
+        if (onProgress) {
+          onProgress({
+            ...status,
+            currentChunk: 1,
+            totalChunks: 1,
+            overallProgress: status.progress,
+          });
+        }
+      });
+      return { ...result, totalChunks: 1 };
+    }
+
+    this.isStreaming = true;
+    let totalTokensProcessed = 0;
+    let avgTokensPerSecond = 0;
+    let firstChunkTimeToFirstToken = 0;
+
+    try {
+      await this.downloadVoice(voiceId);
+
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        // Check if streaming was stopped
+        if (!this.isStreaming) {
+          console.log('[TTS] Streaming was stopped');
+          break;
+        }
+
+        const chunk = chunks[chunkIndex];
+        console.log(`[TTS] Processing chunk ${chunkIndex + 1}/${totalChunks}: "${chunk.substring(0, 50)}..."`);
+
+        // Generate audio for this chunk
+        const tokens = this.tokenize(chunk);
+        const numTokens = Math.min(Math.max(tokens.length - 2, 0), 509);
+        totalTokensProcessed += numTokens;
+
+        const voiceData = await getVoiceData(voiceId);
+        const offset = numTokens * STYLE_DIM;
+        const styleData = voiceData.slice(offset, offset + STYLE_DIM);
+
+        const inputs: Record<string, Tensor> = {};
+
+        try {
+          inputs['input_ids'] = new Tensor('int64', new Int32Array(tokens), [1, tokens.length]);
+        } catch (error) {
+          inputs['input_ids'] = new Tensor('int64', tokens, [1, tokens.length]);
+        }
+
+        inputs['style'] = new Tensor('float32', new Float32Array(styleData), [1, STYLE_DIM]);
+        inputs['speed'] = new Tensor('float32', new Float32Array([speed]), [1]);
+
+        const inferenceStartTime = Date.now();
+        const outputs = await this.session!.run(inputs);
+
+        const inferenceTime = Date.now() - inferenceStartTime;
+        const chunkTokensPerSecond = inferenceTime > 0 ? numTokens / (inferenceTime / 1000) : 0;
+
+        if (chunkIndex === 0) {
+          firstChunkTimeToFirstToken = inferenceTime;
+        }
+
+        avgTokensPerSecond = (avgTokensPerSecond * chunkIndex + chunkTokensPerSecond) / (chunkIndex + 1);
+
+        if (!outputs || !outputs['waveform'] || !outputs['waveform'].data) {
+          throw new Error('Invalid output from model inference');
+        }
+
+        const waveform = outputs['waveform'].data as Float32Array;
+        const audioUri = await this._floatArrayToAudioFile(waveform);
+
+        // Play this chunk and wait for it to finish
+        await new Promise<void>((resolve, reject) => {
+          Audio.Sound.createAsync(
+            { uri: audioUri },
+            { shouldPlay: true },
+            (status) => {
+              if (onProgress && status.isLoaded) {
+                const chunkProgress = status.positionMillis / (status.durationMillis || 1);
+                const overallProgress = (chunkIndex + chunkProgress) / totalChunks;
+
+                onProgress({
+                  progress: chunkProgress,
+                  tokensPerSecond: avgTokensPerSecond,
+                  timeToFirstToken: firstChunkTimeToFirstToken,
+                  position: status.positionMillis,
+                  duration: status.durationMillis || 0,
+                  phonemes: this.streamingPhonemes,
+                  currentChunk: chunkIndex + 1,
+                  totalChunks,
+                  overallProgress,
+                });
+              }
+
+              if (status.isLoaded && status.didJustFinish) {
+                resolve();
+              }
+            }
+          ).then(({ sound }) => {
+            this.streamingSound = sound;
+          }).catch(reject);
+        });
+
+        // Clean up the sound after chunk finishes
+        if (this.streamingSound) {
+          try {
+            await this.streamingSound.unloadAsync();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          this.streamingSound = null;
+        }
+      }
+
+      this.isStreaming = false;
+
+      return {
+        tokensPerSecond: avgTokensPerSecond,
+        timeToFirstToken: firstChunkTimeToFirstToken,
+        totalTokens: totalTokensProcessed,
+        totalChunks,
+      };
+    } catch (error) {
+      this.isStreaming = false;
+      console.error('Error streaming chunked audio:', error);
+      throw error;
+    }
+  }
+
   private async _floatArrayToAudioFile(floatArray: Float32Array): Promise<string> {
     try {
       const wavBuffer = this._floatArrayToWav(floatArray, SAMPLE_RATE);
