@@ -1155,6 +1155,30 @@ class KokoroOnnx {
         if (i + 1 < totalChunks) {
           // Wait for the lookahead chunk (should be ready or almost ready)
           if (nextChunkPromise) {
+            // Send callback showing we're waiting for next chunk (generating state visible)
+            // At this point: current chunk is 'completed', next chunk is 'generating'
+            if (onProgress) {
+              const avgTokensPerSecond = totalInferenceTime > 0
+                ? totalTokensProcessed / (totalInferenceTime / 1000)
+                : 0;
+              onProgress({
+                progress: 0,
+                status: 'generating',
+                position: 0,
+                duration: 0,
+                phonemes: '',
+                avgTokensPerSecond,
+                timeToFirstToken: firstChunkTimeToFirstToken,
+                currentChunk: i + 2, // Next chunk (1-indexed)
+                totalChunks,
+                overallProgress: (i + 1) / totalChunks,
+                phase: 'generating',
+                generationProgress: 0.5, // Indeterminate progress
+                chunks,
+                chunkStates: [...chunkStates],
+              });
+            }
+
             const nextResult = await nextChunkPromise;
             audioUris.push(nextResult.audioUri);
             totalTokensProcessed += nextResult.numTokens;
@@ -1248,6 +1272,28 @@ class KokoroOnnx {
           if (status.isLoaded && status.didJustFinish) {
             // Mark chunk as completed
             chunkStates[chunkIndex] = 'completed';
+
+            // Send callback with completed state so UI can update
+            if (onProgress) {
+              const overallProgress = (chunkIndex + 1) / totalChunks;
+              onProgress({
+                progress: 1,
+                status: 'playing',
+                position: status.positionMillis || 0,
+                duration: status.durationMillis || 0,
+                phonemes: '',
+                avgTokensPerSecond: tokensPerSecond,
+                timeToFirstToken,
+                currentChunk: chunkIndex + 1,
+                totalChunks,
+                overallProgress,
+                phase: 'playing',
+                generationProgress: 1,
+                chunks,
+                chunkStates: [...chunkStates],
+              });
+            }
+
             resolve();
           }
         }

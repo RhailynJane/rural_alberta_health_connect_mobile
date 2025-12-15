@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   Animated,
   StyleSheet,
@@ -11,34 +11,19 @@ import { ChunkState } from '../../utils/tts';
 import { FONTS } from '../constants/constants';
 
 interface TTSHighlightedTextProps {
-  /** The text chunks from TTS */
   chunks: string[];
-  /** State of each chunk */
   chunkStates: ChunkState[];
-  /** Whether TTS is active (generating or speaking) */
   isActive: boolean;
-  /** Custom text style */
   textStyle?: TextStyle;
-  /** Custom container style */
   containerStyle?: ViewStyle;
-  /** Render as bullet list items */
   asBulletList?: boolean;
-  /** Custom bullet character */
   bulletChar?: string;
-  /** Parent horizontal padding to extend background to edges (default: 20) */
   parentPadding?: number;
+  currentChunk?: number;
 }
 
 /**
  * TTSHighlightedText - Visual feedback for TTS chunk generation/playback
- *
- * Improved readability with glow/blink effect:
- * - Generating: Dark readable text with pulsing cyan glow background
- * - Playing: Dark text with solid subtle cyan highlight
- * - Completed: Normal dark text
- * - Pending: Dimmed gray text
- *
- * Background extends full-width of parent card for better visual impact.
  */
 export default function TTSHighlightedText({
   chunks,
@@ -50,155 +35,182 @@ export default function TTSHighlightedText({
   bulletChar = '•',
   parentPadding = 20,
 }: TTSHighlightedTextProps) {
-  // Animation values for each chunk
-  const pulseAnims = useRef<Animated.Value[]>([]).current;
+  // Store animation values persistently
+  const animValuesRef = useRef<Map<number, Animated.Value>>(new Map());
+  const runningAnimsRef = useRef<Map<number, Animated.CompositeAnimation>>(new Map());
+  const prevStatesRef = useRef<string>('');
 
-  // Initialize animation values when chunks change
-  useEffect(() => {
-    // Create animation values for new chunks
-    while (pulseAnims.length < chunks.length) {
-      pulseAnims.push(new Animated.Value(0));
+  // Get or create animation value for a chunk
+  const getAnimValue = useCallback((index: number): Animated.Value => {
+    if (!animValuesRef.current.has(index)) {
+      animValuesRef.current.set(index, new Animated.Value(0));
     }
-    // Remove extra animation values
-    while (pulseAnims.length > chunks.length) {
-      pulseAnims.pop();
-    }
-  }, [chunks.length]);
+    return animValuesRef.current.get(index)!;
+  }, []);
 
-  // Run pulse animation for generating chunks
+  // Check if any chunk is playing
+  const isAnyPlaying = chunkStates.some(s => s === 'playing');
+
+  // Get visual state for a chunk
+  const getVisualState = useCallback((state: ChunkState): ChunkState => {
+    if (state === 'playing') return 'playing';
+    if (state === 'completed') return 'completed';
+    if (state === 'generating') {
+      // Only show blink if no other chunk is playing
+      return isAnyPlaying ? 'pending' : 'generating';
+    }
+    return 'pending';
+  }, [isAnyPlaying]);
+
+  // Manage animations - only update when states actually change
   useEffect(() => {
-    if (!isActive) {
-      // Reset all animations when not active
-      pulseAnims.forEach(anim => anim.setValue(0));
+    if (!isActive || chunks.length === 0) {
+      // Stop all animations when not active
+      runningAnimsRef.current.forEach(anim => anim.stop());
+      runningAnimsRef.current.clear();
       return;
     }
 
-    // Start pulse animation for generating chunks
-    const animations: Animated.CompositeAnimation[] = [];
+    // Create a string key of current visual states to detect real changes
+    const currentStatesKey = chunkStates.map((s, i) => `${i}:${getVisualState(s)}`).join(',');
 
-    chunkStates.forEach((state, index) => {
-      if (state === 'generating' && pulseAnims[index]) {
-        // Gentle pulse animation - calm but noticeable
+    // Skip if nothing changed
+    if (currentStatesKey === prevStatesRef.current) {
+      return;
+    }
+    prevStatesRef.current = currentStatesKey;
+
+    console.log('[TTS-Highlight] States changed:', currentStatesKey);
+
+    // Update animations for each chunk
+    chunkStates.forEach((rawState, index) => {
+      const visualState = getVisualState(rawState);
+      const animValue = getAnimValue(index);
+
+      // Stop existing animation for this chunk
+      const existingAnim = runningAnimsRef.current.get(index);
+      if (existingAnim) {
+        existingAnim.stop();
+        runningAnimsRef.current.delete(index);
+      }
+
+      if (visualState === 'generating') {
+        console.log(`[TTS-Highlight] Starting blink animation for chunk ${index}`);
+        // Start pulsing animation
         const pulse = Animated.loop(
           Animated.sequence([
-            Animated.timing(pulseAnims[index], {
+            Animated.timing(animValue, {
               toValue: 1,
               duration: 1400,
               useNativeDriver: false,
             }),
-            Animated.timing(pulseAnims[index], {
-              toValue: 0.2,
+            Animated.timing(animValue, {
+              toValue: 0.3,
               duration: 1400,
               useNativeDriver: false,
             }),
           ])
         );
-        animations.push(pulse);
+        runningAnimsRef.current.set(index, pulse);
         pulse.start();
-      } else if (pulseAnims[index]) {
-        // Smooth transition for non-generating chunks
-        Animated.timing(pulseAnims[index], {
-          toValue: state === 'playing' ? 1 : 0,
-          duration: 250,
+      } else if (visualState === 'playing') {
+        // Solid highlight
+        Animated.timing(animValue, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      } else {
+        // Fade out
+        Animated.timing(animValue, {
+          toValue: 0,
+          duration: 200,
           useNativeDriver: false,
         }).start();
       }
     });
 
     return () => {
-      animations.forEach(anim => anim.stop());
+      // Cleanup on unmount
+      runningAnimsRef.current.forEach(anim => anim.stop());
     };
-  }, [chunkStates, isActive]);
+  }, [isActive, chunks.length, chunkStates, getVisualState, getAnimValue]);
 
-  // If no chunks or not active, don't render anything special
   if (!isActive || chunks.length === 0) {
     return null;
   }
 
-  // Get animated background style for glow effect - full width
-  const getChunkStyle = (state: ChunkState, animValue: Animated.Value): ViewStyle => {
-    // Extend background to parent edges with negative margin, restore text position with padding
+  // Get style for a chunk
+  const getChunkStyle = (visualState: ChunkState, animValue: Animated.Value): ViewStyle => {
     const baseStyle: ViewStyle = {
       marginHorizontal: -parentPadding,
       paddingHorizontal: parentPadding,
       paddingVertical: 10,
-      marginBottom: 8, // Space between paragraphs
+      marginBottom: 8,
     };
 
-    switch (state) {
+    if (visualState === 'generating') {
+      return {
+        ...baseStyle,
+        backgroundColor: animValue.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['rgba(34, 211, 238, 0.1)', 'rgba(34, 211, 238, 0.35)'],
+        }) as any,
+      };
+    }
+
+    if (visualState === 'playing') {
+      return {
+        ...baseStyle,
+        backgroundColor: 'rgba(34, 211, 238, 0.2)',
+      };
+    }
+
+    if (visualState === 'completed') {
+      return {
+        ...baseStyle,
+        backgroundColor: 'transparent',
+      };
+    }
+
+    // pending
+    return {
+      ...baseStyle,
+      backgroundColor: 'rgba(148, 163, 184, 0.05)',
+    };
+  };
+
+  const getTextStyle = (visualState: ChunkState): TextStyle => {
+    switch (visualState) {
       case 'generating':
-        return {
-          ...baseStyle,
-          // Pulsing cyan glow background
-          backgroundColor: animValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['rgba(34, 211, 238, 0.06)', 'rgba(34, 211, 238, 0.18)'],
-          }) as unknown as string,
-        };
+        return { color: '#0E7490', fontWeight: '600' };
       case 'playing':
-        return {
-          ...baseStyle,
-          // Solid subtle cyan highlight
-          backgroundColor: 'rgba(34, 211, 238, 0.12)',
-        };
+        return { color: '#0891B2', fontWeight: '500' };
       case 'completed':
-        return {
-          ...baseStyle,
-          backgroundColor: 'transparent',
-        };
-      case 'pending':
+        return { color: '#374151', fontWeight: '400' };
       default:
-        return {
-          ...baseStyle,
-          backgroundColor: 'rgba(148, 163, 184, 0.05)', // Very subtle gray for pending
-        };
+        return { color: '#9CA3AF', fontWeight: '400' };
     }
   };
 
-  // High contrast, readable text colors
-  const getTextStyle = (state: ChunkState): TextStyle => {
-    switch (state) {
-      case 'generating':
-        return {
-          color: '#0E7490', // Dark cyan - readable with glow
-          fontWeight: '600',
-        };
-      case 'playing':
-        return {
-          color: '#0891B2', // Slightly lighter cyan - still readable
-          fontWeight: '500',
-        };
-      case 'completed':
-        return {
-          color: '#374151', // Dark gray - normal text
-          fontWeight: '400',
-        };
-      case 'pending':
-      default:
-        return {
-          color: '#9CA3AF', // Medium gray - dimmed but readable
-          fontWeight: '400',
-        };
-    }
-  };
+  return (
+    <View style={[styles.container, containerStyle]}>
+      {chunks.map((chunk, index) => {
+        const rawState = chunkStates[index] || 'pending';
+        const visualState = getVisualState(rawState);
+        const animValue = getAnimValue(index);
 
-  if (asBulletList) {
-    return (
-      <View style={[styles.container, containerStyle]}>
-        {chunks.map((chunk, index) => {
-          const state = chunkStates[index] || 'pending';
-          const animValue = pulseAnims[index] || new Animated.Value(0);
-
+        if (asBulletList) {
           return (
-            <Animated.View key={index} style={getChunkStyle(state, animValue)}>
+            <Animated.View key={index} style={getChunkStyle(visualState, animValue)}>
               <View style={styles.bulletItem}>
-                <Text style={[styles.bullet, getTextStyle(state)]}>{bulletChar}</Text>
+                <Text style={[styles.bullet, getTextStyle(visualState)]}>{bulletChar}</Text>
                 <Text
                   style={[
                     styles.text,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                     textStyle,
-                    getTextStyle(state),
+                    getTextStyle(visualState),
                   ]}
                 >
                   {chunk}
@@ -206,26 +218,16 @@ export default function TTSHighlightedText({
               </View>
             </Animated.View>
           );
-        })}
-      </View>
-    );
-  }
-
-  // Block layout - each chunk as a separate paragraph with full-width background
-  return (
-    <View style={[styles.container, containerStyle]}>
-      {chunks.map((chunk, index) => {
-        const state = chunkStates[index] || 'pending';
-        const animValue = pulseAnims[index] || new Animated.Value(0);
+        }
 
         return (
-          <Animated.View key={index} style={getChunkStyle(state, animValue)}>
+          <Animated.View key={index} style={getChunkStyle(visualState, animValue)}>
             <Text
               style={[
                 styles.text,
                 { fontFamily: FONTS.BarlowSemiCondensed },
                 textStyle,
-                getTextStyle(state),
+                getTextStyle(visualState),
               ]}
             >
               {chunk}
