@@ -1040,9 +1040,16 @@ export default function ProfileInformation() {
               activeOpacity={0.7}
             >
               <Text style={styles.cardTitle}>Personal Information</Text>
-              <Text style={styles.editButton}>
-                {expandedSections.personalInfo ? "Done" : "Edit"}
-              </Text>
+              <View style={styles.editButton}>
+                <Icon 
+                  name={expandedSections.personalInfo ? "chevron-up" : "pencil"} 
+                  size={16} 
+                  color={COLORS.primary} 
+                />
+                <Text style={styles.editButtonText}>
+                  {expandedSections.personalInfo ? "Done" : "Edit"}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             {expandedSections.personalInfo ? (
@@ -1185,9 +1192,16 @@ export default function ProfileInformation() {
               activeOpacity={0.7}
             >
               <Text style={styles.cardTitle}>Emergency Contact</Text>
-              <Text style={styles.editButton}>
-                {expandedSections.emergencyContacts ? "Done" : "Edit"}
-              </Text>
+              <View style={styles.editButton}>
+                <Icon 
+                  name={expandedSections.emergencyContacts ? "chevron-up" : "pencil"} 
+                  size={16} 
+                  color={COLORS.primary} 
+                />
+                <Text style={styles.editButtonText}>
+                  {expandedSections.emergencyContacts ? "Done" : "Edit"}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             {expandedSections.emergencyContacts ? (
@@ -1239,9 +1253,16 @@ export default function ProfileInformation() {
               activeOpacity={0.7}
             >
               <Text style={styles.cardTitle}>Medical Information</Text>
-              <Text style={styles.editButton}>
-                {expandedSections.medicalInfo ? "Done" : "Edit"}
-              </Text>
+              <View style={styles.editButton}>
+                <Icon 
+                  name={expandedSections.medicalInfo ? "chevron-up" : "pencil"} 
+                  size={16} 
+                  color={COLORS.primary} 
+                />
+                <Text style={styles.editButtonText}>
+                  {expandedSections.medicalInfo ? "Done" : "Edit"}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             {expandedSections.medicalInfo ? (
@@ -1339,92 +1360,113 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    padding: 20,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F3F5",
+    marginBottom: 16,
   },
   cardTitle: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 18,
+    fontSize: 20,
     color: COLORS.darkText,
+    flex: 1,
   },
   sectionTitle: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
+    fontSize: 14,
     marginBottom: 8,
-    color: COLORS.darkGray,
-    marginTop: 12,
+    color: "#495057",
+    marginTop: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   text: {
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.darkText,
-    marginBottom: 8,
+    marginBottom: 12,
+    lineHeight: 22,
   },
   input: {
     borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    borderRadius: 8,
-    padding: 12,
+    borderColor: "#DEE2E6",
+    borderRadius: 12,
+    padding: 14,
     color: COLORS.darkText,
-    backgroundColor: COLORS.white,
+    backgroundColor: "#F8F9FA",
     fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 15,
+    minHeight: 48,
   },
   inputError: {
     borderColor: COLORS.error,
+    backgroundColor: "#FFF5F5",
   },
   errorText: {
     color: COLORS.error,
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    marginTop: 6,
     marginBottom: 4,
   },
   suggestionsBox: {
     backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    borderRadius: 8,
-    marginTop: 6,
+    borderColor: "#DEE2E6",
+    borderRadius: 12,
+    marginTop: 8,
     marginBottom: 8,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   suggestionItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#F1F3F5",
   },
   suggestionText: {
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.darkText,
   },
   suggestionLoading: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   suggestionLoadingText: {
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 12,
-    color: COLORS.darkGray,
+    fontSize: 13,
+    color: "#868E96",
     fontStyle: "italic",
   },
   editButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F3F5",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  editButtonText: {
     color: COLORS.primary,
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 14,
+    marginLeft: 4,
   },
   backButton: {
     backgroundColor: COLORS.primary,
@@ -1432,9 +1474,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 100,
     marginTop: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   backButtonText: {
     color: COLORS.white,
