@@ -157,21 +157,26 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
   }
 
   // Ready state - Listen button (different color for replay)
+  // Disabled when another TTS is playing
+  const isDisabled = isOtherPlaying;
+  const buttonColor = isDisabled ? '#D1D5DB' : listenColor;
+
   return (
     <TouchableOpacity
-      style={[styles.button, styles.readyButton, style]}
+      style={[styles.button, styles.readyButton, isDisabled && styles.disabledButton, style]}
       onPress={handlePress}
-      activeOpacity={0.7}
+      activeOpacity={isDisabled ? 1 : 0.7}
+      disabled={isDisabled}
     >
       <Ionicons
         name={hasPlayed ? "refresh-outline" : "volume-medium-outline"}
         size={16}
-        color={listenColor}
+        color={buttonColor}
       />
       <Text
         style={[
           styles.buttonText,
-          { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor },
+          { fontFamily: FONTS.BarlowSemiCondensed, color: buttonColor },
         ]}
       >
         {hasPlayed ? 'Replay' : 'Listen'}
