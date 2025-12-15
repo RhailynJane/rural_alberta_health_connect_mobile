@@ -106,6 +106,7 @@ interface ChunkItemProps {
   asBulletList: boolean;
   bulletChar: string;
   getTextStyleFn: (state: ChunkState) => TextStyle;
+  parentPadding: number;
 }
 
 function ChunkItem({
@@ -115,6 +116,7 @@ function ChunkItem({
   asBulletList,
   bulletChar,
   getTextStyleFn,
+  parentPadding,
 }: ChunkItemProps) {
   const opacity = useSharedValue(0);
 
