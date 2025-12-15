@@ -2076,6 +2076,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
+  nextStepsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  ttsButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
   nextStepsTitle: {
     fontSize: 17,
     fontWeight: "600",
