@@ -15,6 +15,8 @@ const MAX_PHONEME_LENGTH = 510;
 // Optimal chunk size - balance between quality and inference calls
 // Smaller chunks = faster first audio, more inference calls
 const OPTIMAL_CHUNK_CHAR_LENGTH = 180; // ~1-2 sentences per chunk for faster first audio
+// First chunk is smaller for faster initial audio response
+const FIRST_CHUNK_CHAR_LENGTH = 90; // ~50% of optimal, ~1 sentence for quick first audio
 // Maximum characters per chunk (phoneme limit safety)
 const MAX_CHUNK_CHAR_LENGTH = 250;
 
