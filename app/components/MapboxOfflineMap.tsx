@@ -264,7 +264,6 @@ function MapboxOfflineMapComponent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    borderRadius: 12,
     overflow: 'hidden',
   },
   map: {
