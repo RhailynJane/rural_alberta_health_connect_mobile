@@ -128,6 +128,8 @@ export interface ChunkedStreamStatus extends StreamStatus {
   currentChunk: number;
   totalChunks: number;
   overallProgress: number;
+  phase: 'generating' | 'playing';
+  generationProgress: number; // 0-1 during generation phase
 }
 
 /**
