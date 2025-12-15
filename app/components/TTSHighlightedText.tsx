@@ -110,71 +110,66 @@ export default function TTSHighlightedText({
     return null;
   }
 
+  // Minimal, modern approach - no boxes, just subtle text styling
   const getChunkStyle = (state: ChunkState, animValue: Animated.Value): ViewStyle => {
     const baseStyle: ViewStyle = {
-      borderRadius: 6,
-      paddingHorizontal: 4,
-      paddingVertical: 2,
-      marginVertical: 2,
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+      marginVertical: 1,
     };
 
     switch (state) {
       case 'generating':
         return {
           ...baseStyle,
-          // Soft, calming pulse between very light teal shades
-          backgroundColor: animValue.interpolate({
+          // Very subtle background pulse - almost imperceptible
+          opacity: animValue.interpolate({
             inputRange: [0, 1],
-            outputRange: ['rgba(236, 254, 255, 0.6)', 'rgba(207, 250, 254, 0.9)'],
-          }) as unknown as string,
-          // Subtle border that pulses
-          borderWidth: 1,
-          borderColor: animValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['rgba(34, 211, 238, 0.2)', 'rgba(34, 211, 238, 0.5)'],
-          }) as unknown as string,
+            outputRange: [0.7, 1],
+          }) as unknown as number,
         };
       case 'playing':
         return {
           ...baseStyle,
-          // Soft cyan/teal highlight - calm and modern
-          backgroundColor: 'rgba(224, 242, 254, 0.8)',
-          borderWidth: 1,
-          borderColor: 'rgba(56, 189, 248, 0.3)',
+          opacity: 1,
         };
       case 'completed':
         return {
           ...baseStyle,
-          backgroundColor: 'transparent',
+          opacity: 1,
         };
       case 'pending':
       default:
         return {
           ...baseStyle,
-          backgroundColor: 'rgba(248, 250, 252, 0.5)',
-          opacity: 0.55,
+          opacity: 0.4,
         };
     }
   };
 
+  // Light, modern text colors - no harsh saturated tones
   const getTextStyle = (state: ChunkState): TextStyle => {
     switch (state) {
       case 'generating':
         return {
-          color: '#0891B2', // Soft cyan for generating
+          color: '#06B6D4', // Light cyan
+          fontWeight: '500',
         };
       case 'playing':
         return {
-          color: '#0369A1', // Calm sky blue for playing
+          color: '#0EA5E9', // Light sky blue
+          fontWeight: '500',
         };
       case 'completed':
         return {
-          color: '#374151', // Normal text color
+          color: '#64748B', // Soft slate
+          fontWeight: '400',
         };
       case 'pending':
       default:
         return {
-          color: '#94A3B8', // Soft slate gray
+          color: '#CBD5E1', // Very light gray
+          fontWeight: '400',
         };
     }
   };
