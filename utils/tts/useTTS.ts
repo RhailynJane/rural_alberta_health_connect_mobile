@@ -110,7 +110,12 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
 
   const isInitialized = useRef(false);
   const isMounted = useRef(true);
-  const stopCallbackRef = useRef<TTSStopCallback | null>(null);
+
+  // Unique ID for this TTS instance
+  const instanceId = useRef(`tts-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+  // Track if another TTS instance is currently playing
+  const [isOtherPlaying, setIsOtherPlaying] = useState(false);
 
   // Track screen focus for stopping TTS on navigation
   let isFocused = true;
