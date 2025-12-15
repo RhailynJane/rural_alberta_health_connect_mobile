@@ -219,6 +219,16 @@ const styles = StyleSheet.create({
     color: '#2A7DE1',
   },
 
+  // Generating state
+  generatingButton: {
+    backgroundColor: '#F0F7FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  generatingText: {
+    color: '#2A7DE1',
+  },
+
   // Ready state
   readyButton: {
     backgroundColor: '#F0F7FF',
