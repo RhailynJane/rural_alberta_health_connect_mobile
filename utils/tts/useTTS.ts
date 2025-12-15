@@ -402,6 +402,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   // Stop speaking
   const stop = useCallback(async (): Promise<void> => {
     try {
+      notifyTTSStateChange(false, null); // Notify globally that we're stopping
       await KokoroOnnx.stopStreaming();
       if (isMounted.current) {
         if (status === 'speaking' || status === 'generating') {
