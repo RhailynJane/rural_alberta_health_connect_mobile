@@ -324,6 +324,9 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     }
 
     try {
+      // Stop any other TTS instance that's currently playing
+      stopAllOtherTTS(stopCallbackRef.current ?? undefined);
+
       // Start in generating state
       setStatus('generating');
       setGenerationProgress(0);
