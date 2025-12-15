@@ -235,6 +235,10 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   useEffect(() => {
     if (!isFocused && (status === 'speaking' || status === 'generating')) {
       console.log('[TTS] Screen lost focus, stopping playback');
+      // Notify globally that we stopped playing
+      if (currentPlayingInstance === instanceId.current) {
+        notifyTTSStateChange(false, null);
+      }
       KokoroOnnx.stopStreaming().catch(() => {});
       if (isMounted.current) {
         setStatus('ready');
