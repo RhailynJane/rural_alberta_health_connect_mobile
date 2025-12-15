@@ -642,8 +642,10 @@ class KokoroOnnx {
   }
 
   /**
-   * Stream audio from chunked text - handles long text by splitting into chunks
-   * and playing them sequentially
+   * Stream audio from chunked text - handles long text by:
+   * 1. Pre-generating ALL audio chunks first
+   * 2. Caching them for re-play
+   * 3. Then playing them sequentially
    */
   async streamChunkedAudio(
     text: string,
@@ -673,77 +675,110 @@ class KokoroOnnx {
       return { tokensPerSecond: 0, timeToFirstToken: 0, totalTokens: 0, totalChunks: 0 };
     }
 
-    // If only one chunk, use regular streaming
-    if (totalChunks === 1) {
-      const result = await this.streamAudio(text, voiceId, speed, (status) => {
-        if (onProgress) {
-          onProgress({
-            ...status,
-            currentChunk: 1,
-            totalChunks: 1,
-            overallProgress: status.progress,
-          });
-        }
-      });
-      return { ...result, totalChunks: 1 };
-    }
-
     this.isStreaming = true;
     let totalTokensProcessed = 0;
     let avgTokensPerSecond = 0;
     let firstChunkTimeToFirstToken = 0;
 
+    // Create cache key
+    const cacheKey = simpleHash(`${text}|${voiceId}|${speed}`);
+    let audioUris: string[] = [];
+
     try {
       await this.downloadVoice(voiceId);
 
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      // Check if we have cached audio
+      if (this.audioCache.has(cacheKey)) {
+        console.log('[TTS] Using cached audio');
+        audioUris = this.audioCache.get(cacheKey)!;
+      } else {
+        // PHASE 1: Generate ALL audio chunks first
+        console.log('[TTS] Phase 1: Generating all audio chunks...');
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          // Check if streaming was stopped during generation
+          if (!this.isStreaming) {
+            console.log('[TTS] Generation stopped by user');
+            return { tokensPerSecond: 0, timeToFirstToken: 0, totalTokens: 0, totalChunks: 0 };
+          }
+
+          const chunk = chunks[chunkIndex];
+          console.log(`[TTS] Generating chunk ${chunkIndex + 1}/${totalChunks}: "${chunk.substring(0, 40)}..."`);
+
+          // Report generation progress
+          if (onProgress) {
+            onProgress({
+              progress: 0,
+              tokensPerSecond: avgTokensPerSecond,
+              timeToFirstToken: firstChunkTimeToFirstToken,
+              position: 0,
+              duration: 0,
+              phonemes: '',
+              currentChunk: chunkIndex + 1,
+              totalChunks,
+              overallProgress: 0,
+              phase: 'generating',
+              generationProgress: chunkIndex / totalChunks,
+            });
+          }
+
+          // Generate audio for this chunk
+          const tokens = this.tokenize(chunk);
+          const numTokens = Math.min(Math.max(tokens.length - 2, 0), 509);
+          totalTokensProcessed += numTokens;
+
+          const voiceData = await getVoiceData(voiceId);
+          const offset = numTokens * STYLE_DIM;
+          const styleData = voiceData.slice(offset, offset + STYLE_DIM);
+
+          const inputs: Record<string, Tensor> = {};
+
+          try {
+            inputs['input_ids'] = new Tensor('int64', new Int32Array(tokens), [1, tokens.length]);
+          } catch (error) {
+            inputs['input_ids'] = new Tensor('int64', tokens, [1, tokens.length]);
+          }
+
+          inputs['style'] = new Tensor('float32', new Float32Array(styleData), [1, STYLE_DIM]);
+          inputs['speed'] = new Tensor('float32', new Float32Array([speed]), [1]);
+
+          const inferenceStartTime = Date.now();
+          const outputs = await this.session!.run(inputs);
+
+          const inferenceTime = Date.now() - inferenceStartTime;
+          const chunkTokensPerSecond = inferenceTime > 0 ? numTokens / (inferenceTime / 1000) : 0;
+
+          if (chunkIndex === 0) {
+            firstChunkTimeToFirstToken = inferenceTime;
+          }
+
+          avgTokensPerSecond = (avgTokensPerSecond * chunkIndex + chunkTokensPerSecond) / (chunkIndex + 1);
+
+          if (!outputs || !outputs['waveform'] || !outputs['waveform'].data) {
+            throw new Error('Invalid output from model inference');
+          }
+
+          const waveform = outputs['waveform'].data as Float32Array;
+          const audioUri = await this._floatArrayToAudioFile(waveform);
+          audioUris.push(audioUri);
+        }
+
+        // Cache the generated audio
+        this.audioCache.set(cacheKey, audioUris);
+        console.log(`[TTS] All ${totalChunks} chunks generated and cached`);
+      }
+
+      // PHASE 2: Play all audio chunks sequentially
+      console.log('[TTS] Phase 2: Playing audio...');
+
+      for (let chunkIndex = 0; chunkIndex < audioUris.length; chunkIndex++) {
         // Check if streaming was stopped
         if (!this.isStreaming) {
-          console.log('[TTS] Streaming was stopped');
+          console.log('[TTS] Playback stopped by user');
           break;
         }
 
-        const chunk = chunks[chunkIndex];
-        console.log(`[TTS] Processing chunk ${chunkIndex + 1}/${totalChunks}: "${chunk.substring(0, 50)}..."`);
-
-        // Generate audio for this chunk
-        const tokens = this.tokenize(chunk);
-        const numTokens = Math.min(Math.max(tokens.length - 2, 0), 509);
-        totalTokensProcessed += numTokens;
-
-        const voiceData = await getVoiceData(voiceId);
-        const offset = numTokens * STYLE_DIM;
-        const styleData = voiceData.slice(offset, offset + STYLE_DIM);
-
-        const inputs: Record<string, Tensor> = {};
-
-        try {
-          inputs['input_ids'] = new Tensor('int64', new Int32Array(tokens), [1, tokens.length]);
-        } catch (error) {
-          inputs['input_ids'] = new Tensor('int64', tokens, [1, tokens.length]);
-        }
-
-        inputs['style'] = new Tensor('float32', new Float32Array(styleData), [1, STYLE_DIM]);
-        inputs['speed'] = new Tensor('float32', new Float32Array([speed]), [1]);
-
-        const inferenceStartTime = Date.now();
-        const outputs = await this.session!.run(inputs);
-
-        const inferenceTime = Date.now() - inferenceStartTime;
-        const chunkTokensPerSecond = inferenceTime > 0 ? numTokens / (inferenceTime / 1000) : 0;
-
-        if (chunkIndex === 0) {
-          firstChunkTimeToFirstToken = inferenceTime;
-        }
-
-        avgTokensPerSecond = (avgTokensPerSecond * chunkIndex + chunkTokensPerSecond) / (chunkIndex + 1);
-
-        if (!outputs || !outputs['waveform'] || !outputs['waveform'].data) {
-          throw new Error('Invalid output from model inference');
-        }
-
-        const waveform = outputs['waveform'].data as Float32Array;
-        const audioUri = await this._floatArrayToAudioFile(waveform);
+        const audioUri = audioUris[chunkIndex];
 
         // Play this chunk and wait for it to finish
         await new Promise<void>((resolve, reject) => {
@@ -765,6 +800,8 @@ class KokoroOnnx {
                   currentChunk: chunkIndex + 1,
                   totalChunks,
                   overallProgress,
+                  phase: 'playing',
+                  generationProgress: 1,
                 });
               }
 
@@ -801,6 +838,14 @@ class KokoroOnnx {
       console.error('Error streaming chunked audio:', error);
       throw error;
     }
+  }
+
+  /**
+   * Clear the audio cache
+   */
+  clearAudioCache(): void {
+    this.audioCache.clear();
+    console.log('[TTS] Audio cache cleared');
   }
 
   private async _floatArrayToAudioFile(floatArray: Float32Array): Promise<string> {
