@@ -136,28 +136,16 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     if (isMounted.current) setError(err);
   }, []);
 
-  // Create the stop callback for global coordination
-  const internalStop = useCallback(() => {
-    console.log('[TTS] Global stop triggered');
-    KokoroOnnx.stopStreaming().catch(() => {});
-    if (isMounted.current) {
-      setStatus((prev) => (prev === 'speaking' || prev === 'generating' ? 'ready' : prev));
-      setChunks([]);
-      setChunkStates([]);
-      setCurrentChunk(0);
-      setGenerationProgress(0);
-    }
-  }, []);
-
-  // Register this instance for global TTS coordination
+  // Subscribe to global TTS state to know if another instance is playing
   useEffect(() => {
-    stopCallbackRef.current = internalStop;
-    const unregister = registerTTSInstance(internalStop);
-    return () => {
-      unregister();
-      stopCallbackRef.current = null;
-    };
-  }, [internalStop]);
+    const unsubscribe = subscribeTTSState((isPlaying, playingId) => {
+      if (isMounted.current) {
+        // Another instance is playing if there's a playing instance that's not us
+        setIsOtherPlaying(isPlaying && playingId !== instanceId.current);
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   // Check availability and load model on mount
   useEffect(() => {
