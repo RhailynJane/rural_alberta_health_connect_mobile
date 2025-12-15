@@ -567,25 +567,10 @@ class KokoroOnnx {
     // Remove parentheses and brackets (keep content)
     text = text.replace(/[()[\]{}]/g, '');
 
-    // Handle common hyphenated compound words - convert to spoken form
-    text = text.replace(/\bover-the-counter\b/gi, 'over the counter');
-    text = text.replace(/\bnon-prescription\b/gi, 'non prescription');
-    text = text.replace(/\bself-care\b/gi, 'self care');
-    text = text.replace(/\bfollow-up\b/gi, 'follow up');
-    text = text.replace(/\bwell-being\b/gi, 'well being');
-    text = text.replace(/\bhealth-care\b/gi, 'health care');
-    text = text.replace(/\bfirst-aid\b/gi, 'first aid');
-    text = text.replace(/\blong-term\b/gi, 'long term');
-    text = text.replace(/\bshort-term\b/gi, 'short term');
-    text = text.replace(/\bday-to-day\b/gi, 'day to day');
-    text = text.replace(/\bface-to-face\b/gi, 'face to face');
-    text = text.replace(/\bover-the-phone\b/gi, 'over the phone');
-    text = text.replace(/\bin-person\b/gi, 'in person');
-    text = text.replace(/\bre-apply\b/gi, 'reapply');
-    text = text.replace(/\bre-assess\b/gi, 'reassess');
-    text = text.replace(/\bnon-stick\b/gi, 'non stick');
-    text = text.replace(/\banti-bacterial\b/gi, 'antibacterial');
-    text = text.replace(/\banti-inflammatory\b/gi, 'anti inflammatory');
+    // Handle prefix words that should JOIN together (hyphen removed, no space)
+    text = text.replace(/\bre-([a-z])/gi, 'RE$1');  // re-apply → reapply, re-assess → reassess
+    text = text.replace(/\banti-([a-z])/gi, 'anti$1');  // anti-bacterial → antibacterial
+    text = text.replace(/\bnon-([a-z])/gi, 'non$1');  // non-stick → nonstick
 
     // Handle common acronyms - spell them out
     text = text.replace(/\bAI\b/g, 'A I');
