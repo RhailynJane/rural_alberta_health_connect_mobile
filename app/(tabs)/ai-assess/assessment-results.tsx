@@ -310,9 +310,10 @@ function renderAssessmentCards(
               {/* Ready state - Listen/Replay button with icon and text */}
               {ttsStatus === 'ready' && (
                 <TouchableOpacity
-                  style={styles.inlineTtsButton}
+                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
                   onPress={handleTTSPress}
-                  activeOpacity={0.7}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
                 >
                   <Ionicons
                     name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"}
