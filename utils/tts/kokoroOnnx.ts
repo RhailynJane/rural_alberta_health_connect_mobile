@@ -555,9 +555,11 @@ class KokoroOnnx {
     text = text.replace(/[()[\]{}]/g, '');
 
     // Handle prefix words that should JOIN together (hyphen removed, no space)
-    text = text.replace(/\bre-([a-z])/gi, 'RE$1');  // re-apply → reapply, re-assess → reassess
+    text = text.replace(/\bre-([a-z])/gi, 're$1');  // re-apply → reapply
     text = text.replace(/\banti-([a-z])/gi, 'anti$1');  // anti-bacterial → antibacterial
     text = text.replace(/\bnon-([a-z])/gi, 'non$1');  // non-stick → nonstick
+    text = text.replace(/\bpre-([a-z])/gi, 'pre$1');  // pre-existing → preexisting
+    text = text.replace(/\bco-([a-z])/gi, 'co$1');  // co-worker → coworker
 
     // Handle common acronyms - spell them out
     text = text.replace(/\bAI\b/g, 'A I');
