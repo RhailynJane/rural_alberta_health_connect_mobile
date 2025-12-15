@@ -256,6 +256,10 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         if (status === 'speaking' || status === 'generating') {
           console.log('[TTS] App went to background, stopping playback');
+          // Notify globally that we stopped playing
+          if (currentPlayingInstance === instanceId.current) {
+            notifyTTSStateChange(false, null);
+          }
           KokoroOnnx.stopStreaming().catch(() => {});
           if (isMounted.current) {
             setStatus('ready');
