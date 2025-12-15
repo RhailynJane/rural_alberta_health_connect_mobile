@@ -170,7 +170,7 @@ const COMMON_WORD_PHONEMES: Record<string, string> = {
   'moderate': 'mˈɑːdəɹət',
   'timeframe': 'tˈaɪmfɹeɪm',
   'timeframes': 'tˈaɪmfɹeɪmz',
-  'alberta': 'ælˈbɜɹtə',
+  'alberta': 'ɑlbˈɜːɹtə',
   'detailed': 'dˈiːteɪld',
 };
 
