@@ -2080,7 +2080,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 16,
   },
   ttsButton: {
     paddingVertical: 6,
