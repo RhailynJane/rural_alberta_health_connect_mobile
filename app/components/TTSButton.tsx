@@ -37,6 +37,7 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     download,
     isAvailable,
     hasPlayed,
+    isOtherPlaying,
   } = useTTS();
 
   // Different colors for played vs not played
