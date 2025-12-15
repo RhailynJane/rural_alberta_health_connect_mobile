@@ -1,12 +1,20 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import {
-  Animated,
   StyleSheet,
   Text,
   View,
   TextStyle,
   ViewStyle,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  cancelAnimation,
+  Easing,
+} from 'react-native-reanimated';
 import { ChunkState } from '../../utils/tts';
 import { FONTS } from '../constants/constants';
 
@@ -19,11 +27,11 @@ interface TTSHighlightedTextProps {
   asBulletList?: boolean;
   bulletChar?: string;
   parentPadding?: number;
-  currentChunk?: number;
 }
 
 /**
  * TTSHighlightedText - Visual feedback for TTS chunk generation/playback
+ * Uses react-native-reanimated for reliable pulsing animation
  */
 export default function TTSHighlightedText({
   chunks,
@@ -35,150 +43,22 @@ export default function TTSHighlightedText({
   bulletChar = '•',
   parentPadding = 20,
 }: TTSHighlightedTextProps) {
-  // Store animation values persistently
-  const animValuesRef = useRef<Map<number, Animated.Value>>(new Map());
-  const runningAnimsRef = useRef<Map<number, Animated.CompositeAnimation>>(new Map());
-  const prevStatesRef = useRef<string>('');
-
-  // Get or create animation value for a chunk
-  const getAnimValue = useCallback((index: number): Animated.Value => {
-    if (!animValuesRef.current.has(index)) {
-      animValuesRef.current.set(index, new Animated.Value(0));
-    }
-    return animValuesRef.current.get(index)!;
-  }, []);
-
   // Check if any chunk is playing
   const isAnyPlaying = chunkStates.some(s => s === 'playing');
 
   // Get visual state for a chunk
-  const getVisualState = useCallback((state: ChunkState): ChunkState => {
+  const getVisualState = (state: ChunkState): ChunkState => {
     if (state === 'playing') return 'playing';
     if (state === 'completed') return 'completed';
     if (state === 'generating') {
-      // Only show blink if no other chunk is playing
       return isAnyPlaying ? 'pending' : 'generating';
     }
     return 'pending';
-  }, [isAnyPlaying]);
-
-  // Manage animations - only update when states actually change
-  useEffect(() => {
-    if (!isActive || chunks.length === 0) {
-      // Stop all animations when not active
-      runningAnimsRef.current.forEach(anim => anim.stop());
-      runningAnimsRef.current.clear();
-      return;
-    }
-
-    // Create a string key of current visual states to detect real changes
-    const currentStatesKey = chunkStates.map((s, i) => `${i}:${getVisualState(s)}`).join(',');
-
-    // Skip if nothing changed
-    if (currentStatesKey === prevStatesRef.current) {
-      return;
-    }
-    prevStatesRef.current = currentStatesKey;
-
-    console.log('[TTS-Highlight] States changed:', currentStatesKey);
-
-    // Update animations for each chunk
-    chunkStates.forEach((rawState, index) => {
-      const visualState = getVisualState(rawState);
-      const animValue = getAnimValue(index);
-
-      // Stop existing animation for this chunk
-      const existingAnim = runningAnimsRef.current.get(index);
-      if (existingAnim) {
-        existingAnim.stop();
-        runningAnimsRef.current.delete(index);
-      }
-
-      if (visualState === 'generating') {
-        console.log(`[TTS-Highlight] Starting blink animation for chunk ${index}`);
-        // Start pulsing animation
-        const pulse = Animated.loop(
-          Animated.sequence([
-            Animated.timing(animValue, {
-              toValue: 1,
-              duration: 1400,
-              useNativeDriver: false,
-            }),
-            Animated.timing(animValue, {
-              toValue: 0.3,
-              duration: 1400,
-              useNativeDriver: false,
-            }),
-          ])
-        );
-        runningAnimsRef.current.set(index, pulse);
-        pulse.start();
-      } else if (visualState === 'playing') {
-        // Solid highlight
-        Animated.timing(animValue, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: false,
-        }).start();
-      } else {
-        // Fade out
-        Animated.timing(animValue, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }).start();
-      }
-    });
-
-    return () => {
-      // Cleanup on unmount
-      runningAnimsRef.current.forEach(anim => anim.stop());
-    };
-  }, [isActive, chunks.length, chunkStates, getVisualState, getAnimValue]);
+  };
 
   if (!isActive || chunks.length === 0) {
     return null;
   }
-
-  // Get style for a chunk
-  const getChunkStyle = (visualState: ChunkState, animValue: Animated.Value): ViewStyle => {
-    const baseStyle: ViewStyle = {
-      marginHorizontal: -parentPadding,
-      paddingHorizontal: parentPadding,
-      paddingVertical: 10,
-      marginBottom: 8,
-    };
-
-    if (visualState === 'generating') {
-      return {
-        ...baseStyle,
-        backgroundColor: animValue.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['rgba(34, 211, 238, 0.1)', 'rgba(34, 211, 238, 0.35)'],
-        }) as any,
-      };
-    }
-
-    if (visualState === 'playing') {
-      return {
-        ...baseStyle,
-        backgroundColor: 'rgba(34, 211, 238, 0.2)',
-      };
-    }
-
-    if (visualState === 'completed') {
-      return {
-        ...baseStyle,
-        backgroundColor: 'transparent',
-      };
-    }
-
-    // pending
-    return {
-      ...baseStyle,
-      backgroundColor: 'rgba(148, 163, 184, 0.05)',
-    };
-  };
 
   const getTextStyle = (visualState: ChunkState): TextStyle => {
     switch (visualState) {
@@ -198,43 +78,135 @@ export default function TTSHighlightedText({
       {chunks.map((chunk, index) => {
         const rawState = chunkStates[index] || 'pending';
         const visualState = getVisualState(rawState);
-        const animValue = getAnimValue(index);
-
-        if (asBulletList) {
-          return (
-            <Animated.View key={index} style={getChunkStyle(visualState, animValue)}>
-              <View style={styles.bulletItem}>
-                <Text style={[styles.bullet, getTextStyle(visualState)]}>{bulletChar}</Text>
-                <Text
-                  style={[
-                    styles.text,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                    textStyle,
-                    getTextStyle(visualState),
-                  ]}
-                >
-                  {chunk}
-                </Text>
-              </View>
-            </Animated.View>
-          );
-        }
 
         return (
-          <Animated.View key={index} style={getChunkStyle(visualState, animValue)}>
-            <Text
-              style={[
-                styles.text,
-                { fontFamily: FONTS.BarlowSemiCondensed },
-                textStyle,
-                getTextStyle(visualState),
-              ]}
-            >
-              {chunk}
-            </Text>
-          </Animated.View>
+          <ChunkItem
+            key={index}
+            chunk={chunk}
+            visualState={visualState}
+            textStyle={textStyle}
+            asBulletList={asBulletList}
+            bulletChar={bulletChar}
+            parentPadding={parentPadding}
+            getTextStyleFn={getTextStyle}
+          />
         );
       })}
+    </View>
+  );
+}
+
+// Separate component for each chunk to properly use hooks
+interface ChunkItemProps {
+  chunk: string;
+  visualState: ChunkState;
+  textStyle?: TextStyle;
+  asBulletList: boolean;
+  bulletChar: string;
+  parentPadding: number;
+  getTextStyleFn: (state: ChunkState) => TextStyle;
+}
+
+function ChunkItem({
+  chunk,
+  visualState,
+  textStyle,
+  asBulletList,
+  bulletChar,
+  parentPadding,
+  getTextStyleFn,
+}: ChunkItemProps) {
+  const opacity = useSharedValue(0);
+
+  // Get background color based on state (lighter colors)
+  const bgColor =
+    visualState === 'generating' ? 'rgba(34, 211, 238, 0.3)' :
+    visualState === 'playing' ? 'rgba(34, 211, 238, 0.2)' :
+    'transparent';
+
+  useEffect(() => {
+    // Cancel any existing animation
+    cancelAnimation(opacity);
+
+    if (visualState === 'generating') {
+      console.log('[TTS-Highlight] Starting blink animation');
+      // Start with visible background
+      opacity.value = 1;
+      // Pulsing animation: 1 -> 0.2 -> 1 repeated (600ms per direction for gentle pulse)
+      opacity.value = withRepeat(
+        withSequence(
+          withTiming(0.2, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1, // Infinite repeat
+        false // Don't reverse
+      );
+    } else if (visualState === 'playing') {
+      opacity.value = withTiming(1, { duration: 200 });
+    } else {
+      opacity.value = withTiming(0, { duration: 200 });
+    }
+
+    return () => {
+      cancelAnimation(opacity);
+    };
+  }, [visualState]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: opacity.value,
+    };
+  });
+
+  const chunkTextStyle = getTextStyleFn(visualState);
+
+  const chunkContent = asBulletList ? (
+    <View style={styles.bulletItem}>
+      <Text style={[styles.bullet, chunkTextStyle]}>{bulletChar}</Text>
+      <Text
+        style={[
+          styles.text,
+          { fontFamily: FONTS.BarlowSemiCondensed },
+          textStyle,
+          chunkTextStyle,
+        ]}
+      >
+        {chunk}
+      </Text>
+    </View>
+  ) : (
+    <Text
+      style={[
+        styles.text,
+        { fontFamily: FONTS.BarlowSemiCondensed },
+        textStyle,
+        chunkTextStyle,
+      ]}
+    >
+      {chunk}
+    </Text>
+  );
+
+  return (
+    <View
+      style={[
+        styles.chunkContainer,
+        {
+          marginHorizontal: -parentPadding,
+          paddingHorizontal: parentPadding,
+        },
+      ]}
+    >
+      {/* Animated background overlay */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: bgColor },
+          animatedStyle,
+        ]}
+      />
+      {/* Content */}
+      {chunkContent}
     </View>
   );
 }
@@ -242,6 +214,11 @@ export default function TTSHighlightedText({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
+  },
+  chunkContainer: {
+    position: 'relative',
+    paddingVertical: 10,
+    marginBottom: 8,
   },
   bulletItem: {
     flexDirection: 'row',
