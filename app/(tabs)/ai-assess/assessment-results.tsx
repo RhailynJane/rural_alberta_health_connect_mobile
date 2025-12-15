@@ -383,10 +383,12 @@ function renderAssessmentCards(
       chunkStates: ttsChunkStates,
       isAvailable: ttsAvailable,
       hasPlayed: ttsHasPlayed,
+      isOtherPlaying,
     } = useTTS();
 
     const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
-    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
+    const isDisabled = isOtherPlaying;
+    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
     const handleTTSPress = async () => {
       if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
@@ -416,7 +418,12 @@ function renderAssessmentCards(
                 </TouchableOpacity>
               )}
               {ttsStatus === 'ready' && (
-                <TouchableOpacity style={styles.inlineTtsButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                  onPress={handleTTSPress}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
+                >
                   <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
                   <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
                     {ttsHasPlayed ? 'Replay' : 'Listen'}
@@ -435,6 +442,7 @@ function renderAssessmentCards(
             isActive={isTTSActive}
             asBulletList={true}
             containerStyle={styles.ttsHighlightContainer}
+            parentPadding={16}
           />
         ) : (
           items.slice(0, 4).map((it, idx) => (
