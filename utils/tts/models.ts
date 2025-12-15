@@ -66,8 +66,8 @@ export const MODELS = Object.freeze({
 export type ModelId = keyof typeof MODELS;
 
 // Default model to use
-// Full precision offers highest quality (326MB)
-export const DEFAULT_MODEL_ID: ModelId = 'model.onnx';
+// Q8F16 offers best balance of quality and speed (86MB)
+export const DEFAULT_MODEL_ID: ModelId = 'model_q8f16.onnx';
 
 /**
  * Check if a model is downloaded

@@ -21,7 +21,11 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
-import { prepareTextForTTS } from "../../../utils/tts";
+import {
+  prepareTextForTTS,
+  prepareNextStepsForTTS,
+  prepareRecommendationsForTTS,
+} from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text matching assessment-results UI (priority + accordions)
@@ -124,7 +128,13 @@ function renderAssessmentCards(
             {icon}
             <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
           </View>
-          {ttsText && <TTSButton text={ttsText} compact style={styles.cardTTSButton} />}
+          {ttsText && (
+            <TTSButton
+              text={ttsText}
+              compact
+              style={styles.cardTTSButton}
+            />
+          )}
         </View>
         {sectionKey === "NEXT STEPS"
           ? items.slice(0, 4).map((it, idx) => (
@@ -914,7 +924,11 @@ export default function LogDetails() {
               {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(resolvedEntry.aiContext, expandedSections, toggleSection)}
+                  {renderAssessmentCards(
+                    resolvedEntry.aiContext,
+                    expandedSections,
+                    toggleSection
+                  )}
                 </View>
               )}
 
@@ -926,7 +940,11 @@ export default function LogDetails() {
                       <Ionicons name="document-text" size={20} color="#2A7DE1" />
                       <Text style={styles.cardTitle}>Additional Notes</Text>
                     </View>
-                    <TTSButton text={prepareTextForTTS(resolvedEntry.notes)} compact style={styles.cardTTSButton} />
+                    <TTSButton
+                      text={prepareTextForTTS(resolvedEntry.notes)}
+                      compact
+                      style={styles.cardTTSButton}
+                    />
                   </View>
                   <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>

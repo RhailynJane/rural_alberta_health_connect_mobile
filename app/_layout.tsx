@@ -11,6 +11,7 @@ import { AppState, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LLMHost } from '../utils/llm/LLMHost';
 import { database } from '../watermelon/database';
+import { preWarmTTS, isModelDownloaded, DEFAULT_MODEL_ID } from '../utils/tts';
 import { checkAndFireDueReminders, initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 
@@ -210,6 +211,16 @@ export default function RootLayout() {
     requestNotificationPermissions().catch(() => {});
     // Configure foreground notification behavior
     configureForegroundNotifications();
+
+    // Pre-warm TTS engine if model is downloaded (for instant audio on first use)
+    isModelDownloaded(DEFAULT_MODEL_ID).then(downloaded => {
+      if (downloaded) {
+        console.log('[TTS] Model downloaded, pre-warming TTS engine...');
+        preWarmTTS().then(success => {
+          console.log(`[TTS] Pre-warm ${success ? 'complete' : 'failed'}`);
+        }).catch(() => {});
+      }
+    }).catch(() => {});
 
     // Initialize OneSignal for push notifications
     initializeOneSignal().catch((error) => {

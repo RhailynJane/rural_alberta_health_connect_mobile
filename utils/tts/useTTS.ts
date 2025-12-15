@@ -117,7 +117,14 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
           return;
         }
 
-        // Model is downloaded, try to load it
+        // Check if already pre-warmed (loaded at app startup)
+        if (KokoroOnnx.isReady()) {
+          console.log('[TTS] Model already pre-warmed, ready instantly');
+          safeSetStatus('ready');
+          return;
+        }
+
+        // Model is downloaded but not pre-warmed, load it now
         if (autoLoad) {
           safeSetStatus('loading');
 

@@ -218,8 +218,8 @@ export const VOICES: Record<string, VoiceInfo> = Object.freeze({
 
 export type VoiceId = keyof typeof VOICES;
 
-// Default voice - warm and calming for healthcare
-export const DEFAULT_VOICE_ID: VoiceId = 'af_heart';
+// Default voice - clear and friendly for healthcare
+export const DEFAULT_VOICE_ID: VoiceId = 'af_bella';
 
 // Recommended voices for healthcare (A and A- grades)
 export const RECOMMENDED_VOICES: VoiceId[] = ['af_heart', 'af_bella'];

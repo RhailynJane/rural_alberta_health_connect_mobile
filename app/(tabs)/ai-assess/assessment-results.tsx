@@ -1513,7 +1513,13 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
                         </Text>
                       </View>
                     )}
-                    {renderAssessmentCards(symptomContext, expandedSections, toggleSection, isPremium, handleUpgradePress)}
+                    {renderAssessmentCards(
+                      symptomContext,
+                      expandedSections,
+                      toggleSection,
+                      isPremium,
+                      handleUpgradePress
+                    )}
                     {assessmentError && (
                       <View style={styles.errorNote}>
                         <Ionicons
