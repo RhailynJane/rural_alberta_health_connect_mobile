@@ -219,6 +219,11 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     // Cleanup: stop TTS playback when component unmounts
     return () => {
       isMounted.current = false;
+      // If this instance was playing, notify globally that we stopped
+      // This prevents stale playing state from blocking other TTS instances
+      if (currentPlayingInstance === instanceId.current) {
+        notifyTTSStateChange(false, null);
+      }
       // Stop any ongoing TTS playback
       KokoroOnnx.stopStreaming().catch((err) => {
         console.log('[TTS] Cleanup stop error (safe to ignore):', err);
