@@ -490,10 +490,15 @@ class KokoroOnnx {
   async stopStreaming(): Promise<void> {
     if (this.streamingSound) {
       try {
-        await this.streamingSound.stopAsync();
-        await this.streamingSound.unloadAsync();
+        // Check if sound is actually loaded before trying to stop
+        const status = await this.streamingSound.getStatusAsync();
+        if (status.isLoaded) {
+          await this.streamingSound.stopAsync();
+          await this.streamingSound.unloadAsync();
+        }
       } catch (error) {
-        console.error('Error stopping streaming audio:', error);
+        // Silently ignore - sound may have already been unloaded
+        // This is expected when switching tabs during playback
       }
       this.streamingSound = null;
     }
