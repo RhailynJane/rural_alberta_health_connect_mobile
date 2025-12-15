@@ -46,7 +46,7 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import ScanningOverlay from "../../components/ScanningOverlay";
 import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
-import { prepareNextStepsForTTS } from "../../../utils/tts";
+import { prepareNextStepsForTTS, prepareTextForTTS, prepareRecommendationsForTTS } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 /**
@@ -236,87 +236,20 @@ function renderAssessmentCards(
     console.log(`${key}: ${sections[key as SectionKey].length} items`);
   });
 
-  // Categorize Next Steps into 3 clear time-based steps
-  const categorizeNextSteps = (items: string[]) => {
-    const steps = {
-      doNow: [] as string[],
-      within48: [] as string[],
-      seekCare: [] as string[],
-    };
-
-    items.forEach(item => {
-      const lower = item.toLowerCase();
-
-      // "Seek care if" patterns
-      if (lower.includes('if symptoms') || lower.includes('seek') || lower.includes('worsen') ||
-          lower.includes('persist') || lower.includes('go to') || lower.includes('contact') ||
-          lower.includes('call 911') || lower.includes('emergency') || lower.includes('urgent')) {
-        const cleaned = item
-          .replace(/^(if symptoms?[^:]*:|seek[^:]*:|urgent[^:]*:|when to[^:]*:)\s*/i, '')
-          .trim();
-        steps.seekCare.push(cleaned);
-      }
-      // "Within 24-48 hours" patterns
-      else if (lower.includes('within') || lower.includes('24') || lower.includes('48') ||
-               lower.includes('tomorrow') || lower.includes('follow') || lower.includes('monitor') ||
-               lower.includes('reassess') || lower.includes('watch for') || lower.includes('next day')) {
-        const cleaned = item
-          .replace(/^(within[^:]*:|follow[- ]?up:?|reassess:?)\s*/i, '')
-          .trim();
-        steps.within48.push(cleaned);
-      }
-      // "Do now" - immediate actions
-      else {
-        const cleaned = item
-          .replace(/^(today:|now:|immediately:)\s*/i, '')
-          .trim();
-        steps.doNow.push(cleaned);
-      }
-    });
-
-    return steps;
+  // Parse item to extract header prefix (e.g., "Today:", "Within 24-48 hours:") and content
+  const parseStepItem = (item: string): { label: string | null; content: string } => {
+    // Match patterns like "Today:", "Within 24-48 hours:", "If symptoms worsen:", "Follow-up:"
+    const match = item.match(/^([^:]{1,30}):\s*(.+)$/);
+    if (match) {
+      return { label: match[1].trim(), content: match[2].trim() };
+    }
+    return { label: null, content: item };
   };
 
-  // Next Steps Card - Clear 3-step timeline
+  // Next Steps Card - Display AI's original format organically
   const NextStepsCard = ({ items }: { items: string[] }) => {
-    const steps = categorizeNextSteps(items);
-
-    const StepRow = ({ stepNumber, label, content }: {
-      stepNumber: number;
-      label: string;
-      content: string[];
-    }) => {
-      if (content.length === 0) return null;
-
-      return (
-        <View style={styles.stepRow}>
-          <View style={styles.stepNumberContainer}>
-            <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {stepNumber}
-            </Text>
-          </View>
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {label}
-            </Text>
-            <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {content[0]}
-            </Text>
-          </View>
-        </View>
-      );
-    };
-
-    // Calculate step numbers dynamically based on which steps have content
-    let stepNum = 0;
-
-    // Prepare text for TTS - combine all steps
-    const allStepsText = [
-      ...steps.doNow.map(s => `Do now: ${s}`),
-      ...steps.within48.map(s => `Within 24 to 48 hours: ${s}`),
-      ...steps.seekCare.map(s => `Seek care if: ${s}`),
-    ];
-    const ttsText = prepareNextStepsForTTS(allStepsText);
+    // Prepare text for TTS
+    const ttsText = prepareNextStepsForTTS(items);
 
     return (
       <View style={styles.nextStepsCard}>
@@ -324,20 +257,27 @@ function renderAssessmentCards(
           <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
             Next Steps
           </Text>
-          {/* TTS Button - subtle, right-aligned */}
           {ttsText && (
             <TTSButton text={ttsText} compact style={styles.ttsButton} />
           )}
         </View>
-        {steps.doNow.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Do now" content={steps.doNow} />
-        )}
-        {steps.within48.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Within 24–48 hours" content={steps.within48} />
-        )}
-        {steps.seekCare.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Seek care if" content={steps.seekCare} />
-        )}
+        {items.map((item, idx) => {
+          const { label, content } = parseStepItem(item);
+          return (
+            <View key={idx} style={styles.stepRow}>
+              <View style={styles.stepContent}>
+                {label && (
+                  <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {label}
+                  </Text>
+                )}
+                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {content}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
       </View>
     );
   };
@@ -347,22 +287,37 @@ function renderAssessmentCards(
     title: string;
     items: string[];
     icon: React.ReactNode;
-  }) => (
-    <View style={styles.primaryAssessmentCard}>
-      <View style={styles.primaryCardHeader}>
-        {icon}
-        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-      </View>
-      {items.slice(0, 4).map((it, idx) => (
-        <View key={idx} style={styles.cardItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-            {it}
-          </Text>
+  }) => {
+    // Prepare text for TTS
+    const ttsText = prepareRecommendationsForTTS(items, 4);
+
+    return (
+      <View style={styles.primaryAssessmentCard}>
+        <View style={styles.primaryCardHeader}>
+          {icon}
+          <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          {ttsText && (
+            <TTSButton text={ttsText} compact style={styles.cardTtsButton} />
+          )}
         </View>
-      ))}
-    </View>
-  );
+        {items.slice(0, 4).map((it, idx) => (
+          <View key={idx} style={styles.cardItem}>
+            <Text style={styles.bulletPoint}>•</Text>
+            <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {it}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  // Helper to prepare section items for TTS
+  const prepareSectionForTTS = (title: string, items: string[]): string => {
+    if (!items.length) return '';
+    const cleanedItems = items.map(item => prepareTextForTTS(item)).filter(Boolean);
+    return `${title}. ${cleanedItems.join('. ')}`;
+  };
 
   // Accordion Component with Premium Gating (for secondary sections)
   const AccordionCard = ({ title, items, icon, sectionKey }: {
@@ -376,6 +331,10 @@ function renderAssessmentCards(
     const hasMoreContent = items.length > previewCount;
     const previewItems = items.slice(0, previewCount);
     const showUpgrade = !isPremium && hasMoreContent && isExpanded;
+
+    // Prepare text for TTS (use visible items based on premium status)
+    const visibleItems = isPremium ? items : previewItems;
+    const ttsText = prepareSectionForTTS(title, visibleItems);
 
     return (
       <View style={[
@@ -398,16 +357,21 @@ function renderAssessmentCards(
               </View>
             )}
           </View>
-          <Ionicons
-            name={isExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#6B7280"
-          />
+          <View style={styles.accordionHeaderRight}>
+            {isExpanded && ttsText && (
+              <TTSButton text={ttsText} compact style={styles.accordionTtsButton} />
+            )}
+            <Ionicons
+              name={isExpanded ? "chevron-up" : "chevron-down"}
+              size={20}
+              color="#6B7280"
+            />
+          </View>
         </TouchableOpacity>
         {isExpanded && (
           <View style={styles.accordionContent}>
             {/* Show preview items (always visible) */}
-            {(isPremium ? items : previewItems).map((it, idx) => (
+            {visibleItems.map((it, idx) => (
               <View key={idx} style={styles.cardItem}>
                 <Text style={styles.bulletPoint}>•</Text>
                 <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -2059,6 +2023,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+  },
+  accordionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  accordionTtsButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  cardTtsButton: {
+    marginLeft: "auto",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   accordionTitle: {
     fontSize: 15,

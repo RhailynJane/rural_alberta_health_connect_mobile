@@ -304,18 +304,36 @@ export function prepareTextForTTS(text: string): string {
 }
 
 /**
+ * Check if text already has a time-based or action label prefix
+ * e.g., "Today:", "Within 24-48 hours:", "If symptoms worsen:", "Follow-up:"
+ */
+function hasLabelPrefix(text: string): boolean {
+  // Match patterns like "Today:", "Within 24-48 hours:", "If symptoms worsen:", etc.
+  return /^[^:]{1,30}:\s*.+$/.test(text.trim());
+}
+
+/**
  * Prepare assessment next steps for TTS
+ * Does NOT add step numbers if text already has label prefixes (e.g., "Today:", "Within 24 hours:")
  */
 export function prepareNextStepsForTTS(nextSteps: string[]): string {
   if (!nextSteps.length) return '';
 
   const parts: string[] = ["Here's what you should do."];
 
+  // Check if items already have labels (time-based prefixes)
+  const hasExistingLabels = nextSteps.some(step => hasLabelPrefix(step));
+
   nextSteps.forEach((step, index) => {
     // Clean the step text
     const cleanStep = prepareTextForTTS(step);
     if (cleanStep) {
-      parts.push(`Step ${index + 1}: ${cleanStep}`);
+      // Only add "Step X:" if items don't already have labels
+      if (hasExistingLabels) {
+        parts.push(cleanStep);
+      } else {
+        parts.push(`Step ${index + 1}: ${cleanStep}`);
+      }
     }
   });
 
