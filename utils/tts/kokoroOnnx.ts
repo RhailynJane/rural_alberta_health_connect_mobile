@@ -9,8 +9,8 @@ import { MODELS } from './models';
 const SAMPLE_RATE = 24000;
 const STYLE_DIM = 256;
 const MAX_PHONEME_LENGTH = 510;
-// Safe chunk size - leave room for phoneme expansion and padding tokens
-const SAFE_CHUNK_CHAR_LENGTH = 150;
+// Safe chunk size - smaller chunks = better quality, more natural pauses
+const SAFE_CHUNK_CHAR_LENGTH = 80;
 
 // Voice data URL
 const VOICE_DATA_URL = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices";
