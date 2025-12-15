@@ -33,7 +33,7 @@ interface TTSHighlightedTextProps {
 /**
  * TTSHighlightedText - Visual feedback for TTS chunk generation/playback
  * Uses react-native-reanimated for reliable pulsing animation
- * Background stays within content bounds - no overflow issues
+ * Background extends to parent card edges via negative margins
  */
 export default function TTSHighlightedText({
   chunks,
@@ -43,6 +43,7 @@ export default function TTSHighlightedText({
   containerStyle,
   asBulletList = false,
   bulletChar = '•',
+  parentPadding = 16, // Default card padding
 }: TTSHighlightedTextProps) {
   // Check if any chunk is playing
   const isAnyPlaying = chunkStates.some(s => s === 'playing');
