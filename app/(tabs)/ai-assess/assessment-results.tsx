@@ -44,7 +44,9 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import ScanningOverlay from "../../components/ScanningOverlay";
+import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
+import { prepareNextStepsForTTS } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 /**
