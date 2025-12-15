@@ -321,7 +321,7 @@ export default function Profile() {
   const [notificationFrequencyModalVisible, setNotificationFrequencyModalVisible] = useState(false);
   const [notificationTimePickerVisible, setNotificationTimePickerVisible] = useState(false);
   const [selectedNotificationTime, setSelectedNotificationTime] = useState<string>("09:00");
-
+    const [notificationTimeUnit, setNotificationTimeUnit] = useState<'hour' | 'minute'>('hour');
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
       // Validate only personal info fields before saving
@@ -1271,30 +1271,63 @@ export default function Profile() {
 
       {/* Time Input for Notifications */}
       {notificationTimePickerVisible && (
-        <View style={styles.timePickerContainer}>
-          <Text style={styles.timePickerLabel}>Enter time (HH:MM)</Text>
-          <View style={styles.timeInputRow}>
-            <TouchableOpacity
-              style={styles.timeButton}
-              onPress={() => {
-                const [h, m] = selectedNotificationTime.split(':');
-                const newH = Math.max(0, parseInt(h) - 1).toString().padStart(2, '0');
-                setSelectedNotificationTime(newH + ':' + m);
-              }}
-            >
-              <Icon name="remove" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
-            <Text style={styles.timeDisplay}>{selectedNotificationTime}</Text>
-            <TouchableOpacity
-              style={styles.timeButton}
-              onPress={() => {
-                const [h, m] = selectedNotificationTime.split(':');
-                const newH = Math.min(23, parseInt(h) + 1).toString().padStart(2, '0');
-                setSelectedNotificationTime(newH + ':' + m);
-              }}
-            >
-              <Icon name="add" size={20} color={COLORS.primary} />
-            </TouchableOpacity>
+        <View style={styles.notificationTimePickerContainer}>
+          <Text style={styles.notificationTimePickerLabel}>Select Reminder Time</Text>
+          <View style={styles.notificationTimeInputRow}>
+            {/* Hour Selector */}
+            <View style={styles.timeUnitColumn}>
+              <TouchableOpacity
+                style={styles.notificationTimeAdjustBtn}
+                onPress={() => {
+                  const [h, m] = selectedNotificationTime.split(':');
+                  const newH = Math.max(0, parseInt(h) - 1).toString().padStart(2, '0');
+                  setSelectedNotificationTime(newH + ':' + m);
+                }}
+              >
+                <Icon name="expand-less" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.notificationTimeValue}>{selectedNotificationTime.split(':')[0]}</Text>
+              <TouchableOpacity
+                style={styles.notificationTimeAdjustBtn}
+                onPress={() => {
+                  const [h, m] = selectedNotificationTime.split(':');
+                  const newH = Math.min(23, parseInt(h) + 1).toString().padStart(2, '0');
+                  setSelectedNotificationTime(newH + ':' + m);
+                }}
+              >
+                <Icon name="expand-more" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.notificationTimeLabel}>Hour</Text>
+            </View>
+
+            {/* Separator */}
+            <Text style={styles.notificationTimeSeparator}>:</Text>
+
+            {/* Minute Selector */}
+            <View style={styles.timeUnitColumn}>
+              <TouchableOpacity
+                style={styles.notificationTimeAdjustBtn}
+                onPress={() => {
+                  const [h, m] = selectedNotificationTime.split(':');
+                  const newM = Math.max(0, parseInt(m) - 5).toString().padStart(2, '0');
+                  setSelectedNotificationTime(h + ':' + newM);
+                }}
+              >
+                <Icon name="expand-less" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.notificationTimeValue}>{selectedNotificationTime.split(':')[1]}</Text>
+              <TouchableOpacity
+                style={styles.notificationTimeAdjustBtn}
+                onPress={() => {
+                  const [h, m] = selectedNotificationTime.split(':');
+                  const newM = Math.min(59, parseInt(m) + 5).toString().padStart(2, '0');
+                  setSelectedNotificationTime(h + ':' + newM);
+                }}
+              >
+                <Icon name="expand-more" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.notificationTimeLabel}>Minute</Text>
+            </View>
           </View>
         </View>
       )}
@@ -2029,7 +2062,7 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     fontSize: 16,
   },
-  timePickerContainer: {
+    notificationTimePickerContainer: {
     position: 'absolute',
     bottom: 100,
     left: 20,
@@ -2044,22 +2077,26 @@ const styles = StyleSheet.create({
     elevation: 10,
     zIndex: 1000,
   },
-  timePickerLabel: {
+    notificationTimePickerLabel: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 16,
     color: COLORS.darkText,
-    marginBottom: 12,
+      marginBottom: 20,
     textAlign: 'center',
   },
-  timeInputRow: {
+    notificationTimeInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+      gap: 12,
   },
-  timeButton: {
-    width: 40,
-    height: 40,
+    timeUnitColumn: {
+      alignItems: 'center',
+      gap: 8,
+    },
+    notificationTimeAdjustBtn: {
+      width: 44,
+      height: 44,
     borderRadius: 8,
     backgroundColor: '#E8F1FF',
     justifyContent: 'center',
@@ -2067,12 +2104,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.primary,
   },
-  timeDisplay: {
+    notificationTimeValue: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 24,
+      fontSize: 32,
     color: COLORS.darkText,
-    minWidth: 80,
+      minWidth: 50,
     textAlign: 'center',
   },
+    notificationTimeSeparator: {
+      fontFamily: FONTS.BarlowSemiCondensedBold,
+      fontSize: 28,
+      color: COLORS.darkText,
+      marginBottom: 20,
+    },
+    notificationTimeLabel: {
+      fontFamily: FONTS.BarlowSemiCondensed,
+      fontSize: 12,
+      color: COLORS.darkGray,
+    },
 });
 
