@@ -272,15 +272,15 @@ function renderAssessmentCards(
       }
     };
 
-    // Determine button text and icon based on status
+    // Determine button text and icon based on status - calm theme colors
     const getButtonContent = () => {
       switch (ttsStatus) {
         case 'generating':
-          return { text: 'Stop', icon: 'stop-circle' as const, color: '#DC3545' };
+          return { text: 'Stop', icon: 'stop-circle' as const, color: '#B45309' };
         case 'speaking':
-          return { text: 'Stop', icon: 'stop-circle' as const, color: '#DC3545' };
+          return { text: 'Stop', icon: 'stop-circle' as const, color: '#B45309' };
         case 'ready':
-          return { text: 'Listen', icon: 'volume-medium' as const, color: '#2A7DE1' };
+          return { text: 'Listen', icon: 'volume-medium' as const, color: '#0891B2' };
         default:
           return null;
       }
@@ -304,7 +304,7 @@ function renderAssessmentCards(
               activeOpacity={0.7}
             >
               {ttsStatus === 'generating' ? (
-                <ActivityIndicator size="small" color="#2A7DE1" />
+                <ActivityIndicator size="small" color="#0891B2" />
               ) : (
                 <Ionicons name={buttonContent.icon} size={16} color={buttonContent.color} />
               )}
@@ -2107,29 +2107,29 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
-  // Inline TTS button styles
+  // Inline TTS button styles - calm, modern theme
   inlineTtsButton: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: "#F0F7FF",
+    backgroundColor: "rgba(236, 254, 255, 0.6)",
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: "rgba(34, 211, 238, 0.25)",
     gap: 6,
   },
   inlineTtsButtonActive: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FECACA",
+    backgroundColor: "rgba(254, 243, 199, 0.5)",
+    borderColor: "rgba(251, 191, 36, 0.3)",
   },
   inlineTtsButtonText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#2A7DE1",
+    color: "#0891B2",
   },
   inlineTtsButtonTextActive: {
-    color: "#DC3545",
+    color: "#B45309",
   },
   ttsHighlightContainer: {
     marginTop: 8,
