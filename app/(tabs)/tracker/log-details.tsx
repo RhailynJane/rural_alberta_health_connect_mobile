@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -20,11 +20,13 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
 import TTSButton from "../../components/TTSButton";
+import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { FONTS } from "../../constants/constants";
 import {
   prepareTextForTTS,
   prepareNextStepsForTTS,
   prepareRecommendationsForTTS,
+  useTTS,
 } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
@@ -121,6 +123,28 @@ function renderAssessmentCards(
       return prepareTextForTTS(item);
     }).join('. ');
 
+    // Get TTS state for highlighting
+    const {
+      status: ttsStatus,
+      speak,
+      stop,
+      chunks: ttsChunks,
+      chunkStates: ttsChunkStates,
+      isAvailable: ttsAvailable,
+      hasPlayed: ttsHasPlayed,
+    } = useTTS();
+
+    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
+
+    const handleTTSPress = async () => {
+      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+        await stop();
+      } else if (ttsStatus === 'ready' && ttsText) {
+        await speak(ttsText);
+      }
+    };
+
     return (
       <View style={styles.primaryAssessmentCard}>
         <View style={styles.primaryCardHeaderWithTTS}>
@@ -128,38 +152,65 @@ function renderAssessmentCards(
             {icon}
             <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
           </View>
-          {ttsText && (
-            <TTSButton
-              text={ttsText}
-              compact
-              style={styles.cardTTSButton}
-            />
+          {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+            <>
+              {ttsStatus === 'generating' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <ActivityIndicator size="small" color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'speaking' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <Ionicons name="pause" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'ready' && (
+                <TouchableOpacity style={styles.inlineTtsButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                    {ttsHasPlayed ? 'Replay' : 'Listen'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
-        {sectionKey === "NEXT STEPS"
-          ? items.slice(0, 4).map((it, idx) => (
-              <View key={idx} style={styles.stepRow}>
-                <View style={styles.stepNumberContainer}>
-                  <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+
+        {/* Show TTS highlighted text when active */}
+        {isTTSActive && ttsChunks.length > 0 ? (
+          <TTSHighlightedText
+            chunks={ttsChunks}
+            chunkStates={ttsChunkStates}
+            isActive={isTTSActive}
+            asBulletList={sectionKey !== "NEXT STEPS"}
+            containerStyle={{ marginTop: 4 }}
+          />
+        ) : (
+          sectionKey === "NEXT STEPS"
+            ? items.slice(0, 4).map((it, idx) => (
+                <View key={idx} style={styles.stepRow}>
+                  <View style={styles.stepNumberContainer}>
+                    <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                      {it.split(':')[0] || `Step ${idx + 1}`}
+                    </Text>
+                    <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                      {it.replace(/^.*?:\s*/, '') || it}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.stepContent}>
-                  <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
-                    {it.split(':')[0] || `Step ${idx + 1}`}
-                  </Text>
-                  <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
-                    {it.replace(/^.*?:\s*/, '') || it}
+              ))
+            : items.slice(0, 4).map((it, idx) => (
+                <View key={idx} style={styles.cardItem}>
+                  <Text style={styles.bulletPoint}>•</Text>
+                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                    {it}
                   </Text>
                 </View>
-              </View>
-            ))
-          : items.slice(0, 4).map((it, idx) => (
-              <View key={idx} style={styles.cardItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-                  {it}
-                </Text>
-              </View>
-            ))}
+              ))
+        )}
       </View>
     );
   };
@@ -177,6 +228,28 @@ function renderAssessmentCards(
     // Prepare text for TTS
     const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
 
+    // Get TTS state for highlighting
+    const {
+      status: ttsStatus,
+      speak,
+      stop,
+      chunks: ttsChunks,
+      chunkStates: ttsChunkStates,
+      isAvailable: ttsAvailable,
+      hasPlayed: ttsHasPlayed,
+    } = useTTS();
+
+    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
+
+    const handleTTSPress = async () => {
+      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+        await stop();
+      } else if (ttsStatus === 'ready' && ttsText) {
+        await speak(ttsText);
+      }
+    };
+
     return (
       <View style={styles.accordionCard}>
         <TouchableOpacity
@@ -188,27 +261,57 @@ function renderAssessmentCards(
             {icon}
             <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
           </View>
-          <Ionicons
-            name={isExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#6B7280"
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+              <>
+                {ttsStatus === 'generating' && (
+                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                    <ActivityIndicator size="small" color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                {ttsStatus === 'speaking' && (
+                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                    <Ionicons name="pause" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                {ttsStatus === 'ready' && (
+                  <TouchableOpacity style={styles.inlineTtsButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                    <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                    <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                      {ttsHasPlayed ? 'Replay' : 'Listen'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+            <Ionicons
+              name={isExpanded ? "chevron-up" : "chevron-down"}
+              size={20}
+              color="#6B7280"
+            />
+          </View>
         </TouchableOpacity>
         {isExpanded && (
           <View style={styles.accordionContent}>
-            {ttsText && (
-              <View style={styles.accordionTTSRow}>
-                <TTSButton text={ttsText} compact style={styles.accordionTTSButton} />
-              </View>
+            {/* Show TTS highlighted text when active */}
+            {isTTSActive && ttsChunks.length > 0 ? (
+              <TTSHighlightedText
+                chunks={ttsChunks}
+                chunkStates={ttsChunkStates}
+                isActive={isTTSActive}
+                asBulletList={true}
+                containerStyle={{ marginTop: 4 }}
+              />
+            ) : (
+              (items.length > 0 ? items : previewItems).map((it, idx) => (
+                <View key={idx} style={styles.cardItem}>
+                  <Text style={styles.bulletPoint}>•</Text>
+                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {it}
+                  </Text>
+                </View>
+              ))
             )}
-            {(items.length > 0 ? items : previewItems).map((it, idx) => (
-              <View key={idx} style={styles.cardItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {it}
-                </Text>
-              </View>
-            ))}
           </View>
         )}
       </View>
@@ -1439,5 +1542,24 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     fontFamily: FONTS.BarlowSemiCondensed,
     fontWeight: "500",
+  },
+  // Inline TTS button styles
+  inlineTtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inlineIconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
   },
 });
