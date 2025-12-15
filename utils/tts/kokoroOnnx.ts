@@ -210,6 +210,17 @@ export function splitTextIntoChunks(text: string, maxChunkLength: number = SAFE_
   return chunks;
 }
 
+// Simple hash function for caching
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16);
+}
+
 class KokoroOnnx {
   private session: InferenceSession | null = null;
   private isModelLoaded: boolean = false;
@@ -225,6 +236,8 @@ class KokoroOnnx {
   private streamingTokens: number[] = [];
   private streamingPhonemes: string = "";
   private streamingCallback: ((status: StreamStatus) => void) | null = null;
+  // Audio cache: key = hash(text + voiceId + speed), value = array of audio URIs
+  private audioCache: Map<string, string[]> = new Map();
 
   constructor() {
     // Initialize
