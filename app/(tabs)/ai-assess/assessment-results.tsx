@@ -272,50 +272,51 @@ function renderAssessmentCards(
       }
     };
 
-    // Determine button text and icon based on status - light modern theme
-    const getButtonContent = () => {
-      switch (ttsStatus) {
-        case 'generating':
-          return { text: 'Stop', icon: 'pause' as const, color: '#94A3B8' };
-        case 'speaking':
-          return { text: 'Stop', icon: 'pause' as const, color: '#94A3B8' };
-        case 'ready':
-          return { text: 'Listen', icon: 'volume-medium-outline' as const, color: '#22D3EE' };
-        default:
-          return null;
-      }
-    };
-
-    const buttonContent = getButtonContent();
-
     return (
       <View style={styles.nextStepsCard}>
         <View style={styles.nextStepsHeader}>
           <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
             Next Steps
           </Text>
-          {ttsText && ttsAvailable && buttonContent && (
-            <TouchableOpacity
-              style={[
-                styles.inlineTtsButton,
-                isTTSActive && styles.inlineTtsButtonActive
-              ]}
-              onPress={handleTTSPress}
-              activeOpacity={0.7}
-            >
-              {ttsStatus === 'generating' ? (
-                <ActivityIndicator size="small" color="#94A3B8" />
-              ) : (
-                <Ionicons name={buttonContent.icon} size={16} color={buttonContent.color} />
+          {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+            <>
+              {/* Generating state - icon only, no background */}
+              {ttsStatus === 'generating' && (
+                <TouchableOpacity
+                  style={styles.inlineIconOnlyButton}
+                  onPress={handleTTSPress}
+                  activeOpacity={0.7}
+                >
+                  <ActivityIndicator size="small" color="#94A3B8" />
+                </TouchableOpacity>
               )}
-              <Text style={[
-                styles.inlineTtsButtonText,
-                { fontFamily: FONTS.BarlowSemiCondensed },
-                isTTSActive && styles.inlineTtsButtonTextActive
-              ]}>
-                {buttonContent.text}
-              </Text>
-            </TouchableOpacity>
+              {/* Speaking state - pause icon only, no background */}
+              {ttsStatus === 'speaking' && (
+                <TouchableOpacity
+                  style={styles.inlineIconOnlyButton}
+                  onPress={handleTTSPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="pause" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {/* Ready state - Listen button with icon and text */}
+              {ttsStatus === 'ready' && (
+                <TouchableOpacity
+                  style={styles.inlineTtsButton}
+                  onPress={handleTTSPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="volume-medium-outline" size={16} color="#22D3EE" />
+                  <Text style={[
+                    styles.inlineTtsButtonText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}>
+                    Listen
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
@@ -2119,8 +2120,12 @@ const styles = StyleSheet.create({
     gap: 5,
     minHeight: 28,
   },
-  inlineTtsButtonActive: {
-    backgroundColor: "rgba(241, 245, 249, 0.8)",
+  inlineIconOnlyButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 6,
+    minWidth: 28,
+    minHeight: 28,
   },
   inlineTtsButtonText: {
     fontSize: 13,
@@ -2129,9 +2134,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     includeFontPadding: false,
     textAlignVertical: "center",
-  },
-  inlineTtsButtonTextActive: {
-    color: "#94A3B8",
   },
   ttsHighlightContainer: {
     marginTop: 8,

@@ -88,7 +88,7 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
         onPress={handlePress}
         activeOpacity={0.7}
       >
-        <Ionicons name="volume-medium-outline" size={16} color="#6B7280" />
+        <Ionicons name="volume-medium-outline" size={16} color="#94A3B8" />
         <Text style={[styles.buttonText, styles.downloadText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
           {compact ? 'Enable audio' : 'Enable audio guidance'}
         </Text>
@@ -104,9 +104,9 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     const progressPercent = Math.round(downloadProgress * 100);
     return (
       <View style={[styles.button, styles.downloadingButton, style]}>
-        <ActivityIndicator size="small" color="#2A7DE1" />
+        <ActivityIndicator size="small" color="#22D3EE" />
         <Text style={[styles.buttonText, styles.downloadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Downloading voice... {progressPercent}%
+          Downloading... {progressPercent}%
         </Text>
       </View>
     );
@@ -116,56 +116,56 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
   if (status === 'loading') {
     return (
       <View style={[styles.button, styles.loadingButton, style]}>
-        <ActivityIndicator size="small" color="#2A7DE1" />
+        <ActivityIndicator size="small" color="#22D3EE" />
         <Text style={[styles.buttonText, styles.loadingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Preparing voice...
+          Preparing...
         </Text>
       </View>
     );
   }
 
-  // Generating state - show spinner without percentage (visual feedback is on text)
+  // Generating state - icon only, no background
   if (status === 'generating') {
     return (
       <TouchableOpacity
-        style={[styles.button, styles.generatingButton, style]}
+        style={[styles.iconOnlyButton, style]}
         onPress={handlePress}
         activeOpacity={0.7}
       >
-        <ActivityIndicator size="small" color="#2A7DE1" />
-        <Text style={[styles.buttonText, styles.generatingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          {compact ? 'Stop' : 'Generating...'}
-        </Text>
+        <ActivityIndicator size="small" color="#94A3B8" />
       </TouchableOpacity>
     );
   }
 
-  // Ready or Speaking state
-  const isSpeaking = status === 'speaking';
+  // Speaking state - pause icon only, no background
+  if (status === 'speaking') {
+    return (
+      <TouchableOpacity
+        style={[styles.iconOnlyButton, style]}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="pause" size={18} color="#94A3B8" />
+      </TouchableOpacity>
+    );
+  }
 
+  // Ready state - Listen button
   return (
     <TouchableOpacity
-      style={[
-        styles.button,
-        isSpeaking ? styles.speakingButton : styles.readyButton,
-        style,
-      ]}
+      style={[styles.button, styles.readyButton, style]}
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      <Ionicons
-        name={isSpeaking ? 'stop-circle' : 'volume-medium'}
-        size={18}
-        color={isSpeaking ? '#DC3545' : '#2A7DE1'}
-      />
+      <Ionicons name="volume-medium-outline" size={16} color="#22D3EE" />
       <Text
         style={[
           styles.buttonText,
-          isSpeaking ? styles.speakingText : styles.readyText,
+          styles.readyText,
           { fontFamily: FONTS.BarlowSemiCondensed },
         ]}
       >
-        {isSpeaking ? 'Stop' : (compact ? 'Listen' : 'Listen to guidance')}
+        {compact ? 'Listen' : 'Listen'}
       </Text>
     </TouchableOpacity>
   );
@@ -176,73 +176,58 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    gap: 5,
+    minHeight: 28,
+  },
+  iconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
+    minWidth: 28,
+    minHeight: 28,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
+    lineHeight: 16,
   },
 
   // Download state
   downloadButton: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: 'transparent',
   },
   downloadText: {
-    color: '#6B7280',
+    color: '#94A3B8',
   },
   sizeHint: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: '#CBD5E1',
   },
 
   // Downloading state
   downloadingButton: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: 'transparent',
   },
   downloadingText: {
-    color: '#2A7DE1',
+    color: '#22D3EE',
   },
 
   // Loading state
   loadingButton: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: 'transparent',
   },
   loadingText: {
-    color: '#2A7DE1',
-  },
-
-  // Generating state
-  generatingButton: {
-    backgroundColor: '#F0F7FF',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  generatingText: {
-    color: '#2A7DE1',
+    color: '#22D3EE',
   },
 
   // Ready state
   readyButton: {
-    backgroundColor: '#F0F7FF',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
+    backgroundColor: 'transparent',
   },
   readyText: {
-    color: '#2A7DE1',
-  },
-
-  // Speaking state
-  speakingButton: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  speakingText: {
-    color: '#DC3545',
+    color: '#22D3EE',
   },
 });

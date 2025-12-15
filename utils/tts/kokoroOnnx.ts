@@ -166,6 +166,8 @@ const COMMON_WORD_PHONEMES: Record<string, string> = {
   'severe': 'səvˈɪəɹ',
   'mild': 'mˈaɪld',
   'moderate': 'mˈɑːdəɹət',
+  'timeframe': 'tˈaɪmfɹeɪm',
+  'timeframes': 'tˈaɪmfɹeɪmz',
 };
 
 export interface StreamStatus {
