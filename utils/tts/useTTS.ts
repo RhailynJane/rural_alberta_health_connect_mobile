@@ -59,6 +59,8 @@ export interface UseTTSReturn {
   currentChunk: number; // 1-indexed, 0 when not active
   // Track if audio has been played (for UI differentiation)
   hasPlayed: boolean;
+  // True if another TTS instance is playing (disable this button)
+  isOtherPlaying: boolean;
 }
 
 export interface UseTTSOptions {
