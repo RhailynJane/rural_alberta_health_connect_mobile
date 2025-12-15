@@ -1315,6 +1315,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
   },
+  accordionTTSRow: {
+    marginBottom: 10,
+    alignItems: "flex-start",
+  },
+  accordionTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
   // Next Steps timeline (match assessment-results)
   stepRow: {
     flexDirection: "row",
