@@ -19,7 +19,9 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
+import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
+import { prepareTextForTTS } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text matching assessment-results UI (priority + accordions)
