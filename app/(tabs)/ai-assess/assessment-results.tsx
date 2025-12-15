@@ -491,10 +491,12 @@ function renderAssessmentCards(
       chunkStates: ttsChunkStates,
       isAvailable: ttsAvailable,
       hasPlayed: ttsHasPlayed,
+      isOtherPlaying,
     } = useTTS();
 
     const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
-    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
+    const isDisabled = isOtherPlaying;
+    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
     const handleTTSPress = async () => {
       if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
