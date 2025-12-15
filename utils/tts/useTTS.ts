@@ -378,6 +378,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       );
 
       // Ensure status is set to ready after completion
+      notifyTTSStateChange(false, null);
       if (isMounted.current) {
         setStatus('ready');
         setGenerationProgress(0);
@@ -388,6 +389,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       }
     } catch (err) {
       console.error('[TTS] Speak error:', err);
+      notifyTTSStateChange(false, null); // Notify globally that we're done (on error)
       setError(err instanceof Error ? err.message : 'Speech failed');
       setStatus('ready');
       setGenerationProgress(0);
