@@ -199,7 +199,7 @@ export default function Emergency() {
             {/* Find Care link - subtle text link */}
             <TouchableOpacity
               style={styles.findCareLink}
-              onPress={() => router.push('/find-care')}
+              onPress={() => router.push('/location-services')}
               activeOpacity={0.6}
             >
               <Text style={styles.findCareLinkText}>Looking for a clinic?</Text>
