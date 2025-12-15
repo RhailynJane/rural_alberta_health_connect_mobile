@@ -2090,7 +2090,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
     color: "#1F2937",
-    marginBottom: 16,
+    flex: 1, // Allow title to take available space
   },
   stepRow: {
     flexDirection: "row",
