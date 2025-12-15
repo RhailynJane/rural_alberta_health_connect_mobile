@@ -966,42 +966,38 @@ const carouselStyles = StyleSheet.create({
   },
   indicatorsOverlay: {
     position: "absolute",
-    bottom: 16,
-    alignSelf: "center",
+    bottom: 24,
     left: 0,
     right: 0,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
   },
-  // Frosted glass pill container
+  // Frosted glass pill - light and airy
   indicatorsPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.85)",
-    // Shadow for depth
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.45)",
+    // Soft shadow for lift
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    // Subtle border for glass edge
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.5)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   indicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.6)",
   },
   indicatorActive: {
-    backgroundColor: "#2A7DE1",
-    width: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    width: 18,
     borderRadius: 3,
   },
 });
