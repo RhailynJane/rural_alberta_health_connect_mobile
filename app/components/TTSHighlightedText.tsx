@@ -26,12 +26,12 @@ interface TTSHighlightedTextProps {
   containerStyle?: ViewStyle;
   asBulletList?: boolean;
   bulletChar?: string;
-  parentPadding?: number;
 }
 
 /**
  * TTSHighlightedText - Visual feedback for TTS chunk generation/playback
  * Uses react-native-reanimated for reliable pulsing animation
+ * Background stays within content bounds - no overflow issues
  */
 export default function TTSHighlightedText({
   chunks,
@@ -41,7 +41,6 @@ export default function TTSHighlightedText({
   containerStyle,
   asBulletList = false,
   bulletChar = '•',
-  parentPadding = 20,
 }: TTSHighlightedTextProps) {
   // Check if any chunk is playing
   const isAnyPlaying = chunkStates.some(s => s === 'playing');
@@ -87,7 +86,6 @@ export default function TTSHighlightedText({
             textStyle={textStyle}
             asBulletList={asBulletList}
             bulletChar={bulletChar}
-            parentPadding={parentPadding}
             getTextStyleFn={getTextStyle}
           />
         );
@@ -103,7 +101,6 @@ interface ChunkItemProps {
   textStyle?: TextStyle;
   asBulletList: boolean;
   bulletChar: string;
-  parentPadding: number;
   getTextStyleFn: (state: ChunkState) => TextStyle;
 }
 
@@ -113,7 +110,6 @@ function ChunkItem({
   textStyle,
   asBulletList,
   bulletChar,
-  parentPadding,
   getTextStyleFn,
 }: ChunkItemProps) {
   const opacity = useSharedValue(0);
@@ -165,7 +161,7 @@ function ChunkItem({
       <Text style={[styles.bullet, chunkTextStyle]}>{bulletChar}</Text>
       <Text
         style={[
-          styles.text,
+          styles.bulletText,
           { fontFamily: FONTS.BarlowSemiCondensed },
           textStyle,
           chunkTextStyle,
@@ -177,7 +173,7 @@ function ChunkItem({
   ) : (
     <Text
       style={[
-        styles.text,
+        styles.standaloneText,
         { fontFamily: FONTS.BarlowSemiCondensed },
         textStyle,
         chunkTextStyle,
@@ -188,19 +184,11 @@ function ChunkItem({
   );
 
   return (
-    <View
-      style={[
-        styles.chunkContainer,
-        {
-          marginHorizontal: -parentPadding,
-          paddingHorizontal: parentPadding,
-        },
-      ]}
-    >
-      {/* Animated background overlay */}
+    <View style={styles.chunkContainer}>
+      {/* Animated background overlay - rounded, stays within bounds */}
       <Animated.View
         style={[
-          StyleSheet.absoluteFill,
+          styles.backgroundOverlay,
           { backgroundColor: bgColor },
           animatedStyle,
         ]}
@@ -217,22 +205,37 @@ const styles = StyleSheet.create({
   },
   chunkContainer: {
     position: 'relative',
-    paddingVertical: 10,
     marginBottom: 8,
+    // Ensure overflow is hidden so background can't escape
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  backgroundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 8,
   },
   bulletItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   bullet: {
     fontSize: 15,
     marginRight: 10,
     marginTop: 1,
   },
-  text: {
+  bulletText: {
     fontSize: 15,
     lineHeight: 22,
     color: '#374151',
     flex: 1,
+  },
+  standaloneText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#374151',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
 });
