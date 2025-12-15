@@ -365,6 +365,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
 
           // Audio finished when overall progress reaches 100%
           if (streamStatus.overallProgress >= 1) {
+            notifyTTSStateChange(false, null); // Notify globally that we're done
             setStatus('ready');
             setGenerationProgress(0);
             setHasPlayed(true); // Mark as played for UI differentiation
