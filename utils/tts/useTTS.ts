@@ -10,21 +10,25 @@ import { DEFAULT_VOICE_ID, VoiceId } from './voices';
 const TTS_MODEL_DOWNLOADED_KEY = '@tts_model_downloaded';
 const TTS_ENABLED_KEY = '@tts_enabled';
 
-// Global TTS coordination - ensures only one TTS plays at a time
-type TTSStopCallback = () => void;
-const ttsInstances = new Set<TTSStopCallback>();
+// Global TTS coordination - track which instance is playing so others can disable
+type TTSStateListener = (isPlaying: boolean, instanceId: string | null) => void;
+const ttsStateListeners = new Set<TTSStateListener>();
+let currentPlayingInstance: string | null = null;
 
-function registerTTSInstance(stopCallback: TTSStopCallback) {
-  ttsInstances.add(stopCallback);
-  return () => ttsInstances.delete(stopCallback);
+function notifyTTSStateChange(isPlaying: boolean, instanceId: string | null) {
+  currentPlayingInstance = isPlaying ? instanceId : null;
+  ttsStateListeners.forEach((listener) => listener(isPlaying, instanceId));
 }
 
-function stopAllOtherTTS(exceptCallback?: TTSStopCallback) {
-  ttsInstances.forEach((callback) => {
-    if (callback !== exceptCallback) {
-      callback();
-    }
-  });
+function subscribeTTSState(listener: TTSStateListener) {
+  ttsStateListeners.add(listener);
+  // Immediately notify of current state
+  listener(currentPlayingInstance !== null, currentPlayingInstance);
+  return () => ttsStateListeners.delete(listener);
+}
+
+function isAnotherTTSPlaying(instanceId: string): boolean {
+  return currentPlayingInstance !== null && currentPlayingInstance !== instanceId;
 }
 
 export type TTSStatus =
