@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import KokoroOnnx, { ChunkedStreamStatus } from './kokoroOnnx';
 import { downloadModel, isModelDownloaded, DEFAULT_MODEL_ID, MODELS, ModelId } from './models';
@@ -87,6 +88,16 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   const isInitialized = useRef(false);
   const isMounted = useRef(true);
 
+  // Track screen focus for stopping TTS on navigation
+  let isFocused = true;
+  try {
+    // useIsFocused may throw if not in a navigation context
+    isFocused = useIsFocused();
+  } catch {
+    // Not in a navigation context, assume focused
+    isFocused = true;
+  }
+
   // Safe state setters that check if component is still mounted
   const safeSetStatus = useCallback((newStatus: TTSStatus) => {
     if (isMounted.current) setStatus(newStatus);
@@ -165,10 +176,54 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
 
     initialize();
 
+    // Cleanup: stop TTS playback when component unmounts
     return () => {
       isMounted.current = false;
+      // Stop any ongoing TTS playback
+      KokoroOnnx.stopStreaming().catch((err) => {
+        console.log('[TTS] Cleanup stop error (safe to ignore):', err);
+      });
     };
   }, [modelId, autoLoad, safeSetStatus, safeSetError]);
+
+  // Stop TTS when screen loses focus (tab navigation)
+  useEffect(() => {
+    if (!isFocused && (status === 'speaking' || status === 'generating')) {
+      console.log('[TTS] Screen lost focus, stopping playback');
+      KokoroOnnx.stopStreaming().catch(() => {});
+      if (isMounted.current) {
+        setStatus('ready');
+        setChunks([]);
+        setChunkStates([]);
+        setCurrentChunk(0);
+        setGenerationProgress(0);
+      }
+    }
+  }, [isFocused, status]);
+
+  // Stop TTS when app goes to background
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        if (status === 'speaking' || status === 'generating') {
+          console.log('[TTS] App went to background, stopping playback');
+          KokoroOnnx.stopStreaming().catch(() => {});
+          if (isMounted.current) {
+            setStatus('ready');
+            setChunks([]);
+            setChunkStates([]);
+            setCurrentChunk(0);
+            setGenerationProgress(0);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+    };
+  }, [status]);
 
   // Download model
   const download = useCallback(async (): Promise<boolean> => {
