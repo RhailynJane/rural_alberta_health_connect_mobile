@@ -9,8 +9,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Image,
     LayoutAnimation,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Platform,
     ScrollView,
     StyleSheet,
@@ -40,6 +43,7 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
+import ScanningOverlay from "../../components/ScanningOverlay";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
@@ -293,7 +297,7 @@ function renderAssessmentCards(
             <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               {label}
             </Text>
-            <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+            <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
               {content[0]}
             </Text>
           </View>
@@ -336,7 +340,7 @@ function renderAssessmentCards(
       {items.slice(0, 4).map((it, idx) => (
         <View key={idx} style={styles.cardItem}>
           <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
             {it}
           </Text>
         </View>
@@ -524,6 +528,129 @@ function renderAssessmentCards(
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// IMAGE CAROUSEL COMPONENT - Horizontal slideshow for all images
+// ═══════════════════════════════════════════════════════════
+interface ImageCarouselProps {
+  photos: string[];
+  yoloResult: PipelineResult | null;
+  activeIndex: number;
+  onIndexChange: (index: number) => void;
+}
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CAROUSEL_PADDING = 40; // 20px padding on each side
+const IMAGE_WIDTH = SCREEN_WIDTH - CAROUSEL_PADDING;
+
+function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: ImageCarouselProps) {
+  // Get image source for each photo (annotated if available, original otherwise)
+  const getImageSource = (index: number) => {
+    const result = yoloResult?.results[index];
+    const hasAnnotated = result?.annotatedImageBase64 && result.annotatedImageBase64.length > 0;
+    return hasAnnotated
+      ? { uri: `data:image/jpeg;base64,${result.annotatedImageBase64}` }
+      : { uri: photos[index] };
+  };
+
+  // Handle scroll end to update active index
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const newIndex = Math.round(contentOffsetX / IMAGE_WIDTH);
+    if (newIndex !== activeIndex && newIndex >= 0 && newIndex < photos.length) {
+      onIndexChange(newIndex);
+    }
+  };
+
+  return (
+    <View style={carouselStyles.container}>
+      {/* Horizontal Image Scroll */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        contentContainerStyle={carouselStyles.scrollContent}
+        decelerationRate="fast"
+        snapToInterval={IMAGE_WIDTH}
+        snapToAlignment="start"
+      >
+        {photos.map((_, index) => (
+          <View key={index} style={[carouselStyles.imageContainer, { width: IMAGE_WIDTH }]}>
+            <View style={carouselStyles.imageWrapper}>
+              <Image
+                source={getImageSource(index)}
+                style={carouselStyles.image}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Page Indicators */}
+      {photos.length > 1 && (
+        <View style={carouselStyles.indicators}>
+          {photos.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                carouselStyles.indicator,
+                index === activeIndex && carouselStyles.indicatorActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Carousel-specific styles
+const carouselStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  scrollContent: {
+    paddingHorizontal: 0,
+  },
+  imageContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  imageWrapper: {
+    backgroundColor: "#F8F9FA",
+    padding: 8,
+    borderRadius: 10,
+  },
+  image: {
+    width: "100%",
+    height: 260,
+    borderRadius: 8,
+  },
+  indicators: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 12,
+    gap: 8,
+  },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E5E7EB",
+  },
+  indicatorActive: {
+    backgroundColor: "#2A7DE1",
+    width: 20,
+    borderRadius: 4,
+  },
+});
+
 export default function AssessmentResults() {
   const database = useWatermelonDatabase();
   const { isOnline, isChecking } = useNetworkStatus();
@@ -560,6 +687,12 @@ export default function AssessmentResults() {
   const [isYoloProcessing, setIsYoloProcessing] = useState(false);
   const [yoloError, setYoloError] = useState<string | null>(null);
   const [yoloProgress, setYoloProgress] = useState<string>("");
+
+  // Image Carousel State
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Scanning Overlay State - shows scan animation before revealing results
+  const [showScanningOverlay, setShowScanningOverlay] = useState(true);
 
   // On-device LLM for offline assessment (Android only)
   // Using useWoundLLMStatic - only subscribes to isAvailable/isReady
@@ -1180,6 +1313,12 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
 
   const handleReturnHome = () => router.replace("/(tabs)/dashboard");
 
+  // Handle scanning overlay completion
+  const handleScanningComplete = () => {
+    console.log("✅ [ScanningOverlay] Scan complete, revealing carousel");
+    setShowScanningOverlay(false);
+  };
+
   // Calm, clinical care level indicators (not alarming)
   const getCareLevel = (severity: number) => {
     if (severity >= 9) return {
@@ -1231,50 +1370,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
     return nameMap[className] || className;
   };
 
-  // Generate primary diagnosis summary from detections
-  const getDiagnosisSummary = (yoloResult: PipelineResult | null) => {
-    if (!yoloResult || yoloResult.totalDetections === 0) {
-      return { primary: 'No injuries detected', detail: 'Image analysis complete' };
-    }
-
-    const byClass = yoloResult.summary.byClass;
-    const entries = Object.entries(byClass);
-
-    // Get the most common/significant finding
-    const sorted = entries.sort((a, b) => (b[1] as number) - (a[1] as number));
-    const [primaryClass, primaryCount] = sorted[0];
-    const friendlyName = getPatientFriendlyName(primaryClass);
-
-    // Total affected areas
-    const totalAreas = yoloResult.totalDetections;
-
-    // Build summary
-    const primary = `${friendlyName} detected`;
-    const detail = totalAreas === 1
-      ? '1 affected area identified'
-      : `${totalAreas} affected areas identified`;
-
-    return { primary, detail, totalAreas, friendlyName };
-  };
-
-  // Select best image to display (highest detection count or confidence)
-  const getBestImageIndex = (yoloResult: PipelineResult | null): number => {
-    if (!yoloResult || yoloResult.results.length <= 1) return 0;
-
-    let bestIndex = 0;
-    let bestScore = 0;
-
-    yoloResult.results.forEach((result, idx) => {
-      const score = result.detections.length;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = idx;
-      }
-    });
-
-    return bestIndex;
-  };
-
   const ResultCard = ({
     title,
     children,
@@ -1314,187 +1409,150 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.contentSection}>
-              {/* ASSESSMENT SUMMARY - Clean, minimal */}
-              {(() => {
-                const diagnosis = getDiagnosisSummary(yoloResult);
-                const hasDetections = yoloResult && yoloResult.totalDetections > 0;
-
-                return (
-                  <View style={styles.summaryCard}>
-                    {/* Primary Diagnosis */}
-                    <Text style={[styles.diagnosisPrimary, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {hasDetections ? diagnosis.primary : 'Assessment complete'}
-                    </Text>
-
-                    {/* Supporting Detail */}
-                    <Text style={[styles.diagnosisDetail, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {hasDetections ? diagnosis.detail : 'No visible injuries detected'}
-                    </Text>
-                  </View>
-                );
-              })()}
-
-              {/* ═══════════════════════════════════════════════════════════
-                  EVIDENCE SECTION - Unified Image Card
-                  Smart display: shows best image, patient-friendly labels
-                  ═══════════════════════════════════════════════════════════ */}
-              {displayPhotos.length > 0 && (
-                <View style={styles.evidenceSection}>
-                  {/* Processing State */}
-                  {isYoloProcessing && (
-                    <View style={styles.yoloProcessingContainer}>
-                      <ActivityIndicator size="small" color="#2A7DE1" />
-                      <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        {yoloProgress || "Analyzing your images..."}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Error State */}
-                  {yoloError && (
-                    <View style={styles.yoloErrorContainer}>
-                      <Ionicons name="alert-circle" size={20} color="#DC3545" />
-                      <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Unable to analyze image
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Evidence Card - Single unified card */}
-                  {!isYoloProcessing && !yoloError && (() => {
-                    // Smart image selection: show best image only
-                    const bestIndex = getBestImageIndex(yoloResult);
-                    const bestResult = yoloResult?.results[bestIndex];
-                    const hasAnnotated = bestResult?.annotatedImageBase64 && bestResult.annotatedImageBase64.length > 0;
-                    const imageSource = hasAnnotated
-                      ? { uri: `data:image/jpeg;base64,${bestResult.annotatedImageBase64}` }
-                      : { uri: displayPhotos[bestIndex] };
-
-                    const hasDetections = yoloResult && yoloResult.totalDetections > 0;
-
-                    return (
-                      <View style={styles.evidenceCard}>
-                        {/* Section Label */}
-                        <Text style={[styles.evidenceLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {hasDetections ? 'Affected areas identified' : 'Image analysis'}
-                        </Text>
-
-                        {/* Image with annotations */}
-                        <View style={styles.evidenceImageWrapper}>
-                          <Image
-                            source={imageSource}
-                            style={styles.evidenceImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-
-                        {/* Explanation */}
-                        <Text style={[styles.evidenceExplanation, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {hasDetections
-                            ? 'Highlighted areas show detected injury locations'
-                            : 'No injuries were detected in the analyzed image'}
+          {/* Scanning Overlay - Shows scan animation on each image before revealing results */}
+          {showScanningOverlay && displayPhotos.length > 0 ? (
+            <ScanningOverlay
+              visible={true}
+              images={displayPhotos}
+              yoloResult={yoloResult}
+              isYoloComplete={!isYoloProcessing && yoloResult !== null}
+              onComplete={handleScanningComplete}
+            />
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.contentSection}>
+                {/* ═══════════════════════════════════════════════════════════
+                    EVIDENCE SECTION - Horizontal Image Carousel
+                    Shows all images in a slideshow with indicators
+                    ═══════════════════════════════════════════════════════════ */}
+                {displayPhotos.length > 0 && (
+                  <View style={styles.evidenceSection}>
+                    {/* Processing State */}
+                    {isYoloProcessing && (
+                      <View style={styles.yoloProcessingContainer}>
+                        <ActivityIndicator size="small" color="#2A7DE1" />
+                        <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {yoloProgress || "Analyzing your images..."}
                         </Text>
                       </View>
-                    );
-                  })()}
-                </View>
-              )}
+                    )}
 
-              {/* Layer 2 & 3: Assessment Content */}
-              {isLoading ? (
-                <View style={styles.loadingCard}>
-                  <ActivityIndicator size="large" color="#2A7DE1" />
-                  <Text
-                    style={[
-                      styles.loadingText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {isLLMGenerating
-                      ? "Generating assessment..."
-                      : "Analyzing your symptoms with AI assessment..."}
-                  </Text>
-                  {isLLMGenerating && (
-                    <View style={styles.offlineLLMIndicator}>
-                      <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
-                      <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Using on-device AI
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <>
-                  {usedOfflineLLM && (
-                    <View style={styles.offlineNotice}>
-                      <Ionicons name="cloud-offline-outline" size={14} color="#6B7280" />
-                      <Text style={[styles.offlineNoticeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Generated offline
-                      </Text>
-                    </View>
-                  )}
-                  {renderAssessmentCards(symptomContext, expandedSections, toggleSection, isPremium, handleUpgradePress)}
-                  {assessmentError && (
-                    <View style={styles.errorNote}>
-                      <Ionicons
-                        name="information-circle"
-                        size={16}
-                        color="#FF6B35"
+                    {/* Error State */}
+                    {yoloError && (
+                      <View style={styles.yoloErrorContainer}>
+                        <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                        <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Unable to analyze images
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Image Carousel - Horizontal slideshow of all images */}
+                    {!isYoloProcessing && !yoloError && (
+                      <ImageCarousel
+                        photos={displayPhotos}
+                        yoloResult={yoloResult}
+                        activeIndex={activeImageIndex}
+                        onIndexChange={setActiveImageIndex}
                       />
-                      <Text
-                        style={[
-                          styles.errorNoteText,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Note: Unable to complete full AI analysis. For medical
-                        guidance, contact Health Link Alberta at 811.
-                      </Text>
-                    </View>
-                  )}
-                </>
-              )}
+                    )}
+                  </View>
+                )}
 
-              {/* Single Primary CTA */}
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={styles.primaryCTA}
-                  onPress={() => router.push("/(tabs)/tracker")}
-                >
-                  <Text
-                    style={[
-                      styles.primaryCTAText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Track Your Health
-                  </Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" />
-                </TouchableOpacity>
+                {/* Layer 2 & 3: Assessment Content */}
+                {isLoading ? (
+                  <View style={styles.loadingCard}>
+                    <ActivityIndicator size="large" color="#2A7DE1" />
+                    <Text
+                      style={[
+                        styles.loadingText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {isLLMGenerating
+                        ? "Generating assessment..."
+                        : "Analyzing your symptoms with AI assessment..."}
+                    </Text>
+                    {isLLMGenerating && (
+                      <View style={styles.offlineLLMIndicator}>
+                        <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
+                        <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Using on-device AI
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <>
+                    {usedOfflineLLM && (
+                      <View style={styles.offlineNotice}>
+                        <Ionicons name="cloud-offline-outline" size={14} color="#6B7280" />
+                        <Text style={[styles.offlineNoticeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Generated offline
+                        </Text>
+                      </View>
+                    )}
+                    {renderAssessmentCards(symptomContext, expandedSections, toggleSection, isPremium, handleUpgradePress)}
+                    {assessmentError && (
+                      <View style={styles.errorNote}>
+                        <Ionicons
+                          name="information-circle"
+                          size={16}
+                          color="#FF6B35"
+                        />
+                        <Text
+                          style={[
+                            styles.errorNoteText,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          Note: Unable to complete full AI analysis. For medical
+                          guidance, contact Health Link Alberta at 811.
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
 
-                <TouchableOpacity
-                  style={styles.secondaryCTA}
-                  onPress={handleReturnHome}
-                >
-                  <Text
-                    style={[
-                      styles.secondaryCTAText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
+                {/* Single Primary CTA */}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.primaryCTA}
+                    onPress={() => router.push("/(tabs)/tracker")}
                   >
-                    Return to Dashboard
-                  </Text>
-                </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.primaryCTAText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Track Your Health
+                    </Text>
+                    <Ionicons name="arrow-forward" size={20} color="white" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.secondaryCTA}
+                    onPress={handleReturnHome}
+                  >
+                    <Text
+                      style={[
+                        styles.secondaryCTAText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Return to Dashboard
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          )}
         </View>
       </CurvedBackground>
       <BottomNavigation />
@@ -1776,25 +1834,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     fontWeight: "500",
-  },
-  // ASSESSMENT SUMMARY - Clean, minimal
-  summaryCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  diagnosisPrimary: {
-    fontSize: 21,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 6,
-  },
-  diagnosisDetail: {
-    fontSize: 15,
-    color: "#6B7280",
   },
   // ═══════════════════════════════════════════════════════════
   // EVIDENCE SECTION - Unified Image Card Styles
