@@ -66,7 +66,8 @@ export const MODELS = Object.freeze({
 export type ModelId = keyof typeof MODELS;
 
 // Default model to use
-export const DEFAULT_MODEL_ID: ModelId = 'model_q8f16.onnx';
+// Full precision offers highest quality (326MB)
+export const DEFAULT_MODEL_ID: ModelId = 'model.onnx';
 
 /**
  * Check if a model is downloaded
