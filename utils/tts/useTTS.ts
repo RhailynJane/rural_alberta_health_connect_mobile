@@ -104,6 +104,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
 
   const isInitialized = useRef(false);
   const isMounted = useRef(true);
+  const stopCallbackRef = useRef<TTSStopCallback | null>(null);
 
   // Track screen focus for stopping TTS on navigation
   let isFocused = true;
