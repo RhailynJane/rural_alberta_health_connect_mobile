@@ -22,6 +22,7 @@ export const getCurrentUser = query({
       firstName: user.firstName,
       lastName: user.lastName,
       phone: user.phone,
+      image: user.image,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
     };
   },
@@ -71,5 +72,20 @@ export const checkUserExistsByEmail = mutation({
       .first();
     
     return existingUser !== null;
+  },
+});
+
+/**
+ * Updates the user's profile image URL
+ */
+export const updateImage = mutation({
+  args: { image: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    await ctx.db.patch(userId, { image: args.image });
+    return { success: true };
   },
 });

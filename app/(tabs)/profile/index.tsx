@@ -53,6 +53,7 @@ export default function Profile() {
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
   const updatePhone = useMutation(api.users.updatePhone);
+  const updateUserImage = useMutation((api as any).users.updateImage);
     const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
     const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -80,7 +81,7 @@ export default function Profile() {
       );
       setCachedUser(currentUserOnline);
       // If backend provides photo URL in future, prefer it
-      const maybePhoto = (currentUserOnline as any)?.photoUrl || (currentUserOnline as any)?.avatarUrl;
+      const maybePhoto = (currentUserOnline as any)?.photoUrl || (currentUserOnline as any)?.avatarUrl || (currentUserOnline as any)?.image;
       if (maybePhoto) setAvatarUrl(String(maybePhoto));
     }
   }, [isOnline, currentUserOnline]);
@@ -153,6 +154,7 @@ export default function Profile() {
           const { storageId } = await put.json();
           const photoUrl = await storeUploadedPhoto({ storageId });
           setAvatarUrl(photoUrl);
+          try { await updateUserImage({ image: photoUrl } as any); } catch (err) { console.warn('Failed to persist avatar URL', err); }
         } catch (e) {
           // Fallback to local URI even if upload fails
           setAvatarUrl(uri);
@@ -1031,30 +1033,34 @@ export default function Profile() {
         <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container}>
           {/* Profile Header */}
-          <View style={styles.headerCard}>
-            <View style={styles.headerCenter}>
-              <View>
-                <View style={styles.avatar}>
-                  {avatarUrl ? (
-                    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-                  ) : (
-                    <Text style={styles.avatarText}>
-                      {(() => {
-                        const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
-                        return String(n).trim().charAt(0).toUpperCase();
-                      })()}
-                    </Text>
-                  )}
+          <View style={styles.headerSection}>
+            <View style={styles.headerCard}>
+              {/* Dock avatar to the card top */}
+              <View style={styles.avatarDock}>
+                <View style={styles.avatarHolder}>
+                  <View style={styles.avatar}>
+                    {avatarUrl ? (
+                      <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={styles.avatarText}>
+                        {(() => {
+                          const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
+                          return String(n).trim().charAt(0).toUpperCase();
+                        })()}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.avatarEditBtn}
+                    onPress={pickAndUploadAvatar}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name={uploadingAvatar ? 'hourglass-empty' : 'photo-camera'} size={18} color={COLORS.white} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.avatarEditBtn}
-                  onPress={pickAndUploadAvatar}
-                  activeOpacity={0.85}
-                >
-                  <Icon name={uploadingAvatar ? 'hourglass-empty' : 'photo-camera'} size={16} color={COLORS.white} />
-                </TouchableOpacity>
               </View>
-              <View style={styles.headerTextWrap}>
+              <View style={styles.headerCenter}>
+                <View style={styles.headerTextWrap}>
                 <Text style={styles.nameText} numberOfLines={1}>
                   {currentUser?.firstName ? `${currentUser.firstName} ${currentUser?.lastName || ''}`.trim() : 'Your Profile'}
                 </Text>
@@ -1070,7 +1076,7 @@ export default function Profile() {
                   })()}
                 </Text>
               </View>
-            </View>
+              </View>
 
             {/* Stats Grid (2x2) */}
             <View style={styles.statsGrid}>
@@ -1094,6 +1100,7 @@ export default function Profile() {
                 <Text style={styles.statNumber}>{isOnline ? 'Online' : 'Offline'}</Text>
                 <Text style={styles.statLabel}>Sync</Text>
               </View>
+            </View>
             </View>
           </View>
 
@@ -1182,10 +1189,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginHorizontal: 0,
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 50,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: '#E9ECEF',
+    overflow: 'visible',
+    position: 'relative',
+    paddingTop: 64,
+  },
+  headerSection: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  headerGradient: {
+    // gradient removed
   },
   headerRow: {
     flexDirection: 'row',
@@ -1201,38 +1218,59 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     backgroundColor: '#E8F1FF',
     borderWidth: 1,
     borderColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 0,
+  },
+  avatarDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  avatarHolder: {
+    width: 96,
+    height: 96,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 94,
+    height: 94,
+    borderRadius: 47,
   },
   avatarText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
     color: COLORS.primary,
-    fontSize: 22,
+    fontSize: 28,
   },
   avatarEditBtn: {
     position: 'absolute',
-    right: 4,
-    bottom: 4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    left: -8,
+    bottom: -6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
   nameText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
