@@ -688,7 +688,7 @@ export default function LogDetails() {
               </ScrollView>
             </View>
           </CurvedBackground>
-          <BottomNavigation />
+          <BottomNavigation floating={true} />
         </SafeAreaView>
       );
     }
@@ -716,7 +716,7 @@ export default function LogDetails() {
             </ScrollView>
           </View>
         </CurvedBackground>
-        <BottomNavigation />
+        <BottomNavigation floating={true} />
       </SafeAreaView>
     );
   }
@@ -910,7 +910,7 @@ export default function LogDetails() {
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
       {/* Delete Confirmation Modal - replaces Alert.alert */}
       <StatusModal

@@ -188,7 +188,7 @@ export default function SymptomSeverity() {
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </SafeAreaView>
   );
 }

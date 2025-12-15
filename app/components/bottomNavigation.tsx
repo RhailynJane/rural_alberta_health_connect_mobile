@@ -50,7 +50,11 @@ const tabs: Tab[] = [
   },
 ];
 
-const BottomNavigation: React.FC = () => {
+type BottomNavigationProps = {
+  floating?: boolean;
+};
+
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ floating = true }) => {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -65,10 +69,13 @@ const BottomNavigation: React.FC = () => {
 
   return (
     <View
-      style={[styles.container, {
-        height: containerHeight,
-        paddingBottom: insets.bottom,
-      }]}
+      style={[
+        floating ? styles.containerFloating : styles.containerInline,
+        {
+          height: containerHeight,
+          paddingBottom: insets.bottom,
+        },
+      ]}
     >
       <View style={styles.bar}>
         <View style={styles.sideGroupLeft}>
@@ -140,7 +147,7 @@ const BottomNavigation: React.FC = () => {
         </View>
       </View>
 
-      {centerTab && (
+      {floating && centerTab && (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityState={pathname === centerTab.route ? { selected: true } : {}}
@@ -166,11 +173,17 @@ const BottomNavigation: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  containerFloating: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  containerInline: {
+    position: 'relative',
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'flex-end',
   },

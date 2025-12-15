@@ -586,7 +586,7 @@ export default function Tracker() {
 
 
                   </CurvedBackground>
-                  <BottomNavigation />
+                  <BottomNavigation floating={true} />
                 </SafeAreaView>
               );
 }

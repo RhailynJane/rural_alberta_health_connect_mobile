@@ -1536,7 +1536,7 @@ export default function ProfileInformation() {
         onClose={() => setModalVisible(false)}
       />
 
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </SafeAreaView>
   );
 }
