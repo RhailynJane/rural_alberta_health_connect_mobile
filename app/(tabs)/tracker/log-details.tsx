@@ -1250,10 +1250,26 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 8,
   },
+  primaryCardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  primaryCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   primaryCardTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
+  },
+  cardTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   accordionCard: {
     backgroundColor: "#FFFFFF",
