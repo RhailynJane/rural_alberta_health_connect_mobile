@@ -6,7 +6,12 @@
 // const { status, speak, stop, download } = useTTS();
 // await speak("Hello world");
 
-export { default as KokoroOnnx, type StreamStatus } from './kokoroOnnx';
+export {
+  default as KokoroOnnx,
+  splitTextIntoChunks,
+  type StreamStatus,
+  type ChunkedStreamStatus
+} from './kokoroOnnx';
 export {
   MODELS,
   DEFAULT_MODEL_ID,
