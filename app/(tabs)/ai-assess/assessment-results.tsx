@@ -339,6 +339,7 @@ function renderAssessmentCards(
             chunkStates={ttsChunkStates}
             isActive={isTTSActive}
             containerStyle={styles.ttsHighlightContainer}
+            parentPadding={20}
           />
         ) : (
           // Normal text rendering when TTS is not active
