@@ -4,9 +4,11 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,6 +53,10 @@ export default function Profile() {
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
   const updatePhone = useMutation(api.users.updatePhone);
+    const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+    const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const currentUserOnline = useQuery(
     api.users.getCurrentUser,
     isAuthenticated && !isLoading ? {} : "skip"
@@ -73,6 +79,9 @@ export default function Profile() {
         console.error("Failed to cache user:", err)
       );
       setCachedUser(currentUserOnline);
+      // If backend provides photo URL in future, prefer it
+      const maybePhoto = (currentUserOnline as any)?.photoUrl || (currentUserOnline as any)?.avatarUrl;
+      if (maybePhoto) setAvatarUrl(String(maybePhoto));
     }
   }, [isOnline, currentUserOnline]);
 
@@ -100,8 +109,66 @@ export default function Profile() {
           if (cached) setCachedProfile(JSON.parse(cached));
         })
         .catch((err) => console.error("Failed to load cached profile:", err));
+
+          // Load cached avatar
+          AsyncStorage.getItem("@profile_avatar_url")
+            .then((url) => { if (url) setAvatarUrl(url); })
+            .catch(() => {});
     }
   }, [isOnline]);
+
+  // Save avatar URL cache when it changes
+  useEffect(() => {
+    if (avatarUrl) {
+      AsyncStorage.setItem("@profile_avatar_url", avatarUrl).catch(() => {});
+    }
+  }, [avatarUrl]);
+
+  const pickAndUploadAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        setModalTitle("Permissions Needed");
+        setModalMessage("Please allow photo library access to set your profile picture.");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1,1],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const uri = result.assets[0].uri;
+      setUploadingAvatar(true);
+      if (isOnline) {
+        try {
+          const uploadUrl = await generateUploadUrl();
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          const put = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': blob.type }, body: blob });
+          if (!put.ok) throw new Error('Upload failed');
+          const { storageId } = await put.json();
+          const photoUrl = await storeUploadedPhoto({ storageId });
+          setAvatarUrl(photoUrl);
+        } catch (e) {
+          // Fallback to local URI even if upload fails
+          setAvatarUrl(uri);
+        }
+      } else {
+        setAvatarUrl(uri);
+      }
+    } catch (e) {
+      setModalTitle('Error');
+      setModalMessage('Failed to choose photo. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Use online or cached data
   const currentUser = isOnline ? currentUserOnline : (cachedUser || currentUserOnline);
@@ -965,36 +1032,49 @@ export default function Profile() {
         <ScrollView style={styles.container}>
           {/* Profile Header */}
           <View style={styles.headerCard}>
-            <View style={styles.headerRow}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {(() => {
-                    const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
-                    return String(n).trim().charAt(0).toUpperCase();
-                  })()}
-                </Text>
+            <View style={styles.headerCenter}>
+              <View>
+                <View style={styles.avatar}>
+                  {avatarUrl ? (
+                    <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {(() => {
+                        const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
+                        return String(n).trim().charAt(0).toUpperCase();
+                      })()}
+                    </Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.avatarEditBtn}
+                  onPress={pickAndUploadAvatar}
+                  activeOpacity={0.85}
+                >
+                  <Icon name={uploadingAvatar ? 'hourglass-empty' : 'photo-camera'} size={16} color={COLORS.white} />
+                </TouchableOpacity>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.headerTextWrap}>
                 <Text style={styles.nameText} numberOfLines={1}>
                   {currentUser?.firstName ? `${currentUser.firstName} ${currentUser?.lastName || ''}`.trim() : 'Your Profile'}
                 </Text>
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {currentUser?.phone ? `${currentUser.phone}` : 'Welcome back'}
+                <Text style={[styles.metaText, styles.centerText]} numberOfLines={1}>
+                  {(() => {
+                    const year = (() => {
+                      const d = (userProfile as any)?.createdAt || (currentUser as any)?.createdAt || (currentUser as any)?._creationTime;
+                      if (!d) return null;
+                      const dt = new Date(d);
+                      return isNaN(dt.getTime()) ? null : dt.getFullYear();
+                    })();
+                    return year ? `Member since ${year}` : 'Welcome back';
+                  })()}
                 </Text>
               </View>
-              <TouchableOpacity
-                style={styles.editProfileBtn}
-                onPress={() => router.push("/profile/profile-information" as any)}
-                activeOpacity={0.8}
-              >
-                <Icon name="edit" size={18} color={COLORS.white} />
-                <Text style={styles.editProfileBtnText}>Edit</Text>
-              </TouchableOpacity>
             </View>
 
-            {/* Stats Row */}
-            <View style={styles.statsRow}>
-              <View style={[styles.statCard, styles.statCardFirst]}>
+            {/* Stats Grid (2x2) */}
+            <View style={styles.statsGrid}>
+              <View style={[styles.statBox, styles.statBoxFirst]}>
                 <Text style={styles.statNumber}>{(() => {
                   const fields: (keyof typeof userData)[] = ['age','address1','city','province','postalCode','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'];
                   const done = fields.filter(k => String((userData as any)[k] || '').trim().length > 0).length;
@@ -1002,61 +1082,46 @@ export default function Profile() {
                 })()}%</Text>
                 <Text style={styles.statLabel}>Complete</Text>
               </View>
-              <View style={styles.statCard}>
+              <View style={styles.statBox}>
                 <Text style={styles.statNumber}>{userData.reminderEnabled ? 'On' : 'Off'}</Text>
                 <Text style={styles.statLabel}>Reminders</Text>
               </View>
-              <View style={styles.statCard}>
+              <View style={[styles.statBox, styles.statBoxFirst]}>
                 <Text style={styles.statNumber}>{userData.locationServices ? 'On' : 'Off'}</Text>
                 <Text style={styles.statLabel}>Location</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>{isOnline ? 'Online' : 'Offline'}</Text>
+                <Text style={styles.statLabel}>Sync</Text>
               </View>
             </View>
           </View>
 
-          {/* Quick Actions Grid */}
-          <View style={styles.grid}>
-            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/profile-information" as any)} activeOpacity={0.85}>
-              <View style={styles.tileIconWrap}><Icon name="person" size={22} color={COLORS.primary} /></View>
-              <Text style={styles.tileText}>Profile Info</Text>
+          {/* List Tiles */}
+          <View style={styles.listCard}>
+            <TouchableOpacity style={styles.listItem} onPress={() => router.push("/profile/profile-information" as any)} activeOpacity={0.85}>
+              <View style={styles.listIconWrap}><Icon name="person" size={20} color={COLORS.primary} /></View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>Profile Information</Text>
+                <Text style={styles.listSubtitle}>Personal details & medical history</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/app-settings" as any)} activeOpacity={0.85}>
-              <View style={styles.tileIconWrap}><Icon name="settings" size={22} color={COLORS.primary} /></View>
-              <Text style={styles.tileText}>App Settings</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/help-support" as any)} activeOpacity={0.85}>
-              <View style={styles.tileIconWrap}><Icon name="help-outline" size={22} color={COLORS.primary} /></View>
-              <Text style={styles.tileText}>Help & Support</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.tile, styles.tileDanger]} onPress={handleSignOut} activeOpacity={0.85}>
-              <View style={[styles.tileIconWrap, styles.tileDangerIcon]}><Icon name="exit-to-app" size={22} color={COLORS.white} /></View>
-              <Text style={[styles.tileText, styles.tileDangerText]}>Sign Out</Text>
+            <TouchableOpacity style={styles.listItem} onPress={() => router.push("/profile/app-settings" as any)} activeOpacity={0.85}>
+              <View style={styles.listIconWrap}><Icon name="notifications" size={20} color={COLORS.primary} /></View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>Notifications</Text>
+                <Text style={styles.listSubtitle}>Manage alerts & reminders</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
             </TouchableOpacity>
           </View>
 
-          {/* Suggestions */}
-          <View style={styles.suggestionCard}>
-            <Text style={styles.suggestionTitle}>Suggested</Text>
-            <TouchableOpacity style={styles.suggestionRow} onPress={() => router.push("/profile/app-settings" as any)}>
-              <View style={styles.suggestionLeft}>
-                <Icon name="notifications" size={20} color={COLORS.primary} />
-                <Text style={styles.suggestionText}>Notifications</Text>
-              </View>
-              <View style={styles.suggestionRight}>
-                <Text style={styles.suggestionBadge}>{userData.reminderEnabled ? 'On' : 'Off'}</Text>
-                <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.suggestionRow} onPress={() => router.push("/profile/app-settings" as any)}>
-              <View style={styles.suggestionLeft}>
-                <Icon name="shield" size={20} color={COLORS.primary} />
-                <Text style={styles.suggestionText}>Security & Privacy</Text>
-              </View>
-              <View style={styles.suggestionRight}>
-                <Text style={styles.suggestionBadge}>Encrypted</Text>
-                <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
-              </View>
-            </TouchableOpacity>
-          </View>
+          {/* Sign Out */}
+          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} activeOpacity={0.9}>
+            <Icon name="exit-to-app" size={18} color={COLORS.white} style={styles.signOutIcon} />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
 
           {/* Privacy footnote */}
           <View style={styles.privacyFootnote}>
@@ -1127,6 +1192,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  headerCenter: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerTextWrap: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
   avatar: {
     width: 56,
     height: 56,
@@ -1138,10 +1211,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  avatarImage: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+  },
   avatarText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
     color: COLORS.primary,
     fontSize: 22,
+  },
+  avatarEditBtn: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
   },
   nameText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
@@ -1172,6 +1263,25 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+  },
+  statBox: {
+    width: '48%',
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  statBoxFirst: {
+    marginLeft: 0,
   },
   statCard: {
     flex: 1,
@@ -1241,6 +1351,45 @@ const styles = StyleSheet.create({
   },
   tileDangerText: {
     color: '#DC3545',
+  },
+  listCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  listIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginRight: 12,
+  },
+  listTextWrap: {
+    flex: 1,
+  },
+  listTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  listSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
   },
   suggestionCard: {
     backgroundColor: COLORS.white,
@@ -1416,7 +1565,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  suggestionText: {
+  suggestionRowText: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
     color: COLORS.darkText,
