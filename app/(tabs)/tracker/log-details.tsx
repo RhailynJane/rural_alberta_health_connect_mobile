@@ -108,38 +108,51 @@ function renderAssessmentCards(
     items: string[];
     icon: React.ReactNode;
     sectionKey: string;
-  }) => (
-    <View style={styles.primaryAssessmentCard}>
-      <View style={styles.primaryCardHeader}>
-        {icon}
-        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+  }) => {
+    // Prepare text for TTS
+    const ttsText = items.map((item, idx) => {
+      if (sectionKey === "NEXT STEPS") {
+        return `Step ${idx + 1}: ${prepareTextForTTS(item)}`;
+      }
+      return prepareTextForTTS(item);
+    }).join('. ');
+
+    return (
+      <View style={styles.primaryAssessmentCard}>
+        <View style={styles.primaryCardHeaderWithTTS}>
+          <View style={styles.primaryCardHeaderLeft}>
+            {icon}
+            <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          </View>
+          {ttsText && <TTSButton text={ttsText} compact style={styles.cardTTSButton} />}
+        </View>
+        {sectionKey === "NEXT STEPS"
+          ? items.slice(0, 4).map((it, idx) => (
+              <View key={idx} style={styles.stepRow}>
+                <View style={styles.stepNumberContainer}>
+                  <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+                </View>
+                <View style={styles.stepContent}>
+                  <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                    {it.split(':')[0] || `Step ${idx + 1}`}
+                  </Text>
+                  <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                    {it.replace(/^.*?:\s*/, '') || it}
+                  </Text>
+                </View>
+              </View>
+            ))
+          : items.slice(0, 4).map((it, idx) => (
+              <View key={idx} style={styles.cardItem}>
+                <Text style={styles.bulletPoint}>•</Text>
+                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                  {it}
+                </Text>
+              </View>
+            ))}
       </View>
-      {sectionKey === "NEXT STEPS"
-        ? items.slice(0, 4).map((it, idx) => (
-            <View key={idx} style={styles.stepRow}>
-              <View style={styles.stepNumberContainer}>
-                <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
-                  {it.split(':')[0] || `Step ${idx + 1}`}
-                </Text>
-                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
-                  {it.replace(/^.*?:\s*/, '') || it}
-                </Text>
-              </View>
-            </View>
-          ))
-        : items.slice(0, 4).map((it, idx) => (
-            <View key={idx} style={styles.cardItem}>
-              <Text style={styles.bulletPoint}>•</Text>
-              <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-                {it}
-              </Text>
-            </View>
-          ))}
-    </View>
-  );
+    );
+  };
 
   const AccordionCard = ({ title, items, icon, sectionKey }: {
     title: string;
