@@ -205,7 +205,9 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     }
 
     try {
-      setStatus('speaking');
+      // Start in generating state
+      setStatus('generating');
+      setGenerationProgress(0);
 
       // Use chunked streaming which handles long text automatically
       await KokoroOnnx.streamChunkedAudio(
@@ -213,16 +215,26 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
         voiceId,
         speed,
         (streamStatus: ChunkedStreamStatus) => {
-          // Log progress for debugging
-          if (streamStatus.totalChunks > 1) {
-            console.log(`[TTS] Chunk ${streamStatus.currentChunk}/${streamStatus.totalChunks} - ${Math.round(streamStatus.overallProgress * 100)}%`);
+          if (!isMounted.current) return;
+
+          // Update state based on phase
+          if (streamStatus.phase === 'generating') {
+            setStatus('generating');
+            setGenerationProgress(streamStatus.generationProgress);
+            console.log(`[TTS] Generating ${streamStatus.currentChunk}/${streamStatus.totalChunks} - ${Math.round(streamStatus.generationProgress * 100)}%`);
+          } else if (streamStatus.phase === 'playing') {
+            setStatus('speaking');
+            setGenerationProgress(1);
+            // Log playback progress
+            if (streamStatus.totalChunks > 1) {
+              console.log(`[TTS] Playing ${streamStatus.currentChunk}/${streamStatus.totalChunks} - ${Math.round(streamStatus.overallProgress * 100)}%`);
+            }
           }
 
           // Audio finished when overall progress reaches 100%
           if (streamStatus.overallProgress >= 1) {
-            if (isMounted.current) {
-              setStatus('ready');
-            }
+            setStatus('ready');
+            setGenerationProgress(0);
           }
         }
       );
@@ -230,11 +242,13 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       // Ensure status is set to ready after completion
       if (isMounted.current) {
         setStatus('ready');
+        setGenerationProgress(0);
       }
     } catch (err) {
       console.error('[TTS] Speak error:', err);
       setError(err instanceof Error ? err.message : 'Speech failed');
       setStatus('ready');
+      setGenerationProgress(0);
     }
   }, [status, voiceId, speed]);
 
