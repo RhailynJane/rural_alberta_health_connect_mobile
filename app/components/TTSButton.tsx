@@ -126,6 +126,23 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     );
   }
 
+  // Generating state - show progress and allow cancel
+  if (status === 'generating') {
+    const progressPercent = Math.round(generationProgress * 100);
+    return (
+      <TouchableOpacity
+        style={[styles.button, styles.generatingButton, style]}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        <ActivityIndicator size="small" color="#2A7DE1" />
+        <Text style={[styles.buttonText, styles.generatingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          Generating... {progressPercent}%
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   // Ready or Speaking state
   const isSpeaking = status === 'speaking';
 
