@@ -189,7 +189,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     }
   }, [status, modelId]);
 
-  // Speak text
+  // Speak text - uses chunked streaming for long text
   const speak = useCallback(async (text: string): Promise<void> => {
     if (status !== 'ready') {
       console.warn('[TTS] Cannot speak: status is', status);
@@ -204,19 +204,30 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     try {
       setStatus('speaking');
 
-      await KokoroOnnx.streamAudio(
+      // Use chunked streaming which handles long text automatically
+      await KokoroOnnx.streamChunkedAudio(
         text,
         voiceId,
         speed,
-        (streamStatus: StreamStatus) => {
-          // Audio finished
-          if (streamStatus.progress >= 1) {
+        (streamStatus: ChunkedStreamStatus) => {
+          // Log progress for debugging
+          if (streamStatus.totalChunks > 1) {
+            console.log(`[TTS] Chunk ${streamStatus.currentChunk}/${streamStatus.totalChunks} - ${Math.round(streamStatus.overallProgress * 100)}%`);
+          }
+
+          // Audio finished when overall progress reaches 100%
+          if (streamStatus.overallProgress >= 1) {
             if (isMounted.current) {
               setStatus('ready');
             }
           }
         }
       );
+
+      // Ensure status is set to ready after completion
+      if (isMounted.current) {
+        setStatus('ready');
+      }
     } catch (err) {
       console.error('[TTS] Speak error:', err);
       setError(err instanceof Error ? err.message : 'Speech failed');
