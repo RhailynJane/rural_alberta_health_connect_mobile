@@ -64,6 +64,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
 
   const [status, setStatus] = useState<TTSStatus>('checking');
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isAvailable, setIsAvailable] = useState(false);
 
