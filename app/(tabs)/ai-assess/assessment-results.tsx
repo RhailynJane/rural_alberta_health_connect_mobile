@@ -272,15 +272,15 @@ function renderAssessmentCards(
       }
     };
 
-    // Determine button text and icon based on status - minimal modern theme
+    // Determine button text and icon based on status - light modern theme
     const getButtonContent = () => {
       switch (ttsStatus) {
         case 'generating':
-          return { text: 'Stop', icon: 'pause' as const, color: '#64748B' };
+          return { text: 'Stop', icon: 'pause' as const, color: '#94A3B8' };
         case 'speaking':
-          return { text: 'Stop', icon: 'pause' as const, color: '#64748B' };
+          return { text: 'Stop', icon: 'pause' as const, color: '#94A3B8' };
         case 'ready':
-          return { text: 'Listen', icon: 'volume-medium-outline' as const, color: '#06B6D4' };
+          return { text: 'Listen', icon: 'volume-medium-outline' as const, color: '#22D3EE' };
         default:
           return null;
       }
@@ -2111,11 +2111,13 @@ const styles = StyleSheet.create({
   inlineTtsButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: 14,
     backgroundColor: "transparent",
-    gap: 4,
+    gap: 5,
+    minHeight: 28,
   },
   inlineTtsButtonActive: {
     backgroundColor: "rgba(241, 245, 249, 0.8)",
@@ -2123,10 +2125,13 @@ const styles = StyleSheet.create({
   inlineTtsButtonText: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#06B6D4",
+    color: "#22D3EE",
+    lineHeight: 16,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   inlineTtsButtonTextActive: {
-    color: "#64748B",
+    color: "#94A3B8",
   },
   ttsHighlightContainer: {
     marginTop: 8,

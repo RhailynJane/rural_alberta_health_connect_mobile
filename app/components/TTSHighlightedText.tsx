@@ -147,28 +147,28 @@ export default function TTSHighlightedText({
     }
   };
 
-  // Light, modern text colors - no harsh saturated tones
+  // Very light, modern text colors - soft pastel tones
   const getTextStyle = (state: ChunkState): TextStyle => {
     switch (state) {
       case 'generating':
         return {
-          color: '#06B6D4', // Light cyan
+          color: '#67E8F9', // Very light cyan
           fontWeight: '500',
         };
       case 'playing':
         return {
-          color: '#0EA5E9', // Light sky blue
+          color: '#7DD3FC', // Very light sky blue
           fontWeight: '500',
         };
       case 'completed':
         return {
-          color: '#64748B', // Soft slate
+          color: '#94A3B8', // Light slate
           fontWeight: '400',
         };
       case 'pending':
       default:
         return {
-          color: '#CBD5E1', // Very light gray
+          color: '#E2E8F0', // Very light gray - almost white
           fontWeight: '400',
         };
     }
