@@ -171,6 +171,7 @@ const COMMON_WORD_PHONEMES: Record<string, string> = {
   'timeframe': 'tˈaɪmfɹeɪm',
   'timeframes': 'tˈaɪmfɹeɪmz',
   'alberta': 'ælˈbɜɹtə',
+  'detailed': 'dˈiːteɪld',
   // Hyphenated compound words (stored without hyphens as they get normalized)
   'otc': 'ˌoʊvəɹðəkˈaʊntəɹ',
   'overthe': 'ˌoʊvəɹðə',
