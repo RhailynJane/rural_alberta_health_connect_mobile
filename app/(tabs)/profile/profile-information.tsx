@@ -19,6 +19,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
+import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
@@ -68,6 +69,8 @@ export default function ProfileInformation() {
 
   // State for user data
   const [userData, setUserData] = useState({
+    email: "",
+    fullName: "",
     phone: "",
     age: "",
     address1: "",
@@ -112,8 +115,19 @@ export default function ProfileInformation() {
   const [isFetchingAddress, setIsFetchingAddress] = useState(false);
   const latestAddressQueryTsRef = useRef<number>(0);
 
-  // Expandable sections
+  // Expandable sections (now per-field instead of per-section)
   const [expandedSections, setExpandedSections] = useState({
+    fullName: false,
+    phone: false,
+    age: false,
+    address: false,
+    location: false,
+    emergencyContactName: false,
+    emergencyContactPhone: false,
+    allergies: false,
+    currentMedications: false,
+    medicalConditions: false,
+    // Keep old section keys for backwards compatibility with auto-save logic
     personalInfo: false,
     emergencyContacts: false,
     medicalInfo: false,
@@ -149,6 +163,7 @@ export default function ProfileInformation() {
                 const phone = await getPhoneSecurely(uid);
                 setUserData((prev) => ({
                   ...prev,
+                  fullName: cached.fullName ?? prev.fullName ?? "",
                   phone: (phone || cached.phone) ?? prev.phone ?? "",
                   age: cached.age ?? prev.age ?? "",
                   address1: cached.address1 ?? prev.address1 ?? "",
@@ -176,8 +191,12 @@ export default function ProfileInformation() {
           }
 
           // No pending offline changes; merge server profile into UI
+          const fullNameFromServer = (currentUser?.firstName || currentUser?.lastName 
+            ? [currentUser?.firstName || "", currentUser?.lastName || ""].filter(val => val.trim()).join(" ") 
+            : "");
           setUserData((prev) => ({
             ...prev,
+            fullName: fullNameFromServer || prev.fullName || "",
             age: userProfile.age ?? prev.age ?? "",
             address1: userProfile.address1 ?? prev.address1 ?? "",
             address2: userProfile.address2 ?? prev.address2 ?? "",
@@ -222,6 +241,8 @@ export default function ProfileInformation() {
     userProfile, 
     currentUser?._id, 
     currentUser?.phone, 
+    currentUser?.firstName,
+    currentUser?.lastName,
     isOnline, 
     database, 
     expandedSections.personalInfo, 
@@ -247,6 +268,7 @@ export default function ProfileInformation() {
         const cached = JSON.parse(raw) || {};
         setUserData((prev) => ({
           ...prev,
+          fullName: cached.fullName ?? prev.fullName ?? "",
           phone: cached.phone ?? prev.phone ?? "",
           age: cached.age ?? prev.age ?? "",
           address1: cached.address1 ?? prev.address1 ?? "",
@@ -278,34 +300,67 @@ export default function ProfileInformation() {
     //   }, [currentUser?._id, database, isOnline])
     // );
 
-  // Prefill phone from current user
+  // Prefill phone and fullName from current user
   React.useEffect(() => {
     if (currentUser?.phone !== undefined) {
       setUserData((prev) => ({ ...prev, phone: currentUser?.phone || "" }));
     }
   }, [currentUser?.phone]);
 
+  React.useEffect(() => {
+    if (currentUser?.email !== undefined) {
+      setUserData((prev) => ({ ...prev, email: currentUser?.email || "" }));
+    }
+  }, [currentUser?.email]);
+
+  React.useEffect(() => {
+    if (currentUser?.firstName || currentUser?.lastName) {
+      const fullName = [currentUser?.firstName || "", currentUser?.lastName || ""].filter(val => val.trim()).join(" ");
+      console.log("📝 Setting fullName from currentUser:", { firstName: currentUser?.firstName, lastName: currentUser?.lastName, fullName });
+      setUserData((prev) => ({ ...prev, fullName }));
+    }
+  }, [currentUser?.firstName, currentUser?.lastName]);
+
   const toggleSection = async (section: keyof typeof expandedSections) => {
-    if (expandedSections[section]) {
-      // Closing section - save data
-      let ok = false;
-      if (section === "personalInfo") {
+    const isClosing = expandedSections[section];
+    
+    if (isClosing) {
+      // Closing individual field - auto-save based on which field it is
+      const personalFields = ['fullName', 'phone', 'age', 'address', 'location'];
+      const emergencyFields = ['emergencyContactName', 'emergencyContactPhone'];
+      const medicalFields = ['allergies', 'currentMedications', 'medicalConditions'];
+      
+      let ok = true;
+      if (personalFields.includes(section)) {
+        ok = await handleUpdatePersonalInfo({ silent: false, showModal: true });
+      } else if (emergencyFields.includes(section)) {
+        ok = await handleUpdateEmergencyContact();
+      } else if (medicalFields.includes(section)) {
+        ok = await handleUpdateMedicalInfo();
+      } else if (section === "personalInfo") {
         ok = await handleUpdatePersonalInfo();
       } else if (section === "emergencyContacts") {
         ok = await handleUpdateEmergencyContact();
       } else if (section === "medicalInfo") {
         ok = await handleUpdateMedicalInfo();
       }
-      if (!ok) return; // Keep open if validation failed
+      
+      if (!ok) return; // Keep open if save failed
     }
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+    
+    // Close all other expanded fields when opening a new one
+    setExpandedSections((prev) => {
+      const updated = Object.keys(prev).reduce((acc, key) => ({
+        ...acc,
+        [key]: key === section ? !prev[section as keyof typeof prev] : false
+      }), {} as typeof prev);
+      return updated;
+    });
   };
 
-  const handleUpdatePersonalInfo = async (opts?: { silent?: boolean }): Promise<boolean> => {
+  const handleUpdatePersonalInfo = async (opts?: { silent?: boolean; showModal?: boolean }): Promise<boolean> => {
     const silent = !!opts?.silent;
+    const showModal = !!opts?.showModal;
     try {
       // For silent saves, don't block on full validation. We'll merge with cached values to ensure required fields are present.
       const mustValidate = !silent;
@@ -486,9 +541,9 @@ export default function ProfileInformation() {
         }
       } catch {}
       
-      if (!silent) {
+      if (showModal) {
         setModalType('success');
-        setModalTitle('Success');
+        setModalTitle('Saved');
         setModalMessage('Personal information updated successfully');
         setModalVisible(true);
       }
@@ -496,7 +551,7 @@ export default function ProfileInformation() {
       return true;
     } catch (error) {
       console.error(error);
-      if (!silent) {
+      if (showModal || !silent) {
         setModalType('error');
         setModalTitle('Error');
         setModalMessage('Failed to update personal information. Please try again.');
@@ -887,6 +942,7 @@ export default function ProfileInformation() {
 
   const validatePersonalInfo = (): boolean => {
     const fieldsToCheck: (keyof typeof userData)[] = [
+      "fullName",
       "phone",
       "age",
       "address1",
@@ -1032,303 +1088,440 @@ export default function ProfileInformation() {
           contentInsetAdjustmentBehavior="always"
           contentContainerStyle={{ paddingBottom: 200 }}
         >
-          {/* Personal Information */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("personalInfo")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cardTitle}>Personal Information</Text>
-              <View style={styles.editButton}>
-                <Icon 
-                  name={expandedSections.personalInfo ? "chevron-up" : "pencil"} 
-                  size={16} 
-                  color={COLORS.primary} 
-                />
-                <Text style={styles.editButtonText}>
-                  {expandedSections.personalInfo ? "Done" : "Edit"}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {expandedSections.personalInfo ? (
-              <>
-                <Text style={styles.sectionTitle}>Phone Number</Text>
+          {/* Section Title */}
+          <Text style={styles.sectionHeader}>Personal Information</Text>
+          
+          {/* Full Name Field */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("fullName")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="person" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Full Name</Text>
+              {expandedSections.fullName ? (
                 <TextInput
-                  style={[styles.input, errors.phone ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.fullName ? styles.inputError : null]}
+                  value={userData.fullName}
+                  onChangeText={(text) => handleInputChange("fullName", text)}
+                  placeholder="Enter your full name"
+                  placeholderTextColor={COLORS.lightGray}
+                  autoFocus
+                />
+              ) : (
+                <Text style={styles.fieldValue}>{userData.fullName || "Not set"}</Text>
+              )}
+              {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.fullName ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.fullName ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
+          
+          {/* Email Field (Read-only) */}
+          <View style={styles.fieldCard}>
+            <View style={styles.fieldIconWrap}>
+              <Icon name="email" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Email</Text>
+              <Text style={styles.fieldValue}>{userData.email || "Not set"}</Text>
+            </View>
+          </View>
+          
+          {/* Phone Number Field */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("phone")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="phone" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Phone Number</Text>
+              {expandedSections.phone ? (
+                <TextInput
+                  style={[styles.fieldInput, errors.phone ? styles.inputError : null]}
                   value={userData.phone}
                   onChangeText={(text) => handleInputChange("phone", text)}
                   placeholder="(403) 555-0123"
                   placeholderTextColor={COLORS.lightGray}
                   keyboardType="phone-pad"
                   autoCapitalize="none"
+                  autoFocus
                 />
-                {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+              ) : (
+                <Text style={styles.fieldValue}>{userData.phone || "Not set"}</Text>
+              )}
+              {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.phone ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.phone ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-                <Text style={styles.sectionTitle}>Age</Text>
+          {/* Age Field */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("age")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="cake" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Age</Text>
+              {expandedSections.age ? (
                 <TextInput
-                  style={[styles.input, errors.age ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.age ? styles.inputError : null]}
                   value={userData.age}
                   onChangeText={(text) => handleInputChange("age", text)}
                   placeholder="e.g., 25"
                   placeholderTextColor={COLORS.lightGray}
                   keyboardType="numeric"
+                  autoFocus
                 />
-                {errors.age ? <Text style={styles.errorText}>{errors.age}</Text> : null}
+              ) : (
+                <Text style={styles.fieldValue}>{userData.age || "Not set"}</Text>
+              )}
+              {errors.age ? <Text style={styles.errorText}>{errors.age}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.age ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.age ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-                <Text style={styles.sectionTitle}>Address Line 1</Text>
-                <TextInput
-                  style={[styles.input, errors.address1 ? styles.inputError : null]}
-                  value={userData.address1}
-                  onChangeText={(text) => handleInputChange("address1", text)}
-                  placeholder="Street address, P.O. box"
-                  placeholderTextColor={COLORS.lightGray}
-                />
-                {errors.address1 ? <Text style={styles.errorText}>{errors.address1}</Text> : null}
-                {!!addressSuggestions.length && (
-                  <View style={styles.suggestionsBox}>
-                    {addressSuggestions.map((s) => (
-                      <TouchableOpacity
-                        key={s.id}
-                        style={styles.suggestionItem}
-                        onPress={() => handleSelectAddressSuggestion(s)}
-                      >
-                        <Text style={styles.suggestionText}>{s.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                    {isFetchingAddress ? (
-                      <View style={styles.suggestionLoading}>
-                        <Text style={styles.suggestionLoadingText}>Searching…</Text>
-                      </View>
-                    ) : null}
-                  </View>
+          {/* Address Card (Combined) */}
+          <View style={styles.fieldCard}>
+            <View style={styles.fieldIconWrap}>
+              <Icon name="home" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <TouchableOpacity 
+                onPress={() => toggleSection("address")}
+                activeOpacity={0.7}
+                style={{ flex: 1 }}
+              >
+                <Text style={styles.fieldLabel}>Address</Text>
+                {expandedSections.address ? null : (
+                  <Text style={styles.fieldValue} numberOfLines={2}>
+                    {userData.address1 || "Not set"}
+                    {userData.city || userData.province || userData.postalCode 
+                      ? `\n${[userData.city, userData.province, userData.postalCode].filter(Boolean).join(", ")}`
+                      : ""}
+                  </Text>
                 )}
+              </TouchableOpacity>
+              
+              {expandedSections.address && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.inputLabel}>Address Line 1</Text>
+                  <TextInput
+                    style={[styles.fieldInput, errors.address1 ? styles.inputError : null]}
+                    value={userData.address1}
+                    onChangeText={(text) => handleInputChange("address1", text)}
+                    placeholder="Street address"
+                    placeholderTextColor={COLORS.lightGray}
+                  />
+                  {errors.address1 ? <Text style={styles.errorText}>{errors.address1}</Text> : null}
+                  {!!addressSuggestions.length && (
+                    <View style={styles.suggestionsBox}>
+                      {addressSuggestions.map((s) => (
+                        <TouchableOpacity
+                          key={s.id}
+                          style={styles.suggestionItem}
+                          onPress={() => handleSelectAddressSuggestion(s)}
+                        >
+                          <Text style={styles.suggestionText}>{s.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                      {isFetchingAddress ? (
+                        <View style={styles.suggestionLoading}>
+                          <Text style={styles.suggestionLoadingText}>Searching…</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
 
-                <Text style={styles.sectionTitle}>Address Line 2</Text>
-                <TextInput
-                  style={styles.input}
-                  value={userData.address2}
-                  onChangeText={(text) => handleInputChange("address2", text)}
-                  placeholder="Apartment, suite, unit, building (optional)"
-                  placeholderTextColor={COLORS.lightGray}
-                />
+                  <Text style={styles.inputLabel}>Address Line 2 (Optional)</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={userData.address2}
+                    onChangeText={(text) => handleInputChange("address2", text)}
+                    placeholder="Apartment, suite, unit"
+                    placeholderTextColor={COLORS.lightGray}
+                  />
 
-                <Text style={styles.sectionTitle}>City</Text>
-                <TextInput
-                  style={[styles.input, errors.city ? styles.inputError : null]}
-                  value={userData.city}
-                  onChangeText={(text) => handleInputChange("city", text)}
-                  placeholder="e.g., Calgary"
-                  placeholderTextColor={COLORS.lightGray}
-                />
-                {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
+                  <Text style={styles.inputLabel}>City</Text>
+                  <TextInput
+                    style={[styles.fieldInput, errors.city ? styles.inputError : null]}
+                    value={userData.city}
+                    onChangeText={(text) => handleInputChange("city", text)}
+                    placeholder="e.g., Calgary"
+                    placeholderTextColor={COLORS.lightGray}
+                  />
+                  {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
 
-                <Text style={styles.sectionTitle}>Province</Text>
-                <TextInput
-                  style={[styles.input, errors.province ? styles.inputError : null]}
-                  value={userData.province}
-                  onChangeText={(text) => handleInputChange("province", text)}
-                  placeholder="e.g., Alberta"
-                  placeholderTextColor={COLORS.lightGray}
-                  autoCapitalize="characters"
-                />
-                {errors.province ? <Text style={styles.errorText}>{errors.province}</Text> : null}
+                  <Text style={styles.inputLabel}>Province</Text>
+                  <TextInput
+                    style={[styles.fieldInput, errors.province ? styles.inputError : null]}
+                    value={userData.province}
+                    onChangeText={(text) => handleInputChange("province", text)}
+                    placeholder="e.g., Alberta"
+                    placeholderTextColor={COLORS.lightGray}
+                    autoCapitalize="characters"
+                  />
+                  {errors.province ? <Text style={styles.errorText}>{errors.province}</Text> : null}
 
-                <Text style={styles.sectionTitle}>Postal Code</Text>
-                <TextInput
-                  style={[styles.input, errors.postalCode ? styles.inputError : null]}
-                  value={userData.postalCode}
-                  onChangeText={(text) => handleInputChange("postalCode", text)}
-                  placeholder="e.g., T2X 0M4"
-                  placeholderTextColor={COLORS.lightGray}
-                  autoCapitalize="characters"
-                />
-                {errors.postalCode ? <Text style={styles.errorText}>{errors.postalCode}</Text> : null}
-
-                <Text style={styles.sectionTitle}>Location (for services)</Text>
-                <TextInput
-                  style={[styles.input, errors.location ? styles.inputError : null]}
-                  value={userData.location}
-                  onChangeText={(text) => handleInputChange("location", text)}
-                  placeholder="City or region for nearby clinics"
-                  placeholderTextColor={COLORS.lightGray}
-                />
-                {errors.location ? <Text style={styles.errorText}>{errors.location}</Text> : null}
-              </>
-            ) : (
-              <>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Phone:</Text> {userData.phone || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Age:</Text> {userData.age || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Address:</Text> {userData.address1 || "Not set"}
-                  {userData.address2 ? `, ${userData.address2}` : ""}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>City:</Text> {userData.city || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Province:</Text> {userData.province || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Postal Code:</Text> {userData.postalCode || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Location:</Text> {userData.location || "Not set"}
-                </Text>
-              </>
-            )}
+                  <Text style={styles.inputLabel}>Postal Code</Text>
+                  <TextInput
+                    style={[styles.fieldInput, errors.postalCode ? styles.inputError : null]}
+                    value={userData.postalCode}
+                    onChangeText={(text) => handleInputChange("postalCode", text)}
+                    placeholder="e.g., T2X 0M4"
+                    placeholderTextColor={COLORS.lightGray}
+                    autoCapitalize="characters"
+                  />
+                  {errors.postalCode ? <Text style={styles.errorText}>{errors.postalCode}</Text> : null}
+                </View>
+              )}
+            </View>
+            <TouchableOpacity onPress={() => toggleSection("address")} style={{ marginLeft: 12 }}>
+              <Icon 
+                name={expandedSections.address ? "check" : "edit"} 
+                size={20} 
+                color={expandedSections.address ? "#28A745" : "#868E96"} 
+              />
+            </TouchableOpacity>
           </View>
 
-          {/* Emergency Contact */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("emergencyContacts")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cardTitle}>Emergency Contact</Text>
-              <View style={styles.editButton}>
-                <Icon 
-                  name={expandedSections.emergencyContacts ? "chevron-up" : "pencil"} 
-                  size={16} 
-                  color={COLORS.primary} 
-                />
-                <Text style={styles.editButtonText}>
-                  {expandedSections.emergencyContacts ? "Done" : "Edit"}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {expandedSections.emergencyContacts ? (
-              <>
-                <Text style={styles.sectionTitle}>Contact Name</Text>
+          {/* Location Field */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("location")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="place" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Location (for services)</Text>
+              {expandedSections.location ? (
                 <TextInput
-                  style={[styles.input, errors.emergencyContactName ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.location ? styles.inputError : null]}
+                  value={userData.location}
+                  onChangeText={(text) => handleInputChange("location", text)}
+                  placeholder="City or region"
+                  placeholderTextColor={COLORS.lightGray}
+                  autoFocus
+                />
+              ) : (
+                <Text style={styles.fieldValue}>{userData.location || "Not set"}</Text>
+              )}
+              {errors.location ? <Text style={styles.errorText}>{errors.location}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.location ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.location ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
+
+          {/* Section Title */}
+          <Text style={styles.sectionHeader}>Emergency Contact</Text>
+          
+          {/* Emergency Contact Name */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("emergencyContactName")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="person" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Contact Name</Text>
+              {expandedSections.emergencyContactName ? (
+                <TextInput
+                  style={[styles.fieldInput, errors.emergencyContactName ? styles.inputError : null]}
                   value={userData.emergencyContactName}
                   onChangeText={(text) => handleInputChange("emergencyContactName", text)}
                   placeholder="Emergency contact name"
                   placeholderTextColor={COLORS.lightGray}
+                  autoFocus
                 />
-                {errors.emergencyContactName ? (
-                  <Text style={styles.errorText}>{errors.emergencyContactName}</Text>
-                ) : null}
+              ) : (
+                <Text style={styles.fieldValue}>{userData.emergencyContactName || "Not set"}</Text>
+              )}
+              {errors.emergencyContactName ? <Text style={styles.errorText}>{errors.emergencyContactName}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.emergencyContactName ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.emergencyContactName ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-                <Text style={styles.sectionTitle}>Phone Number</Text>
+          {/* Emergency Contact Phone */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("emergencyContactPhone")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="phone" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Contact Phone</Text>
+              {expandedSections.emergencyContactPhone ? (
                 <TextInput
-                  style={[styles.input, errors.emergencyContactPhone ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.emergencyContactPhone ? styles.inputError : null]}
                   value={userData.emergencyContactPhone}
                   onChangeText={(text) => handleInputChange("emergencyContactPhone", text)}
                   placeholder="Emergency contact phone"
                   placeholderTextColor={COLORS.lightGray}
                   keyboardType="phone-pad"
+                  autoFocus
                 />
-                {errors.emergencyContactPhone ? (
-                  <Text style={styles.errorText}>{errors.emergencyContactPhone}</Text>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Name:</Text>{" "}
-                  {userData.emergencyContactName || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Phone:</Text>{" "}
-                  {userData.emergencyContactPhone || "Not set"}
-                </Text>
-              </>
-            )}
-          </View>
+              ) : (
+                <Text style={styles.fieldValue}>{userData.emergencyContactPhone || "Not set"}</Text>
+              )}
+              {errors.emergencyContactPhone ? <Text style={styles.errorText}>{errors.emergencyContactPhone}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.emergencyContactPhone ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.emergencyContactPhone ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-          {/* Medical Information */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("medicalInfo")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cardTitle}>Medical Information</Text>
-              <View style={styles.editButton}>
-                <Icon 
-                  name={expandedSections.medicalInfo ? "chevron-up" : "pencil"} 
-                  size={16} 
-                  color={COLORS.primary} 
-                />
-                <Text style={styles.editButtonText}>
-                  {expandedSections.medicalInfo ? "Done" : "Edit"}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            {expandedSections.medicalInfo ? (
-              <>
-                <Text style={styles.sectionTitle}>Allergies</Text>
+          {/* Section Title */}
+          <Text style={styles.sectionHeader}>Medical Information</Text>
+          
+          {/* Allergies */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("allergies")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="warning" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Allergies</Text>
+              {expandedSections.allergies ? (
                 <TextInput
-                  style={[styles.input, errors.allergies ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.allergies ? styles.inputError : null]}
                   value={userData.allergies}
                   onChangeText={(text) => handleInputChange("allergies", text)}
                   placeholder="List any allergies"
                   placeholderTextColor={COLORS.lightGray}
                   multiline
+                  autoFocus
                 />
-                {errors.allergies ? <Text style={styles.errorText}>{errors.allergies}</Text> : null}
+              ) : (
+                <Text style={styles.fieldValue} numberOfLines={2}>{userData.allergies || "Not set"}</Text>
+              )}
+              {errors.allergies ? <Text style={styles.errorText}>{errors.allergies}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.allergies ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.allergies ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-                <Text style={styles.sectionTitle}>Current Medications</Text>
+          {/* Current Medications */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("currentMedications")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="local-pharmacy" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Current Medications</Text>
+              {expandedSections.currentMedications ? (
                 <TextInput
-                  style={[styles.input, errors.currentMedications ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.currentMedications ? styles.inputError : null]}
                   value={userData.currentMedications}
                   onChangeText={(text) => handleInputChange("currentMedications", text)}
                   placeholder="List current medications"
                   placeholderTextColor={COLORS.lightGray}
                   multiline
+                  autoFocus
                 />
-                {errors.currentMedications ? (
-                  <Text style={styles.errorText}>{errors.currentMedications}</Text>
-                ) : null}
+              ) : (
+                <Text style={styles.fieldValue} numberOfLines={2}>{userData.currentMedications || "Not set"}</Text>
+              )}
+              {errors.currentMedications ? <Text style={styles.errorText}>{errors.currentMedications}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.currentMedications ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.currentMedications ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
-                <Text style={styles.sectionTitle}>Medical Conditions</Text>
+          {/* Medical Conditions */}
+          <TouchableOpacity
+            style={styles.fieldCard}
+            onPress={() => toggleSection("medicalConditions")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.fieldIconWrap}>
+              <Icon name="medical-services" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.fieldContent}>
+              <Text style={styles.fieldLabel}>Medical Conditions</Text>
+              {expandedSections.medicalConditions ? (
                 <TextInput
-                  style={[styles.input, errors.medicalConditions ? styles.inputError : null]}
+                  style={[styles.fieldInput, errors.medicalConditions ? styles.inputError : null]}
                   value={userData.medicalConditions}
                   onChangeText={(text) => handleInputChange("medicalConditions", text)}
                   placeholder="List medical conditions"
                   placeholderTextColor={COLORS.lightGray}
                   multiline
+                  autoFocus
                 />
-                {errors.medicalConditions ? (
-                  <Text style={styles.errorText}>{errors.medicalConditions}</Text>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Allergies:</Text>{" "}
-                  {userData.allergies || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Medications:</Text>{" "}
-                  {userData.currentMedications || "Not set"}
-                </Text>
-                <Text style={styles.text}>
-                  <Text style={{ fontWeight: "bold" }}>Conditions:</Text>{" "}
-                  {userData.medicalConditions || "Not set"}
-                </Text>
-              </>
-            )}
-          </View>
+              ) : (
+                <Text style={styles.fieldValue} numberOfLines={2}>{userData.medicalConditions || "Not set"}</Text>
+              )}
+              {errors.medicalConditions ? <Text style={styles.errorText}>{errors.medicalConditions}</Text> : null}
+            </View>
+            <Icon 
+              name={expandedSections.medicalConditions ? "check" : "edit"} 
+              size={20} 
+              color={expandedSections.medicalConditions ? "#28A745" : "#868E96"}
+              style={{ marginLeft: 12 }}
+            />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Icon name="arrow-back" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
-            <Text style={styles.backButtonText}>Back to Profile</Text>
+            <Icon name="chevron-left" size={24} color={COLORS.primary} />
           </TouchableOpacity>
         </ScrollView>
         </KeyboardAvoidingView>
@@ -1342,6 +1535,8 @@ export default function ProfileInformation() {
         message={modalMessage}
         onClose={() => setModalVisible(false)}
       />
+
+      <BottomNavigation />
     </SafeAreaView>
   );
 }
@@ -1357,6 +1552,68 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: "transparent",
+  },
+  sectionHeader: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 18,
+    color: COLORS.darkText,
+    marginTop: 24,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  fieldCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 70,
+  },
+  fieldIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F1F3F5",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  fieldContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  fieldLabel: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    color: "#495057",
+    marginBottom: 4,
+  },
+  fieldValue: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 15,
+    color: COLORS.darkText,
+    lineHeight: 20,
+  },
+  fieldInput: {
+    borderWidth: 1,
+    borderColor: "#DEE2E6",
+    borderRadius: 10,
+    padding: 10,
+    color: COLORS.darkText,
+    backgroundColor: "#F8F9FA",
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 15,
+    marginTop: 4,
+  },
+  inputLabel: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 13,
+    color: "#495057",
+    marginTop: 12,
+    marginBottom: 6,
   },
   card: {
     backgroundColor: COLORS.white,
@@ -1469,19 +1726,16 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   backButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 100,
-    marginTop: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: 24,
+    marginTop: 16,
   },
   backButtonText: {
     color: COLORS.white,
