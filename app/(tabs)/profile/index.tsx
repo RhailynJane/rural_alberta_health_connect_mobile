@@ -963,88 +963,105 @@ export default function Profile() {
         />
         <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container}>
-          {/* Privacy Notice */}
-          <View style={styles.card}>
-            <View style={styles.privacyHeader}>
-              <View style={styles.privacyIcon}>
-                <Text style={styles.privacyIconText}>✓</Text>
+          {/* Profile Header */}
+          <View style={styles.headerCard}>
+            <View style={styles.headerRow}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {(() => {
+                    const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
+                    return String(n).trim().charAt(0).toUpperCase();
+                  })()}
+                </Text>
               </View>
-              <Text style={styles.cardTitle}>Privacy Protected</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.nameText} numberOfLines={1}>
+                  {currentUser?.firstName ? `${currentUser.firstName} ${currentUser?.lastName || ''}`.trim() : 'Your Profile'}
+                </Text>
+                <Text style={styles.metaText} numberOfLines={1}>
+                  {currentUser?.phone ? `${currentUser.phone}` : 'Welcome back'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editProfileBtn}
+                onPress={() => router.push("/profile/profile-information" as any)}
+                activeOpacity={0.8}
+              >
+                <Icon name="edit" size={18} color={COLORS.white} />
+                <Text style={styles.editProfileBtnText}>Edit</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.privacyText}>
-              Your personal information is encrypted and stored locally. No data
-              is shared without your consent.
-            </Text>
+
+            {/* Stats Row */}
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, styles.statCardFirst]}>
+                <Text style={styles.statNumber}>{(() => {
+                  const fields: (keyof typeof userData)[] = ['age','address1','city','province','postalCode','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'];
+                  const done = fields.filter(k => String((userData as any)[k] || '').trim().length > 0).length;
+                  return Math.round((done / fields.length) * 100) || 0;
+                })()}%</Text>
+                <Text style={styles.statLabel}>Complete</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{userData.reminderEnabled ? 'On' : 'Off'}</Text>
+                <Text style={styles.statLabel}>Reminders</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{userData.locationServices ? 'On' : 'Off'}</Text>
+                <Text style={styles.statLabel}>Location</Text>
+              </View>
+            </View>
           </View>
 
-          {/* Profile Information - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/profile-information" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="person" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Profile Information</Text>
-              </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
-            </View>
-            <Text style={styles.cardSubtitle}>
-              View and edit your personal information, emergency contact, and medical history
-            </Text>
-          </TouchableOpacity>
+          {/* Quick Actions Grid */}
+          <View style={styles.grid}>
+            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/profile-information" as any)} activeOpacity={0.85}>
+              <View style={styles.tileIconWrap}><Icon name="person" size={22} color={COLORS.primary} /></View>
+              <Text style={styles.tileText}>Profile Info</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/app-settings" as any)} activeOpacity={0.85}>
+              <View style={styles.tileIconWrap}><Icon name="settings" size={22} color={COLORS.primary} /></View>
+              <Text style={styles.tileText}>App Settings</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tile} onPress={() => router.push("/profile/help-support" as any)} activeOpacity={0.85}>
+              <View style={styles.tileIconWrap}><Icon name="help-outline" size={22} color={COLORS.primary} /></View>
+              <Text style={styles.tileText}>Help & Support</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.tile, styles.tileDanger]} onPress={handleSignOut} activeOpacity={0.85}>
+              <View style={[styles.tileIconWrap, styles.tileDangerIcon]}><Icon name="exit-to-app" size={22} color={COLORS.white} /></View>
+              <Text style={[styles.tileText, styles.tileDangerText]}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
 
-          {/* App Settings - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/app-settings" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="settings" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>App Settings</Text>
+          {/* Suggestions */}
+          <View style={styles.suggestionCard}>
+            <Text style={styles.suggestionTitle}>Suggested</Text>
+            <TouchableOpacity style={styles.suggestionRow} onPress={() => router.push("/profile/app-settings" as any)}>
+              <View style={styles.suggestionLeft}>
+                <Icon name="notifications" size={20} color={COLORS.primary} />
+                <Text style={styles.suggestionText}>Notifications</Text>
               </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
-            </View>
-            <Text style={styles.cardSubtitle}>
-              Manage symptom assessment reminders and location services
-            </Text>
-          </TouchableOpacity>
-
-          {/* Help & Support - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/help-support" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="help-outline" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Help & Support</Text>
+              <View style={styles.suggestionRight}>
+                <Text style={styles.suggestionBadge}>{userData.reminderEnabled ? 'On' : 'Off'}</Text>
+                <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
               </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
-            </View>
-            <Text style={styles.cardSubtitle}>
-              FAQs, user guide, feedback, and report issues
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.suggestionRow} onPress={() => router.push("/profile/app-settings" as any)}>
+              <View style={styles.suggestionLeft}>
+                <Icon name="shield" size={20} color={COLORS.primary} />
+                <Text style={styles.suggestionText}>Security & Privacy</Text>
+              </View>
+              <View style={styles.suggestionRight}>
+                <Text style={styles.suggestionBadge}>Encrypted</Text>
+                <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
+              </View>
+            </TouchableOpacity>
+          </View>
 
-          {/* Sign Out Button */}
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            activeOpacity={0.7}
-          >
-            <Icon
-              name="exit-to-app"
-              size={20}
-              color={COLORS.white}
-              style={styles.signOutIcon}
-            />
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
+          {/* Privacy footnote */}
+          <View style={styles.privacyFootnote}>
+            <Text style={styles.privacyFootnoteText}>Your data stays on your device and is encrypted.</Text>
+          </View>
         </ScrollView>
       </CurvedBackground>
       <BottomNavigation />
@@ -1094,6 +1111,191 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 16,
     backgroundColor: "transparent",
+  },
+  headerCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 0,
+    marginTop: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E8F1FF',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.primary,
+    fontSize: 22,
+  },
+  nameText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 20,
+    color: COLORS.darkText,
+  },
+  metaText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 13,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  editProfileBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editProfileBtnText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  statCardFirst: {
+    marginLeft: 0,
+  },
+  statNumber: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 18,
+    color: COLORS.darkText,
+  },
+  statLabel: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 12,
+  },
+  tile: {
+    width: '48%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tileIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  tileText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    color: COLORS.darkText,
+    textAlign: 'center',
+  },
+  tileDanger: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#F2D6D6',
+  },
+  tileDangerIcon: {
+    backgroundColor: '#DC3545',
+    borderColor: '#DC3545',
+  },
+  tileDangerText: {
+    color: '#DC3545',
+  },
+  suggestionCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    padding: 12,
+    marginBottom: 12,
+  },
+  suggestionTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+    marginBottom: 8,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  suggestionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  suggestionText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+  },
+  suggestionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  suggestionBadge: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 12,
+  },
+  privacyFootnote: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  privacyFootnoteText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
   },
   loadingContainer: {
     flex: 1,
