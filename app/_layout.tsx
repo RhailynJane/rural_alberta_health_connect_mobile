@@ -7,13 +7,13 @@ import * as Notifications from "expo-notifications";
 import { Stack, usePathname } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState } from "react";
-import { View } from "react-native";
+import { AppState, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LLMHost } from '../utils/llm/LLMHost';
 import { database } from '../watermelon/database';
-import { initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
+import { checkAndFireDueReminders, initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
-import { NotificationBanner } from "./components/NotificationBanner";
+
 import { NotificationProvider } from "./components/NotificationContext";
 import { OfflineBanner } from "./components/OfflineBanner";
 import SideMenuProvider from "./components/SideMenuProvider";
@@ -151,18 +151,6 @@ function RootLayoutContent({
   return (
     <SafeAreaProvider>
       <SideMenuProvider>
-        {/* In-app notification banner */}
-        {notificationBanner && (
-          <NotificationBanner
-            title={notificationBanner.title}
-            body={notificationBanner.body}
-            onDismiss={() => setNotificationBanner(null)}
-            onPress={() => {
-              setNotificationBanner(null);
-              // Handle navigation based on notification type
-            }}
-          />
-        )}
         <View style={{ flex: 1 }}>
           {/* Global offline banner at the very top - no SafeAreaView to avoid double padding */}
           {!isOnline && !suppressGlobalOfflineOnPersonalInfo && <OfflineBanner />}
@@ -201,10 +189,7 @@ function RootLayoutContent({
 export default function RootLayout() {
   const [providerKey, setProviderKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [notificationBanner, setNotificationBanner] = useState<{
-    title: string;
-    body: string;
-  } | null>(null);
+
 
   const refreshSession = () => {
     console.log('🔄 Refreshing session via provider remount...');
@@ -235,11 +220,7 @@ export default function RootLayout() {
     const cleanup = setupNotificationListeners(
       // On notification received in foreground
       (notification: Notifications.Notification) => {
-        const { title, body } = notification.request.content;
-        setNotificationBanner({
-          title: title || "Notification",
-          body: body || "",
-        });
+        // Banner removed - notifications handled by system
       },
       // On notification tapped
       (response: Notifications.NotificationResponse) => {
@@ -248,7 +229,19 @@ export default function RootLayout() {
       }
     );
 
-    return cleanup;
+    // Listen for app foreground/background state changes
+    // When app comes to foreground, check if any reminders are due and fire them
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        console.log('📱 App came to foreground - checking for due reminders');
+        checkAndFireDueReminders().catch(err => console.error('Error checking due reminders:', err));
+      }
+    });
+
+    return () => {
+      cleanup?.();
+      appStateSubscription?.remove?.();
+    };
   }, []);
 
   return (
@@ -262,8 +255,7 @@ export default function RootLayout() {
                 {/* LLM Host - singleton model manager (persists across tab switches) */}
                 <LLMHost />
                 <RootLayoutContent
-                  notificationBanner={notificationBanner}
-                  setNotificationBanner={setNotificationBanner}
+
                   isRefreshing={isRefreshing}
                 />
               </SignUpFormProvider>

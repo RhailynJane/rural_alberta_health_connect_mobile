@@ -1,5 +1,6 @@
 import { Q } from '@nozbe/watermelondb';
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 import { database } from "../../watermelon/database";
 import { NotificationBellEvent } from "./NotificationBellEvent";
 
@@ -99,6 +100,8 @@ export async function getReminders(): Promise<ReminderItem[]> {
 async function saveReminders(list: ReminderItem[]): Promise<void> {
   await ensureUserNamespace();
   try { await AsyncStorage.setItem(nk(REMINDERS_KEY), JSON.stringify(list)); } catch {}
+  // Record the time of the last mutation to debounce foreground firing
+  try { await AsyncStorage.setItem(nk('reminders:lastMutationAt'), String(Date.now())); } catch {}
   // Mirror to WatermelonDB for offline/local queries
   try { await syncRemindersToWatermelon(list); } catch {}
   // Sync to Convex if callback is set
@@ -168,6 +171,49 @@ export async function initializeNotificationsOnce() {
   if (typeof (Notifications as any).setNotificationHandler === 'function') {
     (Notifications as any).setNotificationHandler({
       handleNotification: async (notification: any) => {
+        const type = notification?.request?.content?.data?.type;
+        console.log('🔔 [handleNotification] Received notification:', {
+          type,
+          title: notification?.request?.content?.title,
+          hasRequest: !!notification?.request,
+        });
+        
+        // For reminder notifications, check if they're firing too early
+        const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
+        if (isReminder) {
+          const reminderTime = notification?.request?.content?.data?.reminderTime; // Format: "HH:MM"
+          const frequency = notification?.request?.content?.data?.reminderFrequency; // 'daily' or 'weekly'
+          const dayOfWeek = notification?.request?.content?.data?.dayOfWeek; // 'Mon', 'Tue', etc. or undefined
+          
+          if (reminderTime) {
+            const now = new Date();
+            const [hour, minute] = reminderTime.split(':').map(Number);
+            const scheduledTime = new Date();
+            scheduledTime.setHours(hour, minute, 0, 0);
+            
+            // Check if notification is too early
+            let shouldShowNotification = true;
+            if (frequency === 'weekly' && dayOfWeek) {
+              const targetWeekday = weekdayStringToNumber(dayOfWeek);
+              const currentWeekday = now.getDay();
+              shouldShowNotification = currentWeekday === targetWeekday && now.getTime() >= scheduledTime.getTime();
+            } else if (frequency === 'daily') {
+              shouldShowNotification = now.getTime() >= scheduledTime.getTime();
+            }
+            
+            if (!shouldShowNotification) {
+              console.warn(`⚠️ [handleNotification] Notification fired too early! Current: ${now.toLocaleString()}, Scheduled: ${scheduledTime.toLocaleString()} on ${dayOfWeek || 'daily'}. Hiding notification...`);
+              return {
+                shouldShowAlert: false,
+                shouldShowBanner: false,
+                shouldShowList: false,
+                shouldPlaySound: false,
+                shouldSetBadge: false,
+              };
+            }
+          }
+        }
+        
         // Show ALL notifications on device (both reminders and push notifications)
         const result = {
           // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
@@ -177,6 +223,8 @@ export async function initializeNotificationsOnce() {
           shouldPlaySound: true,
           shouldSetBadge: true,
         };
+        
+        console.log('🔔 [handleNotification] Returning:', result);
         return result as any;
       },
     });
@@ -186,9 +234,46 @@ export async function initializeNotificationsOnce() {
   try {
     if (typeof (Notifications as any).addNotificationReceivedListener === 'function') {
       (Notifications as any).addNotificationReceivedListener(async (notification: any) => {
+        console.log('🔔 [notificationReceivedListener] Notification received in app:', {
+          title: notification?.request?.content?.title,
+          body: notification?.request?.content?.body,
+          type: notification?.request?.content?.data?.type,
+          identifier: notification?.request?.identifier,
+        });
+        
         const type = notification?.request?.content?.data?.type;
         const isReminder = type === 'symptom_reminder' || type === 'daily_reminder' || type === 'weekly_reminder';
         if (isReminder) {
+          console.log('✅ Reminder notification detected');
+          
+          // CRITICAL: Check if this notification should actually fire now
+          // Android sometimes fires scheduled notifications immediately - we need to prevent that
+          const reminderTime = notification?.request?.content?.data?.reminderTime; // Format: "HH:MM"
+          const frequency = notification?.request?.content?.data?.reminderFrequency; // 'daily' or 'weekly'
+          const dayOfWeek = notification?.request?.content?.data?.dayOfWeek; // 'Mon', 'Tue', etc. or undefined
+          
+          if (reminderTime) {
+            const now = new Date();
+            const [hour, minute] = reminderTime.split(':').map(Number);
+            const scheduledTime = new Date();
+            scheduledTime.setHours(hour, minute, 0, 0);
+            
+            // For weekly reminders, also check the day of week
+            let shouldProcess = false;
+            if (frequency === 'weekly' && dayOfWeek) {
+              const targetWeekday = weekdayStringToNumber(dayOfWeek);
+              const currentWeekday = now.getDay();
+              shouldProcess = currentWeekday === targetWeekday && now.getTime() >= scheduledTime.getTime();
+            } else if (frequency === 'daily') {
+              shouldProcess = now.getTime() >= scheduledTime.getTime();
+            }
+            
+            if (!shouldProcess) {
+              console.warn(`⚠️ Notification fired too early! Current: ${now.toLocaleString()}, Scheduled: ${scheduledTime.toLocaleString()} on ${dayOfWeek || 'daily'}. Ignoring to prevent duplicate processing.`);
+              return; // Don't process this premature notification
+            }
+          }
+          
           try { await setBellUnread(true); } catch {}
           NotificationBellEvent.emit('due');
           // Append to local reminder history so the Notifications screen can show all previous reminders
@@ -205,6 +290,12 @@ export async function initializeNotificationsOnce() {
               read: false,
             });
           } catch {}
+          
+          // DO NOT reschedule here - causes infinite loops
+          // Reschedule happens at app startup/foreground instead
+          console.log('ℹ️ Notification recorded - reschedule will happen at app startup');
+        } else {
+          console.log('ℹ️ Non-reminder notification received, type:', type);
         }
       });
     }
@@ -278,6 +369,12 @@ export async function requestNotificationPermissions(): Promise<boolean> {
   });
   
   try {
+    // First check current permissions
+    if (typeof (Notifications as any).getPermissionsAsync === 'function') {
+      const current = await (Notifications as any).getPermissionsAsync();
+      console.log("🔔 Current permissions:", current);
+    }
+    
     if (typeof (Notifications as any).getPermissionsAsync !== 'function') {
       console.log("⚠️ getPermissionsAsync not available - likely web or missing module");
       return false;
@@ -291,11 +388,19 @@ export async function requestNotificationPermissions(): Promise<boolean> {
     const req = await (Notifications as any).requestPermissionsAsync();
     console.log("🔔 Permission request result:", req);
     
-    return (
+    const granted = (
       (req as any)?.granted ||
       (req as any)?.ios?.status === (Notifications as any).IosAuthorizationStatus?.PROVISIONAL ||
       false
     );
+    
+    if (granted) {
+      console.log("✅ Notification permissions GRANTED");
+    } else {
+      console.log("❌ Notification permissions DENIED or PROVISIONAL");
+    }
+    
+    return granted;
   } catch (err) {
     console.error("❌ Error requesting permissions:", err);
     return false;
@@ -387,10 +492,11 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
   }
 
   if (typeof (Notifications as any).scheduleNotificationAsync !== 'function') {
-    return; // running in an environment without notifications support
+    console.warn('⚠️ scheduleNotificationAsync not available - notifications cannot be scheduled');
+    return;
   }
 
-  const id = await (Notifications as any).scheduleNotificationAsync({
+  const notificationPayload = {
     content: {
       title: "Symptom Assessment Reminder",
       body: "It's time to complete your daily symptoms check.",
@@ -402,8 +508,18 @@ export async function scheduleSymptomReminder(settings: ReminderSettings) {
       },
     },
     trigger,
+  };
+  
+  console.log('🔔 [scheduleSymptomReminder] Scheduling notification:', {
+    frequency: settings.frequency,
+    time: settings.time,
+    trigger: JSON.stringify(trigger),
+    channelId: REMINDER_CHANNEL_ID,
   });
 
+  const id = await (Notifications as any).scheduleNotificationAsync(notificationPayload);
+
+  console.log('✅ Notification scheduled with ID:', id);
   await AsyncStorage.setItem(nk(STORAGE_KEY), id);
 }
 
@@ -947,34 +1063,109 @@ export async function scheduleReminderItem(item: ReminderItem) {
       return;
     }
 
-    const { hour, minute } = parseTimeToHourMinute(item.time || "09:00");
-    let trigger: any;
-    if (item.frequency === "daily") {
-      trigger = { type: "calendar", hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
-    } else {
-      trigger = { type: "calendar", weekday: weekdayStringToNumber(item.dayOfWeek), hour, minute, repeats: true, channelId: REMINDER_CHANNEL_ID } as any;
+    // On Android, skip native date scheduling to avoid immediate fires and missed triggers
+    if (Platform?.OS === 'android') {
+      console.log('🤖 Android detected - skipping native scheduling; using foreground checks only');
+      return;
     }
+
+    // CRITICAL: Cancel ALL existing scheduled notifications to prevent duplicates and loops
+    try {
+      const allScheduled = await (Notifications as any).getAllScheduledNotificationsAsync();
+      if (allScheduled && Array.isArray(allScheduled)) {
+        console.log(`🔍 Found ${allScheduled.length} scheduled notifications - canceling ALL to prevent loops`);
+        await (Notifications as any).cancelAllScheduledNotificationsAsync();
+        console.log(`🗑️ Canceled all ${allScheduled.length} scheduled notifications`);
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to cancel existing notifications:', err);
+    }
+
+    const { hour, minute } = parseTimeToHourMinute(item.time || "09:00");
+    
+    // Calculate next occurrence for date-based trigger (Android doesn't support calendar triggers)
+    const now = new Date();
+    const nextTriggerDate = new Date();
+    nextTriggerDate.setHours(hour, minute, 0, 0);
+    
+    if (item.frequency === "weekly" && item.dayOfWeek) {
+      // Find next occurrence of the specified weekday
+      const targetWeekday = weekdayStringToNumber(item.dayOfWeek);
+      const currentWeekday = now.getDay();
+      let daysUntilTarget = targetWeekday - currentWeekday;
+      
+      // If target day already passed this week, or it's today but time passed, go to next week
+      if (daysUntilTarget < 0 || (daysUntilTarget === 0 && now.getTime() > nextTriggerDate.getTime())) {
+        daysUntilTarget += 7;
+      }
+      
+      nextTriggerDate.setDate(now.getDate() + daysUntilTarget);
+    } else {
+      // Daily: if time already passed today, schedule for tomorrow
+      // Use > (not >=) for comparison to avoid immediate rescheduling
+      // Add 1 minute buffer to prevent scheduling in the past due to clock skew
+      const bufferTime = new Date(now.getTime() + 60000); // 1 minute buffer
+      if (bufferTime.getTime() > nextTriggerDate.getTime()) {
+        nextTriggerDate.setDate(nextTriggerDate.getDate() + 1);
+      }
+    }
+    
+    console.log(`📅 Scheduling ${item.frequency} reminder: hour=${hour}, minute=${minute}, dayOfWeek=${item.dayOfWeek}, nextTrigger=${nextTriggerDate.toLocaleString()}`);
+    
+    // Safety check: Don't schedule if the trigger time has already passed or is within 30 seconds
+    const now2 = new Date();
+    const thirtySecondsFromNow = new Date(now2.getTime() + 30000);
+    if (nextTriggerDate.getTime() <= thirtySecondsFromNow.getTime()) {
+      console.warn(`⚠️ Calculated trigger time (${nextTriggerDate.toLocaleString()}) is in the past or too soon (< 30s). Skipping notification scheduling to prevent immediate fire.`);
+      return;
+    }
+    
     const schedId = await (Notifications as any).scheduleNotificationAsync({
       content: {
         title: "Symptom Assessment Reminder",
         body: "It's time to complete your symptoms check.",
-        sound: 'default',
-        priority: 'max',
+        sound: true,
+        priority: (Notifications as any).AndroidNotificationPriority.HIGH,
         categoryIdentifier: 'reminder',
+        channelId: REMINDER_CHANNEL_ID,
         data: {
           type: item.frequency === 'daily' ? 'daily_reminder' : 'weekly_reminder',
           timestamp: Date.now(),
           dayOfWeek: item.dayOfWeek,
+          reminderId: item.id,
+          reminderFrequency: item.frequency,
+          reminderTime: item.time,
         },
       },
-      trigger,
+      trigger: { date: nextTriggerDate },
     });
-    console.log('🗓️ Scheduled notification id:', schedId, 'trigger:', JSON.stringify(trigger));
-  } catch {}
+    console.log('🗓️ Scheduled notification id:', schedId);
+    
+    // Verify it was actually scheduled
+    const allScheduled = await (Notifications as any).getAllScheduledNotificationsAsync();
+    console.log(`✅ Verification: ${allScheduled?.length || 0} total notifications scheduled after adding ${item.frequency} reminder`);
+    
+    // Log details of what was scheduled for debugging
+    if (allScheduled && allScheduled.length > 0) {
+      const justScheduled = allScheduled.find((n: any) => n.identifier === schedId);
+      if (justScheduled) {
+        console.log('📋 Scheduled notification details:', {
+          id: justScheduled.identifier,
+          title: justScheduled.content?.title,
+          trigger: justScheduled.trigger,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error in scheduleReminderItem:', err);
+    throw err;
+  }
 }
 
 export async function scheduleAllReminderItems(list?: ReminderItem[]) {
+  console.log('🔔 [scheduleAllReminderItems] Starting...');
   const reminders = list ?? (await getReminders());
+  console.log(`📋 [scheduleAllReminderItems] Found ${reminders.length} total reminders`);
   
   // Cancel ALL existing scheduled notifications first
   const Notifications = await getNotificationsModule();
@@ -992,16 +1183,24 @@ export async function scheduleAllReminderItems(list?: ReminderItem[]) {
   
   // Only schedule enabled reminders
   const enabledReminders = reminders.filter(r => r.enabled);
-  console.log(`📅 Scheduling ${enabledReminders.length} enabled reminders`);
+  console.log(`📅 Scheduling ${enabledReminders.length} enabled reminders out of ${reminders.length} total`);
+  
+  if (enabledReminders.length === 0) {
+    console.log('⚠️ No enabled reminders to schedule!');
+    return;
+  }
   
   for (const r of enabledReminders) {
-    try { 
+    try {
+      console.log(`⏰ Scheduling ${r.frequency} reminder at ${r.time}...`);
       await scheduleReminderItem(r);
       console.log(`✅ Scheduled ${r.frequency} reminder on channel ${REMINDER_CHANNEL_ID}`);
     } catch (e) {
       console.error(`❌ Failed to schedule ${r.frequency} reminder:`, e);
     }
   }
+  
+  console.log('🎉 [scheduleAllReminderItems] Complete!');
 }
 
 // Sync the in-memory reminders list to WatermelonDB (per-user namespace)
@@ -1038,6 +1237,26 @@ async function syncRemindersToWatermelon(list: ReminderItem[]) {
   }
 }
 
+/**
+ * Diagnostic function - check if notifications are properly configured and scheduled
+ */
+export async function getNotificationDiagnostics() {
+  const Notifications = await getNotificationsModule();
+  
+  return {
+    moduleName: (Notifications as any).name || 'unknown',
+    hasNotificationHandler: typeof (Notifications as any).setNotificationHandler === 'function',
+    hasScheduleAsync: typeof (Notifications as any).scheduleNotificationAsync === 'function',
+    hasRequestPermissions: typeof (Notifications as any).requestPermissionsAsync === 'function',
+    hasGetPermissions: typeof (Notifications as any).getPermissionsAsync === 'function',
+    hasReceivedListener: typeof (Notifications as any).addNotificationReceivedListener === 'function',
+    hasResponseListener: typeof (Notifications as any).addNotificationResponseReceivedListener === 'function',
+    hasGetScheduled: typeof (Notifications as any).getAllScheduledNotificationsAsync === 'function',
+    channelId: REMINDER_CHANNEL_ID,
+    timestamp: Date.now(),
+  };
+}
+
 // Manual trigger to re-apply channels and re-schedule all reminders
 export async function forceRescheduleAllReminders(): Promise<number> {
   try {
@@ -1047,4 +1266,85 @@ export async function forceRescheduleAllReminders(): Promise<number> {
   await scheduleAllReminderItems(list);
   // Return count of enabled, non-hourly reminders scheduled
   return list.filter(r => r.enabled && r.frequency !== 'hourly').length;
+}
+
+/**
+ * Check if any reminders are due RIGHT NOW and fire them immediately
+ * This is called when the app comes to foreground since date-based triggers don't work on Android
+ */
+export async function checkAndFireDueReminders(): Promise<void> {
+  try {
+    const Notifications = await getNotificationsModule();
+    const ok = await requestNotificationPermissions();
+    if (!ok) return;
+
+    const reminders = await getReminders();
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    // Align with weekdayStringToNumber() which maps Sun..Sat to 1..7
+    const currentWeekday = now.getDay() + 1;
+    // Debounce: if reminders were mutated very recently, skip firing to avoid
+    // push notifications when user adds/updates/deletes near due time.
+    let recentMutation = false;
+    try {
+      const lastMutStr = await AsyncStorage.getItem(nk('reminders:lastMutationAt'));
+      const lastMut = lastMutStr ? parseInt(lastMutStr, 10) : 0;
+      if (lastMut && now.getTime() - lastMut < 20_000) {
+        recentMutation = true;
+        console.log(`⏳ [checkAndFireDueReminders] Skipping due fire (mutation ${now.getTime() - lastMut}ms ago)`);
+      }
+    } catch {}
+    
+    console.log(`🔄 [checkAndFireDueReminders] Checking ${reminders.length} reminders at ${now.toLocaleTimeString()}`);
+    
+    for (const reminder of reminders) {
+      if (!reminder.enabled || reminder.frequency === 'hourly') continue;
+      
+      const [hour, minute] = (reminder.time || '09:00').split(':').map(Number);
+      
+      let isDue = false;
+      if (reminder.frequency === 'daily') {
+        // Fire if current time is within 5 minutes of scheduled time (to account for variance)
+        const minuteDiff = (currentHour * 60 + currentMinute) - (hour * 60 + minute);
+        isDue = minuteDiff >= 0 && minuteDiff < 5;
+      } else if (reminder.frequency === 'weekly' && reminder.dayOfWeek) {
+        // Fire if correct day of week and within 5 minutes of scheduled time
+        const targetWeekday = weekdayStringToNumber(reminder.dayOfWeek);
+        const minuteDiff = (currentHour * 60 + currentMinute) - (hour * 60 + minute);
+        isDue = currentWeekday === targetWeekday && minuteDiff >= 0 && minuteDiff < 5;
+      }
+      
+      if (isDue && !recentMutation) {
+        console.log(`⏰ [checkAndFireDueReminders] Reminder is due: ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
+        
+        try {
+          // Fire the notification immediately
+          if (typeof (Notifications as any).presentNotificationAsync === 'function') {
+            await (Notifications as any).presentNotificationAsync({
+              title: "Symptom Assessment Reminder",
+              body: "It's time to complete your symptoms check.",
+              sound: true,
+              priority: (Notifications as any).AndroidNotificationPriority?.HIGH || 'high',
+              categoryIdentifier: 'reminder',
+              channelId: REMINDER_CHANNEL_ID,
+              data: {
+                type: reminder.frequency === 'weekly' ? 'weekly_reminder' : 'daily_reminder',
+                reminderFrequency: reminder.frequency,
+                reminderTime: reminder.time,
+                dayOfWeek: reminder.dayOfWeek,
+                reminderId: reminder.id,
+                timestamp: Date.now(),
+              },
+            });
+            console.log(`✅ [checkAndFireDueReminders] Fired due reminder: ${reminder.frequency} reminder at ${reminder.time}`);
+          }
+        } catch (err) {
+          console.error(`❌ [checkAndFireDueReminders] Failed to fire reminder:`, err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[checkAndFireDueReminders] Error:', err);
+  }
 }

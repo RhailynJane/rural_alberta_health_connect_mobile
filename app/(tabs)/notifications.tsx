@@ -285,7 +285,7 @@ export default function NotificationsScreen() {
           )}
         </ScrollView>
       </SafeAreaView>
-      <BottomNavigation floating={false} />
+      <BottomNavigation floating={true} />
     </CurvedBackground>
   );
 }

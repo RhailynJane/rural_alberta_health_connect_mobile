@@ -556,8 +556,17 @@ export default function Profile() {
           dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
         }).catch(() => {});
         if (value) {
-          // best-effort schedule all current reminders when enabling
-          try { scheduleAllReminderItems().catch(() => {}); } catch {}
+          // Schedule all current reminders when enabling
+          console.log('🔔 Reminder toggle ON - scheduling all reminders...');
+          try { 
+            scheduleAllReminderItems()
+              .then(() => console.log('✅ Reminders scheduled successfully'))
+              .catch((err) => console.error('❌ Failed to schedule reminders:', err));
+          } catch (err) {
+            console.error('❌ Error calling scheduleAllReminderItems:', err);
+          }
+        } else {
+          console.log('🔕 Reminder toggle OFF - cancelling all reminders...');
         }
       } catch {}
     }
@@ -635,7 +644,13 @@ export default function Profile() {
       setReminders(updatedList);
 
       // Schedule locally and try to sync the primary settings to backend
-      try { await scheduleAllReminderItems(updatedList); } catch {}
+      console.log('🔔 Scheduling reminders after save...');
+      try { 
+        await scheduleAllReminderItems(updatedList);
+        console.log('✅ Reminders scheduled successfully');
+      } catch (err) {
+        console.error('❌ Failed to schedule reminders:', err);
+      }
       try {
         await updateReminderSettings({
           enabled: true,
@@ -1244,6 +1259,24 @@ export default function Profile() {
               trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
               thumbColor={COLORS.white}
             />
+          </View>
+
+          {/* Notification Debug Link */}
+          <View style={styles.listCard}>
+            <TouchableOpacity 
+              style={styles.listItem} 
+              onPress={() => router.push("/(tabs)/profile/notification-debug")} 
+              activeOpacity={0.85}
+            >
+              <View style={styles.listIconWrap}>
+                <Icon name="bug-report" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>Notification Debug</Text>
+                <Text style={styles.listSubtitle}>Test notification settings & permissions</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
+            </TouchableOpacity>
           </View>
 
           {/* Sign Out */}

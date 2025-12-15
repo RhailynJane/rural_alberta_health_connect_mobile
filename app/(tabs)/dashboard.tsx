@@ -7,12 +7,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, Polyline, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
@@ -484,7 +484,7 @@ export default function Dashboard() {
 
 
   const navigateToHistory = (): void => {
-    router.push("/tracker/history");
+    router.push("/tracker");
   };
 
   const navigateToDailyLog = (): void => {
