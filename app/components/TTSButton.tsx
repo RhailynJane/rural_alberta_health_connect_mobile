@@ -32,6 +32,7 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
   const {
     status,
     downloadProgress,
+    generationProgress,
     error,
     speak,
     stop,
