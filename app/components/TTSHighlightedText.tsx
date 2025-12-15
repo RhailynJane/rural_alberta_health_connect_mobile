@@ -26,6 +26,8 @@ interface TTSHighlightedTextProps {
   containerStyle?: ViewStyle;
   asBulletList?: boolean;
   bulletChar?: string;
+  /** Horizontal padding of parent container - background will extend by this amount */
+  parentPadding?: number;
 }
 
 /**
