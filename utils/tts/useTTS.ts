@@ -323,8 +323,8 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     }
 
     try {
-      // Stop any other TTS instance that's currently playing
-      stopAllOtherTTS(stopCallbackRef.current ?? undefined);
+      // Notify globally that this instance is now playing
+      notifyTTSStateChange(true, instanceId.current);
 
       // Start in generating state
       setStatus('generating');
