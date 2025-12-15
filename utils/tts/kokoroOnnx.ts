@@ -641,6 +641,11 @@ class KokoroOnnx {
       return `${num1} to ${num2}`;
     });
 
+    // General fallback: convert ALL remaining hyphens/dashes between letters to spaces
+    // Handles: ice-cold → ice cold, well-known → well known, over-the-counter → over the counter
+    // Must come AFTER number ranges (24-48) and prefix joins (re-apply → reapply)
+    text = text.replace(/([a-zA-Z])[-–—]([a-zA-Z])/g, '$1 $2');
+
     // Handle remaining standalone numbers
     text = text.replace(/\b(\d+\.?\d*)\b/g, (_, num) => {
       return this.numberToWords(parseFloat(num));
