@@ -55,8 +55,9 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
         await speak(text);
         break;
 
+      case 'generating':
       case 'speaking':
-        // Stop speaking
+        // Stop generating or speaking
         await stop();
         break;
 
