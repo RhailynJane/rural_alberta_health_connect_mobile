@@ -172,19 +172,6 @@ const COMMON_WORD_PHONEMES: Record<string, string> = {
   'timeframes': 'tˈaɪmfɹeɪmz',
   'alberta': 'ælˈbɜɹtə',
   'detailed': 'dˈiːteɪld',
-  // Hyphenated compound words (stored without hyphens as they get normalized)
-  'otc': 'ˌoʊvəɹðəkˈaʊntəɹ',
-  'overthe': 'ˌoʊvəɹðə',
-  'counter': 'kˈaʊntəɹ',
-  'nonprescription': 'nˌɑːnpɹɪskɹˈɪpʃən',
-  'selfcare': 'sˈɛlfkɛɹ',
-  'followup': 'fˈɑːloʊˌʌp',
-  'wellbeing': 'wˈɛlbˌiːɪŋ',
-  'healthcare': 'hˈɛlθkɛɹ',
-  'firstaid': 'fˈɜɹstˌeɪd',
-  'longterm': 'lˈɔːŋtɜɹm',
-  'shortterm': 'ʃˈɔːɹttɜɹm',
-  'overthecount': 'ˌoʊvəɹðəkˈaʊnt',
 };
 
 export interface StreamStatus {
