@@ -317,6 +317,12 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       return;
     }
 
+    // Direct check: prevent starting if another TTS is already playing
+    if (isAnotherTTSPlaying(instanceId.current)) {
+      console.warn('[TTS] Cannot speak: another TTS is already playing');
+      return;
+    }
+
     if (!text.trim()) {
       console.warn('[TTS] Cannot speak: empty text');
       return;
@@ -325,6 +331,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     try {
       // Notify globally that this instance is now playing
       notifyTTSStateChange(true, instanceId.current);
+      console.log(`[TTS] Instance ${instanceId.current} started playing`);
 
       // Start in generating state
       setStatus('generating');
