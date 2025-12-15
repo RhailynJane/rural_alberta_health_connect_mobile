@@ -20,6 +20,8 @@ export type TTSStatus =
   | 'speaking'        // Currently playing audio
   | 'error';          // Error state
 
+export type ChunkState = 'pending' | 'generating' | 'playing' | 'completed';
+
 export interface UseTTSReturn {
   status: TTSStatus;
   downloadProgress: number;
@@ -29,6 +31,10 @@ export interface UseTTSReturn {
   stop: () => Promise<void>;
   download: () => Promise<boolean>;
   isAvailable: boolean;
+  // Chunk info for visual highlighting
+  chunks: string[];
+  chunkStates: ChunkState[];
+  currentChunk: number; // 1-indexed, 0 when not active
 }
 
 export interface UseTTSOptions {
@@ -67,6 +73,11 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isAvailable, setIsAvailable] = useState(false);
+
+  // Chunk state for visual highlighting
+  const [chunks, setChunks] = useState<string[]>([]);
+  const [chunkStates, setChunkStates] = useState<ChunkState[]>([]);
+  const [currentChunk, setCurrentChunk] = useState(0);
 
   const isInitialized = useRef(false);
   const isMounted = useRef(true);
@@ -215,6 +226,10 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       // Start in generating state
       setStatus('generating');
       setGenerationProgress(0);
+      // Reset chunk state
+      setChunks([]);
+      setChunkStates([]);
+      setCurrentChunk(0);
 
       // Use chunked streaming which handles long text automatically
       await KokoroOnnx.streamChunkedAudio(
@@ -223,6 +238,13 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
         speed,
         (streamStatus: ChunkedStreamStatus) => {
           if (!isMounted.current) return;
+
+          // Update chunk info for visual highlighting
+          if (streamStatus.chunks && streamStatus.chunks.length > 0) {
+            setChunks(streamStatus.chunks);
+            setChunkStates(streamStatus.chunkStates);
+            setCurrentChunk(streamStatus.currentChunk);
+          }
 
           // Update state based on phase
           if (streamStatus.phase === 'generating') {
@@ -242,6 +264,10 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
           if (streamStatus.overallProgress >= 1) {
             setStatus('ready');
             setGenerationProgress(0);
+            // Clear chunk state when done
+            setChunks([]);
+            setChunkStates([]);
+            setCurrentChunk(0);
           }
         }
       );
@@ -250,12 +276,18 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       if (isMounted.current) {
         setStatus('ready');
         setGenerationProgress(0);
+        setChunks([]);
+        setChunkStates([]);
+        setCurrentChunk(0);
       }
     } catch (err) {
       console.error('[TTS] Speak error:', err);
       setError(err instanceof Error ? err.message : 'Speech failed');
       setStatus('ready');
       setGenerationProgress(0);
+      setChunks([]);
+      setChunkStates([]);
+      setCurrentChunk(0);
     }
   }, [status, voiceId, speed]);
 
@@ -263,8 +295,15 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   const stop = useCallback(async (): Promise<void> => {
     try {
       await KokoroOnnx.stopStreaming();
-      if (isMounted.current && status === 'speaking') {
-        setStatus('ready');
+      if (isMounted.current) {
+        if (status === 'speaking' || status === 'generating') {
+          setStatus('ready');
+        }
+        // Reset chunk state
+        setChunks([]);
+        setChunkStates([]);
+        setCurrentChunk(0);
+        setGenerationProgress(0);
       }
     } catch (err) {
       console.error('[TTS] Stop error:', err);
@@ -280,6 +319,10 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     stop,
     download,
     isAvailable,
+    // Chunk info for visual highlighting
+    chunks,
+    chunkStates,
+    currentChunk,
   };
 }
 

@@ -74,5 +74,6 @@ export {
   prepareRecommendationsForTTS,
   type TTSStatus,
   type UseTTSReturn,
-  type UseTTSOptions
+  type UseTTSOptions,
+  type ChunkState
 } from './useTTS';

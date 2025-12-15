@@ -46,7 +46,8 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import ScanningOverlay from "../../components/ScanningOverlay";
 import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
-import { prepareNextStepsForTTS, prepareTextForTTS, prepareRecommendationsForTTS } from "../../../utils/tts";
+import { prepareNextStepsForTTS, prepareTextForTTS, prepareRecommendationsForTTS, useTTS, splitTextIntoChunks } from "../../../utils/tts";
+import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 /**
@@ -246,10 +247,46 @@ function renderAssessmentCards(
     return { label: null, content: item };
   };
 
-  // Next Steps Card - Display AI's original format organically
+  // Next Steps Card - Display AI's original format organically with TTS highlighting
   const NextStepsCard = ({ items }: { items: string[] }) => {
     // Prepare text for TTS
     const ttsText = prepareNextStepsForTTS(items);
+
+    // Get TTS state for highlighting
+    const {
+      status: ttsStatus,
+      speak,
+      stop,
+      chunks: ttsChunks,
+      chunkStates: ttsChunkStates,
+      isAvailable: ttsAvailable,
+    } = useTTS();
+
+    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+
+    const handleTTSPress = async () => {
+      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+        await stop();
+      } else if (ttsStatus === 'ready' && ttsText) {
+        await speak(ttsText);
+      }
+    };
+
+    // Determine button text and icon based on status
+    const getButtonContent = () => {
+      switch (ttsStatus) {
+        case 'generating':
+          return { text: 'Stop', icon: 'stop-circle' as const, color: '#DC3545' };
+        case 'speaking':
+          return { text: 'Stop', icon: 'stop-circle' as const, color: '#DC3545' };
+        case 'ready':
+          return { text: 'Listen', icon: 'volume-medium' as const, color: '#2A7DE1' };
+        default:
+          return null;
+      }
+    };
+
+    const buttonContent = getButtonContent();
 
     return (
       <View style={styles.nextStepsCard}>
@@ -257,27 +294,59 @@ function renderAssessmentCards(
           <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
             Next Steps
           </Text>
-          {ttsText && (
-            <TTSButton text={ttsText} compact style={styles.ttsButton} />
+          {ttsText && ttsAvailable && buttonContent && (
+            <TouchableOpacity
+              style={[
+                styles.inlineTtsButton,
+                isTTSActive && styles.inlineTtsButtonActive
+              ]}
+              onPress={handleTTSPress}
+              activeOpacity={0.7}
+            >
+              {ttsStatus === 'generating' ? (
+                <ActivityIndicator size="small" color="#2A7DE1" />
+              ) : (
+                <Ionicons name={buttonContent.icon} size={16} color={buttonContent.color} />
+              )}
+              <Text style={[
+                styles.inlineTtsButtonText,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+                isTTSActive && styles.inlineTtsButtonTextActive
+              ]}>
+                {buttonContent.text}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
-        {items.map((item, idx) => {
-          const { label, content } = parseStepItem(item);
-          return (
-            <View key={idx} style={styles.stepRow}>
-              <View style={styles.stepContent}>
-                {label && (
-                  <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {label}
+
+        {/* Show TTS highlighted text when active */}
+        {isTTSActive && ttsChunks.length > 0 ? (
+          <TTSHighlightedText
+            chunks={ttsChunks}
+            chunkStates={ttsChunkStates}
+            isActive={isTTSActive}
+            containerStyle={styles.ttsHighlightContainer}
+          />
+        ) : (
+          // Normal text rendering when TTS is not active
+          items.map((item, idx) => {
+            const { label, content } = parseStepItem(item);
+            return (
+              <View key={idx} style={styles.stepRow}>
+                <View style={styles.stepContent}>
+                  {label && (
+                    <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      {label}
+                    </Text>
+                  )}
+                  <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {content}
                   </Text>
-                )}
-                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {content}
-                </Text>
+                </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </View>
     );
   };
@@ -2037,6 +2106,33 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
     paddingVertical: 4,
     paddingHorizontal: 8,
+  },
+  // Inline TTS button styles
+  inlineTtsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "#F0F7FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    gap: 6,
+  },
+  inlineTtsButtonActive: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#2A7DE1",
+  },
+  inlineTtsButtonTextActive: {
+    color: "#DC3545",
+  },
+  ttsHighlightContainer: {
+    marginTop: 8,
   },
   accordionTitle: {
     fontSize: 15,

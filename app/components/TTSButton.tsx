@@ -32,8 +32,6 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
   const {
     status,
     downloadProgress,
-    generationProgress,
-    error,
     speak,
     stop,
     download,
@@ -126,9 +124,8 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     );
   }
 
-  // Generating state - show progress and allow cancel
+  // Generating state - show spinner without percentage (visual feedback is on text)
   if (status === 'generating') {
-    const progressPercent = Math.round(generationProgress * 100);
     return (
       <TouchableOpacity
         style={[styles.button, styles.generatingButton, style]}
@@ -137,7 +134,7 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
       >
         <ActivityIndicator size="small" color="#2A7DE1" />
         <Text style={[styles.buttonText, styles.generatingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Generating... {progressPercent}%
+          {compact ? 'Stop' : 'Generating...'}
         </Text>
       </TouchableOpacity>
     );

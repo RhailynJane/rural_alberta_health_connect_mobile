@@ -183,6 +183,8 @@ export interface ChunkedStreamStatus extends StreamStatus {
   overallProgress: number;
   phase: 'generating' | 'playing';
   generationProgress: number; // 0-1 during generation phase
+  chunks: string[]; // Array of text chunks for UI highlighting
+  chunkStates: ('pending' | 'generating' | 'playing' | 'completed')[]; // State of each chunk
 }
 
 /**
@@ -1061,10 +1063,12 @@ class KokoroOnnx {
       if (this.audioCache.has(cacheKey)) {
         console.log('[TTS] Using cached audio (instant playback)');
         const cachedUris = this.audioCache.get(cacheKey)!;
+        const cachedChunkStates: ('pending' | 'generating' | 'playing' | 'completed')[] =
+          chunks.map(() => 'pending');
 
         for (let i = 0; i < cachedUris.length; i++) {
           if (!this.isStreaming) break;
-          await this._playChunk(cachedUris[i], i, totalChunks, onProgress, 0, 0);
+          await this._playChunk(cachedUris[i], i, totalChunks, onProgress, 0, 0, chunks, cachedChunkStates);
         }
 
         this.isStreaming = false;
@@ -1078,6 +1082,10 @@ class KokoroOnnx {
       const firstChunkStartTime = Date.now();
       console.log(`[TTS] Pipeline mode: generate while playing...`);
 
+      // Initialize chunk states - all pending except first which is generating
+      const chunkStates: ('pending' | 'generating' | 'playing' | 'completed')[] =
+        chunks.map((_, i) => i === 0 ? 'generating' : 'pending');
+
       // Report initial generating state
       if (onProgress) {
         onProgress({
@@ -1085,6 +1093,7 @@ class KokoroOnnx {
           position: 0, duration: 0, phonemes: '',
           currentChunk: 1, totalChunks, overallProgress: 0,
           phase: 'generating', generationProgress: 0,
+          chunks, chunkStates: [...chunkStates],
         });
       }
 
@@ -1118,6 +1127,11 @@ class KokoroOnnx {
 
         console.log(`[TTS] Playing chunk ${i + 1}/${totalChunks} (${nextChunkPromise ? 'next generating' : 'last chunk'})...`);
 
+        // Update state: next chunk starts generating (if applicable)
+        if (i + 1 < totalChunks && chunkStates[i + 1] === 'pending') {
+          chunkStates[i + 1] = 'generating';
+        }
+
         // Play current chunk (while next chunk generates in parallel on JS event loop)
         await this._playChunk(
           currentAudio.audioUri,
@@ -1125,7 +1139,9 @@ class KokoroOnnx {
           totalChunks,
           onProgress,
           avgTokensPerSecond,
-          firstChunkTimeToFirstToken
+          firstChunkTimeToFirstToken,
+          chunks,
+          chunkStates
         );
 
         // Prepare for next iteration
@@ -1189,8 +1205,13 @@ class KokoroOnnx {
     totalChunks: number,
     onProgress: ((status: ChunkedStreamStatus) => void) | null,
     tokensPerSecond: number,
-    timeToFirstToken: number
+    timeToFirstToken: number,
+    chunks: string[],
+    chunkStates: ('pending' | 'generating' | 'playing' | 'completed')[]
   ): Promise<void> {
+    // Update state: current chunk is now playing
+    chunkStates[chunkIndex] = 'playing';
+
     return new Promise<void>((resolve, reject) => {
       Audio.Sound.createAsync(
         { uri: audioUri },
@@ -1212,10 +1233,14 @@ class KokoroOnnx {
               overallProgress,
               phase: 'playing',
               generationProgress: 1,
+              chunks,
+              chunkStates: [...chunkStates],
             });
           }
 
           if (status.isLoaded && status.didJustFinish) {
+            // Mark chunk as completed
+            chunkStates[chunkIndex] = 'completed';
             resolve();
           }
         }
@@ -1369,12 +1394,17 @@ class KokoroOnnx {
     const cachedUris = this.audioCache.get(cacheKey)!;
     const totalChunks = cachedUris.length;
 
+    // Reconstruct chunks for UI highlighting
+    const chunks = splitTextIntoChunks(text);
+    const chunkStates: ('pending' | 'generating' | 'playing' | 'completed')[] =
+      chunks.map(() => 'pending');
+
     console.log(`[TTS] Playing cached audio instantly (${totalChunks} chunks)`);
 
     try {
       for (let i = 0; i < totalChunks; i++) {
         if (!this.isStreaming) break;
-        await this._playChunk(cachedUris[i], i, totalChunks, onProgress, 0, 0);
+        await this._playChunk(cachedUris[i], i, totalChunks, onProgress, 0, 0, chunks, chunkStates);
       }
 
       this.isStreaming = false;
