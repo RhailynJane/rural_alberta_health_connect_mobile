@@ -102,7 +102,7 @@ const COMMON_WORD_PHONEMES: Record<string, string> = {
   'the': 'ðə',
   'kokoro': 'kˈoʊkəɹoʊ',
   'text': 'tˈɛkst',
-  'to': 'tˈuː',
+  'to': 'tə',
   'speech': 'spˈiːtʃ',
   'system': 'sˈɪstəm',
   'running': 'ɹˈʌnɪŋ',
