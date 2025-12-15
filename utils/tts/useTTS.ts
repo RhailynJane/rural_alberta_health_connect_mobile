@@ -267,6 +267,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   return {
     status,
     downloadProgress,
+    generationProgress,
     error,
     speak,
     stop,
