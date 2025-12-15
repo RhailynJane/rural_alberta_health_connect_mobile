@@ -16,6 +16,7 @@ export type TTSStatus =
   | 'downloading'     // Download in progress
   | 'loading'         // Loading model into memory
   | 'ready'           // Ready to use
+  | 'generating'      // Generating audio chunks
   | 'speaking'        // Currently playing audio
   | 'error';          // Error state
 
