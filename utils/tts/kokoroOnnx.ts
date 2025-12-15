@@ -207,8 +207,8 @@ export interface ChunkedStreamStatus extends StreamStatus {
 
 /**
  * Split text into optimized chunks for TTS processing
- * Combines multiple sentences into larger chunks (300-400 chars) to reduce inference calls
- * while still respecting natural sentence boundaries
+ * First chunk is smaller for faster initial audio response
+ * Subsequent chunks combine multiple sentences to reduce inference calls
  */
 export function splitTextIntoChunks(text: string): string[] {
   if (!text) {
@@ -219,7 +219,7 @@ export function splitTextIntoChunks(text: string): string[] {
   const cleanText = text.trim().replace(/\s+/g, ' ');
 
   // If text is short enough, return as single chunk
-  if (cleanText.length <= MAX_CHUNK_CHAR_LENGTH) {
+  if (cleanText.length <= FIRST_CHUNK_CHAR_LENGTH) {
     return [cleanText];
   }
 
@@ -228,15 +228,20 @@ export function splitTextIntoChunks(text: string): string[] {
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
-  // Combine sentences into optimal-sized chunks
+  // Combine sentences into chunks - first chunk smaller for faster first audio
   const chunks: string[] = [];
   let currentChunk = '';
+  let isFirstChunk = true;
 
   for (const sentence of sentences) {
+    // Use smaller target for first chunk, normal for subsequent
+    const targetSize = isFirstChunk ? FIRST_CHUNK_CHAR_LENGTH : OPTIMAL_CHUNK_CHAR_LENGTH;
+
     // If adding this sentence would exceed max, start a new chunk
     if (currentChunk.length + sentence.length + 1 > MAX_CHUNK_CHAR_LENGTH) {
       if (currentChunk) {
         chunks.push(currentChunk.trim());
+        isFirstChunk = false;
       }
       // If single sentence is too long, split it further
       if (sentence.length > MAX_CHUNK_CHAR_LENGTH) {
@@ -245,7 +250,10 @@ export function splitTextIntoChunks(text: string): string[] {
         let clauseChunk = '';
         for (const clause of clauses) {
           if (clauseChunk.length + clause.length + 1 > MAX_CHUNK_CHAR_LENGTH) {
-            if (clauseChunk) chunks.push(clauseChunk.trim());
+            if (clauseChunk) {
+              chunks.push(clauseChunk.trim());
+              isFirstChunk = false;
+            }
             clauseChunk = clause;
           } else {
             clauseChunk = clauseChunk ? `${clauseChunk} ${clause}` : clause;
@@ -260,10 +268,11 @@ export function splitTextIntoChunks(text: string): string[] {
       currentChunk = currentChunk ? `${currentChunk} ${sentence}` : sentence;
     }
 
-    // If we've reached optimal size, consider starting new chunk at next sentence
-    if (currentChunk.length >= OPTIMAL_CHUNK_CHAR_LENGTH) {
+    // If we've reached target size, consider starting new chunk at next sentence
+    if (currentChunk.length >= targetSize) {
       chunks.push(currentChunk.trim());
       currentChunk = '';
+      isFirstChunk = false;
     }
   }
 
