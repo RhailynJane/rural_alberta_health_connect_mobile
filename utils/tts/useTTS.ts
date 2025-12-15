@@ -434,6 +434,8 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     currentChunk,
     // Track if audio has been played
     hasPlayed,
+    // True if another TTS instance is playing (disable this button)
+    isOtherPlaying,
   };
 }
 
