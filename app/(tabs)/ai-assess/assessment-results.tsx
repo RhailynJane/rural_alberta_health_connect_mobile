@@ -973,31 +973,27 @@ const carouselStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // Frosted glass pill - light and airy
+  // Frosted glass pill - calm blue tint
   indicatorsPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.45)",
-    // Soft shadow for lift
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "rgba(90, 140, 190, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(90, 140, 190, 0.18)",
   },
   indicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.6)",
+    backgroundColor: "rgba(90, 140, 190, 0.35)",
   },
   indicatorActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    width: 18,
+    backgroundColor: "#6B9AC8",
+    width: 16,
     borderRadius: 3,
   },
 });
