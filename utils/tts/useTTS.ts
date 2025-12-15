@@ -23,6 +23,7 @@ export type TTSStatus =
 export interface UseTTSReturn {
   status: TTSStatus;
   downloadProgress: number;
+  generationProgress: number; // 0-1 during generating phase
   error: string | null;
   speak: (text: string) => Promise<void>;
   stop: () => Promise<void>;
