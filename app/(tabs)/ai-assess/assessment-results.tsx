@@ -6,11 +6,15 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
     Image,
     LayoutAnimation,
+    LayoutChangeEvent,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     Platform,
     ScrollView,
     StyleSheet,
@@ -40,7 +44,11 @@ import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
+import ScanningOverlay from "../../components/ScanningOverlay";
+import TTSButton from "../../components/TTSButton";
 import { FONTS } from "../../constants/constants";
+import { prepareNextStepsForTTS, prepareTextForTTS, prepareRecommendationsForTTS, useTTS, splitTextIntoChunks } from "../../../utils/tts";
+import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 /**
@@ -120,6 +128,357 @@ const getDurationDisplay = (duration: string): string => {
 const cleanGeminiResponse = (text: string): string => {
   return text.replace(/\*\*/g, "");
 };
+
+// ═══════════════════════════════════════════════════════════
+// MEMOIZED CARD COMPONENTS - Stable references to prevent TTS unmount
+// ═══════════════════════════════════════════════════════════
+
+// Helper: Parse step item to extract header prefix (e.g., "Today:", "Within 24-48 hours:")
+const parseStepItem = (item: string): { label: string | null; content: string } => {
+  const match = item.match(/^([^:]{1,30}):\s*(.+)$/);
+  if (match) {
+    return { label: match[1].trim(), content: match[2].trim() };
+  }
+  return { label: null, content: item };
+};
+
+// Helper: Prepare section items for TTS
+const prepareSectionForTTS = (title: string, items: string[]): string => {
+  if (!items.length) return '';
+  const cleanedItems = items.map(item => prepareTextForTTS(item)).filter(Boolean);
+  return `${title}. ${cleanedItems.join('. ')}`;
+};
+
+// NextStepsCard - Memoized to prevent unmount on parent re-render
+interface NextStepsCardProps {
+  items: string[];
+}
+
+const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps) {
+  const ttsText = prepareNextStepsForTTS(items);
+
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop]);
+
+  return (
+    <View style={styles.nextStepsCard}>
+      <View style={styles.nextStepsHeader}>
+        <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          Next Steps
+        </Text>
+        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+          <>
+            {ttsStatus === 'generating' && (
+              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <ActivityIndicator size="small" color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'speaking' && (
+              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <Ionicons name="pause" size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'ready' && (
+              <TouchableOpacity
+                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                onPress={handleTTSPress}
+                activeOpacity={isDisabled ? 1 : 0.7}
+                disabled={isDisabled}
+              >
+                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                  {ttsHasPlayed ? 'Replay' : 'Listen'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+
+      {isTTSActive && ttsChunks.length > 0 ? (
+        <TTSHighlightedText
+          chunks={ttsChunks}
+          chunkStates={ttsChunkStates}
+          isActive={isTTSActive}
+          containerStyle={styles.ttsHighlightContainer}
+          parentPadding={20}
+        />
+      ) : (
+        items.map((item, idx) => {
+          const { label, content } = parseStepItem(item);
+          return (
+            <View key={idx} style={styles.stepRow}>
+              <View style={styles.stepContent}>
+                {label && (
+                  <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {label}
+                  </Text>
+                )}
+                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {content}
+                </Text>
+              </View>
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
+});
+
+// PrimaryCard - Memoized for stable reference
+interface PrimaryCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+}
+
+const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCardProps) {
+  const ttsText = prepareRecommendationsForTTS(items, 4);
+
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop]);
+
+  return (
+    <View style={styles.primaryAssessmentCard}>
+      <View style={styles.nextStepsHeader}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {icon}
+          <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        </View>
+        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+          <>
+            {ttsStatus === 'generating' && (
+              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <ActivityIndicator size="small" color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'speaking' && (
+              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <Ionicons name="pause" size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'ready' && (
+              <TouchableOpacity
+                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                onPress={handleTTSPress}
+                activeOpacity={isDisabled ? 1 : 0.7}
+                disabled={isDisabled}
+              >
+                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                  {ttsHasPlayed ? 'Replay' : 'Listen'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+
+      {isTTSActive && ttsChunks.length > 0 ? (
+        <TTSHighlightedText
+          chunks={ttsChunks}
+          chunkStates={ttsChunkStates}
+          isActive={isTTSActive}
+          asBulletList={true}
+          containerStyle={styles.ttsHighlightContainer}
+          parentPadding={16}
+        />
+      ) : (
+        items.slice(0, 4).map((it, idx) => (
+          <View key={idx} style={styles.cardItem}>
+            <Text style={styles.bulletPoint}>•</Text>
+            <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              {it}
+            </Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+});
+
+// AccordionCard - Memoized for stable reference
+interface AccordionCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+  sectionKey: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  isPremium: boolean;
+  onUpgradePress?: () => void;
+}
+
+const AccordionCard = memo(function AccordionCard({
+  title,
+  items,
+  icon,
+  sectionKey,
+  isExpanded,
+  onToggle,
+  isPremium,
+  onUpgradePress,
+}: AccordionCardProps) {
+  const previewCount = 2;
+  const hasMoreContent = items.length > previewCount;
+  const previewItems = items.slice(0, previewCount);
+  const showUpgrade = !isPremium && hasMoreContent && isExpanded;
+
+  const visibleItems = isPremium ? items : previewItems;
+  const ttsText = prepareSectionForTTS(title, visibleItems);
+
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop]);
+
+  return (
+    <View style={[styles.accordionCard, !isPremium && styles.accordionCardPremium]}>
+      <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
+        <View style={styles.accordionHeaderLeft}>
+          {icon}
+          <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          {!isPremium && hasMoreContent && (
+            <View style={styles.premiumBadge}>
+              <Text style={[styles.premiumBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Advanced
+              </Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.accordionHeaderRight}>
+          {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+            <>
+              {ttsStatus === 'generating' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <ActivityIndicator size="small" color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'speaking' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <Ionicons name="pause" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'ready' && (
+                <TouchableOpacity
+                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                  onPress={handleTTSPress}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
+                >
+                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                    {ttsHasPlayed ? 'Replay' : 'Listen'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+          <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+        </View>
+      </TouchableOpacity>
+      {isExpanded && (
+        <View style={styles.accordionContent}>
+          {isTTSActive && ttsChunks.length > 0 ? (
+            <TTSHighlightedText
+              chunks={ttsChunks}
+              chunkStates={ttsChunkStates}
+              isActive={isTTSActive}
+              asBulletList={true}
+              containerStyle={styles.ttsHighlightContainer}
+              parentPadding={14}
+            />
+          ) : (
+            visibleItems.map((it, idx) => (
+              <View key={idx} style={styles.cardItem}>
+                <Text style={styles.bulletPoint}>•</Text>
+                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))
+          )}
+
+          {showUpgrade && !isTTSActive && (
+            <View style={styles.premiumUpgradeContainer}>
+              <Text style={[styles.premiumMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                {items.length - previewCount} more insights available
+              </Text>
+              <TouchableOpacity style={styles.premiumUpgradeLink} onPress={onUpgradePress} activeOpacity={0.7}>
+                <Text style={[styles.premiumUpgradeLinkText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  See upgrade options →
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
+// ═══════════════════════════════════════════════════════════
+// END MEMOIZED CARD COMPONENTS
+// ═══════════════════════════════════════════════════════════
 
 // Render assessment as separate cards with priority sections at top and accordions for details
 function renderAssessmentCards(
@@ -230,195 +589,6 @@ function renderAssessmentCards(
     console.log(`${key}: ${sections[key as SectionKey].length} items`);
   });
 
-  // Categorize Next Steps into 3 clear time-based steps
-  const categorizeNextSteps = (items: string[]) => {
-    const steps = {
-      doNow: [] as string[],
-      within48: [] as string[],
-      seekCare: [] as string[],
-    };
-
-    items.forEach(item => {
-      const lower = item.toLowerCase();
-
-      // "Seek care if" patterns
-      if (lower.includes('if symptoms') || lower.includes('seek') || lower.includes('worsen') ||
-          lower.includes('persist') || lower.includes('go to') || lower.includes('contact') ||
-          lower.includes('call 911') || lower.includes('emergency') || lower.includes('urgent')) {
-        const cleaned = item
-          .replace(/^(if symptoms?[^:]*:|seek[^:]*:|urgent[^:]*:|when to[^:]*:)\s*/i, '')
-          .trim();
-        steps.seekCare.push(cleaned);
-      }
-      // "Within 24-48 hours" patterns
-      else if (lower.includes('within') || lower.includes('24') || lower.includes('48') ||
-               lower.includes('tomorrow') || lower.includes('follow') || lower.includes('monitor') ||
-               lower.includes('reassess') || lower.includes('watch for') || lower.includes('next day')) {
-        const cleaned = item
-          .replace(/^(within[^:]*:|follow[- ]?up:?|reassess:?)\s*/i, '')
-          .trim();
-        steps.within48.push(cleaned);
-      }
-      // "Do now" - immediate actions
-      else {
-        const cleaned = item
-          .replace(/^(today:|now:|immediately:)\s*/i, '')
-          .trim();
-        steps.doNow.push(cleaned);
-      }
-    });
-
-    return steps;
-  };
-
-  // Next Steps Card - Clear 3-step timeline
-  const NextStepsCard = ({ items }: { items: string[] }) => {
-    const steps = categorizeNextSteps(items);
-
-    const StepRow = ({ stepNumber, label, content }: {
-      stepNumber: number;
-      label: string;
-      content: string[];
-    }) => {
-      if (content.length === 0) return null;
-
-      return (
-        <View style={styles.stepRow}>
-          <View style={styles.stepNumberContainer}>
-            <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {stepNumber}
-            </Text>
-          </View>
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              {label}
-            </Text>
-            <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-              {content[0]}
-            </Text>
-          </View>
-        </View>
-      );
-    };
-
-    // Calculate step numbers dynamically based on which steps have content
-    let stepNum = 0;
-
-    return (
-      <View style={styles.nextStepsCard}>
-        <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-          Next Steps
-        </Text>
-        {steps.doNow.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Do now" content={steps.doNow} />
-        )}
-        {steps.within48.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Within 24–48 hours" content={steps.within48} />
-        )}
-        {steps.seekCare.length > 0 && (
-          <StepRow stepNumber={++stepNum} label="Seek care if" content={steps.seekCare} />
-        )}
-      </View>
-    );
-  };
-
-  // Standard Card Component (for Recommendations)
-  const PrimaryCard = ({ title, items, icon }: {
-    title: string;
-    items: string[];
-    icon: React.ReactNode;
-  }) => (
-    <View style={styles.primaryAssessmentCard}>
-      <View style={styles.primaryCardHeader}>
-        {icon}
-        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-      </View>
-      {items.slice(0, 4).map((it, idx) => (
-        <View key={idx} style={styles.cardItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-            {it}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-
-  // Accordion Component with Premium Gating (for secondary sections)
-  const AccordionCard = ({ title, items, icon, sectionKey }: {
-    title: string;
-    items: string[];
-    icon: React.ReactNode;
-    sectionKey: string;
-  }) => {
-    const isExpanded = expandedSections[sectionKey] || false;
-    const previewCount = 2; // Show 2 items as preview
-    const hasMoreContent = items.length > previewCount;
-    const previewItems = items.slice(0, previewCount);
-    const showUpgrade = !isPremium && hasMoreContent && isExpanded;
-
-    return (
-      <View style={[
-        styles.accordionCard,
-        !isPremium && styles.accordionCardPremium
-      ]}>
-        <TouchableOpacity
-          style={styles.accordionHeader}
-          onPress={() => toggleSection(sectionKey)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.accordionHeaderLeft}>
-            {icon}
-            <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-            {!isPremium && hasMoreContent && (
-              <View style={styles.premiumBadge}>
-                <Text style={[styles.premiumBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Advanced
-                </Text>
-              </View>
-            )}
-          </View>
-          <Ionicons
-            name={isExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#6B7280"
-          />
-        </TouchableOpacity>
-        {isExpanded && (
-          <View style={styles.accordionContent}>
-            {/* Show preview items (always visible) */}
-            {(isPremium ? items : previewItems).map((it, idx) => (
-              <View key={idx} style={styles.cardItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {it}
-                </Text>
-              </View>
-            ))}
-
-            {/* Premium upgrade prompt - soft, non-aggressive */}
-            {showUpgrade && (
-              <View style={styles.premiumUpgradeContainer}>
-                <Text style={[styles.premiumMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {items.length - previewCount} more insights available
-                </Text>
-                <TouchableOpacity
-                  style={styles.premiumUpgradeLink}
-                  onPress={onUpgradePress}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.premiumUpgradeLinkText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    See upgrade options →
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
-
   const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
     'CLINICAL ASSESSMENT': { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
     'VISUAL FINDINGS': { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
@@ -505,6 +675,10 @@ function renderAssessmentCards(
                 items={sections[key]}
                 icon={icons[key].icon}
                 sectionKey={key}
+                isExpanded={expandedSections[key] || false}
+                onToggle={() => toggleSection(key)}
+                isPremium={isPremium}
+                onUpgradePress={onUpgradePress}
               />
             ) : null
           ))}
@@ -518,11 +692,296 @@ function renderAssessmentCards(
           items={sections['OTHER']}
           icon={icons['OTHER'].icon}
           sectionKey="OTHER"
+          isExpanded={expandedSections['OTHER'] || false}
+          onToggle={() => toggleSection('OTHER')}
+          isPremium={isPremium}
+          onUpgradePress={onUpgradePress}
         />
       )}
     </View>
   );
 }
+
+// ═══════════════════════════════════════════════════════════
+// IMAGE CAROUSEL COMPONENT - Horizontal slideshow for all images
+// ═══════════════════════════════════════════════════════════
+interface ImageCarouselProps {
+  photos: string[];
+  yoloResult: PipelineResult | null;
+  activeIndex: number;
+  onIndexChange: (index: number) => void;
+}
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CAROUSEL_PADDING = 40; // 20px padding on each side
+const IMAGE_WIDTH = SCREEN_WIDTH - CAROUSEL_PADDING;
+
+// Calculate where image renders within container using "contain" mode
+function calculateContainLayout(
+  containerWidth: number,
+  containerHeight: number,
+  imageWidth: number,
+  imageHeight: number
+) {
+  if (!containerWidth || !containerHeight || !imageWidth || !imageHeight) {
+    return null;
+  }
+
+  const containerAspect = containerWidth / containerHeight;
+  const imageAspect = imageWidth / imageHeight;
+
+  let renderedWidth: number;
+  let renderedHeight: number;
+
+  if (imageAspect > containerAspect) {
+    // Image is wider - fit to width
+    renderedWidth = containerWidth;
+    renderedHeight = containerWidth / imageAspect;
+  } else {
+    // Image is taller - fit to height
+    renderedHeight = containerHeight;
+    renderedWidth = containerHeight * imageAspect;
+  }
+
+  return {
+    offsetX: (containerWidth - renderedWidth) / 2,
+    offsetY: (containerHeight - renderedHeight) / 2,
+    scaleX: renderedWidth / imageWidth,
+    scaleY: renderedHeight / imageHeight,
+  };
+}
+
+// Get color for detection class (same as ScanningOverlay)
+function getDetectionColor(className: string): string {
+  const colorMap: Record<string, string> = {
+    '1st degree burn': '#FF9500',
+    '2nd degree burn': '#FF6B00',
+    '3rd degree burn': '#FF3B30',
+    'Rashes': '#FF2D92',
+    'abrasion': '#34C759',
+    'bruise': '#AF52DE',
+    'cut': '#30D158',
+    'frostbite': '#5AC8FA',
+  };
+  return colorMap[className] || '#2A7DE1';
+}
+
+function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: ImageCarouselProps) {
+  // Track container layout and image dimensions for label positioning
+  const [containerLayout, setContainerLayout] = useState({ width: 0, height: 0 });
+  const [imageDimensions, setImageDimensions] = useState<Record<number, { width: number; height: number }>>({});
+
+  // Fetch image dimensions for all photos
+  useEffect(() => {
+    photos.forEach((uri, index) => {
+      // For annotated images (base64), get dimensions from the result
+      const result = yoloResult?.results[index];
+      if (result?.annotatedImageBase64) {
+        // Use original image dimensions from preprocessing if available
+        const originalDims = result.originalDimensions;
+        if (originalDims) {
+          setImageDimensions(prev => ({
+            ...prev,
+            [index]: { width: originalDims.width, height: originalDims.height },
+          }));
+          return;
+        }
+      }
+      // Fallback: get dimensions from URI
+      Image.getSize(
+        uri,
+        (width, height) => {
+          setImageDimensions(prev => ({
+            ...prev,
+            [index]: { width, height },
+          }));
+        },
+        () => {} // Ignore errors
+      );
+    });
+  }, [photos, yoloResult]);
+
+  // Handle container layout
+  const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setContainerLayout({ width, height });
+  }, []);
+
+  // Get image source for each photo (annotated if available, original otherwise)
+  const getImageSource = (index: number) => {
+    const result = yoloResult?.results[index];
+    const hasAnnotated = result?.annotatedImageBase64 && result.annotatedImageBase64.length > 0;
+    return hasAnnotated
+      ? { uri: `data:image/jpeg;base64,${result.annotatedImageBase64}` }
+      : { uri: photos[index] };
+  };
+
+  // Handle scroll end to update active index
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const contentOffsetX = event.nativeEvent.contentOffset.x;
+    const newIndex = Math.round(contentOffsetX / IMAGE_WIDTH);
+    if (newIndex !== activeIndex && newIndex >= 0 && newIndex < photos.length) {
+      onIndexChange(newIndex);
+    }
+  };
+
+  // Render detection labels for an image
+  const renderDetectionLabels = (index: number) => {
+    const result = yoloResult?.results[index];
+    const detections = result?.detections || [];
+    const dims = imageDimensions[index];
+
+    if (!detections.length || !dims || !containerLayout.width || !containerLayout.height) {
+      return null;
+    }
+
+    // Image is now edge-to-edge, no wrapper padding
+    const IMAGE_HEIGHT = 280;
+    const layout = calculateContainLayout(
+      containerLayout.width,
+      IMAGE_HEIGHT,
+      dims.width,
+      dims.height
+    );
+
+    if (!layout) return null;
+
+    const { offsetX, offsetY, scaleX, scaleY } = layout;
+
+    return detections.map((detection, idx) => {
+      const { x1, y1 } = detection.boxCorners;
+      // Position label at top-left of bounding box
+      const labelX = offsetX + x1 * scaleX;
+      const labelY = offsetY + y1 * scaleY;
+
+      return (
+        <View
+          key={idx}
+          style={[
+            carouselStyles.detectionLabel,
+            {
+              backgroundColor: getDetectionColor(detection.className),
+              left: labelX,
+              top: Math.max(8, labelY - 24), // Position above the box with min padding
+            },
+          ]}
+        >
+          <Text style={carouselStyles.detectionLabelText}>
+            {detection.className}
+          </Text>
+        </View>
+      );
+    });
+  };
+
+  return (
+    <View style={carouselStyles.container}>
+      {/* Horizontal Image Scroll */}
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleScroll}
+        decelerationRate="fast"
+        snapToInterval={IMAGE_WIDTH}
+        snapToAlignment="start"
+      >
+        {photos.map((_, index) => (
+          <View
+            key={index}
+            style={[carouselStyles.imageSlide, { width: IMAGE_WIDTH }]}
+            onLayout={handleContainerLayout}
+          >
+            <Image
+              source={getImageSource(index)}
+              style={carouselStyles.image}
+              resizeMode="contain"
+            />
+            {/* Detection labels overlay */}
+            {renderDetectionLabels(index)}
+          </View>
+        ))}
+      </ScrollView>
+
+      {/* Floating Page Indicators - Frosted Glass Pill */}
+      {photos.length > 1 && (
+        <View style={carouselStyles.indicatorsOverlay}>
+          <View style={carouselStyles.indicatorsPill}>
+            {photos.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  carouselStyles.indicator,
+                  index === activeIndex && carouselStyles.indicatorActive,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// Carousel-specific styles
+const carouselStyles = StyleSheet.create({
+  container: {
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+  imageSlide: {
+    position: "relative",
+  },
+  image: {
+    width: "100%",
+    height: 280,
+  },
+  detectionLabel: {
+    position: "absolute",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  detectionLabelText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  indicatorsOverlay: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Frosted glass pill - calm blue tint
+  indicatorsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: "rgba(90, 140, 190, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(90, 140, 190, 0.18)",
+  },
+  indicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(90, 140, 190, 0.35)",
+  },
+  indicatorActive: {
+    backgroundColor: "#6B9AC8",
+    width: 16,
+    borderRadius: 3,
+  },
+});
 
 export default function AssessmentResults() {
   const database = useWatermelonDatabase();
@@ -560,6 +1019,12 @@ export default function AssessmentResults() {
   const [isYoloProcessing, setIsYoloProcessing] = useState(false);
   const [yoloError, setYoloError] = useState<string | null>(null);
   const [yoloProgress, setYoloProgress] = useState<string>("");
+
+  // Image Carousel State
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Scanning Overlay State - shows scan animation before revealing results
+  const [showScanningOverlay, setShowScanningOverlay] = useState(true);
 
   // On-device LLM for offline assessment (Android only)
   // Using useWoundLLMStatic - only subscribes to isAvailable/isReady
@@ -1180,6 +1645,12 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
 
   const handleReturnHome = () => router.replace("/(tabs)/dashboard");
 
+  // Handle scanning overlay completion
+  const handleScanningComplete = () => {
+    console.log("✅ [ScanningOverlay] Scan complete, revealing carousel");
+    setShowScanningOverlay(false);
+  };
+
   // Calm, clinical care level indicators (not alarming)
   const getCareLevel = (severity: number) => {
     if (severity >= 9) return {
@@ -1231,50 +1702,6 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
     return nameMap[className] || className;
   };
 
-  // Generate primary diagnosis summary from detections
-  const getDiagnosisSummary = (yoloResult: PipelineResult | null) => {
-    if (!yoloResult || yoloResult.totalDetections === 0) {
-      return { primary: 'No injuries detected', detail: 'Image analysis complete' };
-    }
-
-    const byClass = yoloResult.summary.byClass;
-    const entries = Object.entries(byClass);
-
-    // Get the most common/significant finding
-    const sorted = entries.sort((a, b) => (b[1] as number) - (a[1] as number));
-    const [primaryClass, primaryCount] = sorted[0];
-    const friendlyName = getPatientFriendlyName(primaryClass);
-
-    // Total affected areas
-    const totalAreas = yoloResult.totalDetections;
-
-    // Build summary
-    const primary = `${friendlyName} detected`;
-    const detail = totalAreas === 1
-      ? '1 affected area identified'
-      : `${totalAreas} affected areas identified`;
-
-    return { primary, detail, totalAreas, friendlyName };
-  };
-
-  // Select best image to display (highest detection count or confidence)
-  const getBestImageIndex = (yoloResult: PipelineResult | null): number => {
-    if (!yoloResult || yoloResult.results.length <= 1) return 0;
-
-    let bestIndex = 0;
-    let bestScore = 0;
-
-    yoloResult.results.forEach((result, idx) => {
-      const score = result.detections.length;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = idx;
-      }
-    });
-
-    return bestIndex;
-  };
-
   const ResultCard = ({
     title,
     children,
@@ -1314,187 +1741,156 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
-          <ScrollView
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.contentSection}>
-              {/* ASSESSMENT SUMMARY - Clean, minimal */}
-              {(() => {
-                const diagnosis = getDiagnosisSummary(yoloResult);
-                const hasDetections = yoloResult && yoloResult.totalDetections > 0;
-
-                return (
-                  <View style={styles.summaryCard}>
-                    {/* Primary Diagnosis */}
-                    <Text style={[styles.diagnosisPrimary, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {hasDetections ? diagnosis.primary : 'Assessment complete'}
-                    </Text>
-
-                    {/* Supporting Detail */}
-                    <Text style={[styles.diagnosisDetail, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {hasDetections ? diagnosis.detail : 'No visible injuries detected'}
-                    </Text>
-                  </View>
-                );
-              })()}
-
-              {/* ═══════════════════════════════════════════════════════════
-                  EVIDENCE SECTION - Unified Image Card
-                  Smart display: shows best image, patient-friendly labels
-                  ═══════════════════════════════════════════════════════════ */}
-              {displayPhotos.length > 0 && (
-                <View style={styles.evidenceSection}>
-                  {/* Processing State */}
-                  {isYoloProcessing && (
-                    <View style={styles.yoloProcessingContainer}>
-                      <ActivityIndicator size="small" color="#2A7DE1" />
-                      <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        {yoloProgress || "Analyzing your images..."}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Error State */}
-                  {yoloError && (
-                    <View style={styles.yoloErrorContainer}>
-                      <Ionicons name="alert-circle" size={20} color="#DC3545" />
-                      <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Unable to analyze image
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Evidence Card - Single unified card */}
-                  {!isYoloProcessing && !yoloError && (() => {
-                    // Smart image selection: show best image only
-                    const bestIndex = getBestImageIndex(yoloResult);
-                    const bestResult = yoloResult?.results[bestIndex];
-                    const hasAnnotated = bestResult?.annotatedImageBase64 && bestResult.annotatedImageBase64.length > 0;
-                    const imageSource = hasAnnotated
-                      ? { uri: `data:image/jpeg;base64,${bestResult.annotatedImageBase64}` }
-                      : { uri: displayPhotos[bestIndex] };
-
-                    const hasDetections = yoloResult && yoloResult.totalDetections > 0;
-
-                    return (
-                      <View style={styles.evidenceCard}>
-                        {/* Section Label */}
-                        <Text style={[styles.evidenceLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {hasDetections ? 'Affected areas identified' : 'Image analysis'}
-                        </Text>
-
-                        {/* Image with annotations */}
-                        <View style={styles.evidenceImageWrapper}>
-                          <Image
-                            source={imageSource}
-                            style={styles.evidenceImage}
-                            resizeMode="contain"
-                          />
-                        </View>
-
-                        {/* Explanation */}
-                        <Text style={[styles.evidenceExplanation, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {hasDetections
-                            ? 'Highlighted areas show detected injury locations'
-                            : 'No injuries were detected in the analyzed image'}
+          {/* Scanning Overlay - Shows scan animation on each image before revealing results */}
+          {showScanningOverlay && displayPhotos.length > 0 ? (
+            <ScanningOverlay
+              visible={true}
+              images={displayPhotos}
+              yoloResult={yoloResult}
+              isYoloComplete={!isYoloProcessing && yoloResult !== null}
+              onComplete={handleScanningComplete}
+            />
+          ) : (
+            <ScrollView
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.contentSection}>
+                {/* ═══════════════════════════════════════════════════════════
+                    EVIDENCE SECTION - Horizontal Image Carousel
+                    Shows all images in a slideshow with indicators
+                    ═══════════════════════════════════════════════════════════ */}
+                {displayPhotos.length > 0 && (
+                  <View style={styles.evidenceSection}>
+                    {/* Processing State */}
+                    {isYoloProcessing && (
+                      <View style={styles.yoloProcessingContainer}>
+                        <ActivityIndicator size="small" color="#2A7DE1" />
+                        <Text style={[styles.yoloProcessingText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {yoloProgress || "Analyzing your images..."}
                         </Text>
                       </View>
-                    );
-                  })()}
-                </View>
-              )}
+                    )}
 
-              {/* Layer 2 & 3: Assessment Content */}
-              {isLoading ? (
-                <View style={styles.loadingCard}>
-                  <ActivityIndicator size="large" color="#2A7DE1" />
-                  <Text
-                    style={[
-                      styles.loadingText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    {isLLMGenerating
-                      ? "Generating assessment..."
-                      : "Analyzing your symptoms with AI assessment..."}
-                  </Text>
-                  {isLLMGenerating && (
-                    <View style={styles.offlineLLMIndicator}>
-                      <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
-                      <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Using on-device AI
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ) : (
-                <>
-                  {usedOfflineLLM && (
-                    <View style={styles.offlineNotice}>
-                      <Ionicons name="cloud-offline-outline" size={14} color="#6B7280" />
-                      <Text style={[styles.offlineNoticeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        Generated offline
-                      </Text>
-                    </View>
-                  )}
-                  {renderAssessmentCards(symptomContext, expandedSections, toggleSection, isPremium, handleUpgradePress)}
-                  {assessmentError && (
-                    <View style={styles.errorNote}>
-                      <Ionicons
-                        name="information-circle"
-                        size={16}
-                        color="#FF6B35"
+                    {/* Error State */}
+                    {yoloError && (
+                      <View style={styles.yoloErrorContainer}>
+                        <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                        <Text style={[styles.yoloErrorText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Unable to analyze images
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Image Carousel - Horizontal slideshow of all images */}
+                    {!isYoloProcessing && !yoloError && (
+                      <ImageCarousel
+                        photos={displayPhotos}
+                        yoloResult={yoloResult}
+                        activeIndex={activeImageIndex}
+                        onIndexChange={setActiveImageIndex}
                       />
-                      <Text
-                        style={[
-                          styles.errorNoteText,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Note: Unable to complete full AI analysis. For medical
-                        guidance, contact Health Link Alberta at 811.
-                      </Text>
-                    </View>
-                  )}
-                </>
-              )}
+                    )}
+                  </View>
+                )}
 
-              {/* Single Primary CTA */}
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={styles.primaryCTA}
-                  onPress={() => router.push("/(tabs)/tracker")}
-                >
-                  <Text
-                    style={[
-                      styles.primaryCTAText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Track Your Health
-                  </Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" />
-                </TouchableOpacity>
+                {/* Layer 2 & 3: Assessment Content */}
+                {isLoading ? (
+                  <View style={styles.loadingCard}>
+                    <ActivityIndicator size="large" color="#2A7DE1" />
+                    <Text
+                      style={[
+                        styles.loadingText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {isLLMGenerating
+                        ? "Generating assessment..."
+                        : "Analyzing your symptoms with AI assessment..."}
+                    </Text>
+                    {isLLMGenerating && (
+                      <View style={styles.offlineLLMIndicator}>
+                        <Ionicons name="hardware-chip" size={16} color="#FF6B35" />
+                        <Text style={[styles.offlineLLMText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Using on-device AI
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <>
+                    {usedOfflineLLM && (
+                      <View style={styles.offlineNotice}>
+                        <Ionicons name="cloud-offline-outline" size={14} color="#6B7280" />
+                        <Text style={[styles.offlineNoticeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Generated offline
+                        </Text>
+                      </View>
+                    )}
+                    {renderAssessmentCards(
+                      symptomContext,
+                      expandedSections,
+                      toggleSection,
+                      isPremium,
+                      handleUpgradePress
+                    )}
+                    {assessmentError && (
+                      <View style={styles.errorNote}>
+                        <Ionicons
+                          name="information-circle"
+                          size={16}
+                          color="#FF6B35"
+                        />
+                        <Text
+                          style={[
+                            styles.errorNoteText,
+                            { fontFamily: FONTS.BarlowSemiCondensed },
+                          ]}
+                        >
+                          Note: Unable to complete full AI analysis. For medical
+                          guidance, contact Health Link Alberta at 811.
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
 
-                <TouchableOpacity
-                  style={styles.secondaryCTA}
-                  onPress={handleReturnHome}
-                >
-                  <Text
-                    style={[
-                      styles.secondaryCTAText,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
+                {/* Single Primary CTA */}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.primaryCTA}
+                    onPress={() => router.push("/(tabs)/tracker")}
                   >
-                    Return to Dashboard
-                  </Text>
-                </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.primaryCTAText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Track Your Health
+                    </Text>
+                    <Ionicons name="arrow-forward" size={20} color="white" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.secondaryCTA}
+                    onPress={handleReturnHome}
+                  >
+                    <Text
+                      style={[
+                        styles.secondaryCTAText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Return to Dashboard
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
+            </ScrollView>
+          )}
         </View>
       </CurvedBackground>
       <BottomNavigation />
@@ -1777,25 +2173,6 @@ const styles = StyleSheet.create({
     color: "#666",
     fontWeight: "500",
   },
-  // ASSESSMENT SUMMARY - Clean, minimal
-  summaryCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  diagnosisPrimary: {
-    fontSize: 21,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 6,
-  },
-  diagnosisDetail: {
-    fontSize: 15,
-    color: "#6B7280",
-  },
   // ═══════════════════════════════════════════════════════════
   // EVIDENCE SECTION - Unified Image Card Styles
   // ═══════════════════════════════════════════════════════════
@@ -1999,6 +2376,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  accordionHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  accordionTtsButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  cardTtsButton: {
+    marginLeft: "auto",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  // Inline TTS button styles - minimal modern theme
+  inlineTtsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: "transparent",
+    gap: 5,
+    minHeight: 28,
+  },
+  inlineIconOnlyButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 6,
+    minWidth: 28,
+    minHeight: 28,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#22D3EE",
+    lineHeight: 16,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  ttsHighlightContainer: {
+    marginTop: 8,
+  },
   accordionTitle: {
     fontSize: 15,
     fontWeight: "500",
@@ -2021,11 +2442,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
+  nextStepsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  ttsButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
   nextStepsTitle: {
     fontSize: 17,
     fontWeight: "600",
     color: "#1F2937",
-    marginBottom: 16,
+    flex: 1, // Allow title to take available space
   },
   stepRow: {
     flexDirection: "row",

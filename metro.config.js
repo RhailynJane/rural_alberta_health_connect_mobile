@@ -4,8 +4,8 @@ const { getDefaultConfig } = require("expo/metro-config");
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Add support for .tflite files (TensorFlow Lite models)
-config.resolver.assetExts.push("onnx");
+// Add support for ML models and Rive animations
+config.resolver.assetExts.push("onnx", "riv");
 
 // Fix @rnmapbox/maps module resolution to use native version
 config.resolver.sourceExts = [

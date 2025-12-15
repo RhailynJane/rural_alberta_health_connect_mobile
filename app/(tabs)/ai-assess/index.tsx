@@ -4,11 +4,11 @@ import { useConvexAuth, useQuery } from "convex/react";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+  Animated,
   Image,
   Keyboard,
-  LayoutAnimation,
   Modal,
   ScrollView,
   StyleSheet,
@@ -125,6 +125,29 @@ export default function SymptomAssessment() {
   const [aiContext, setAiContext] = useState<Partial<AIImageContext>>({
     timestamp: new Date().toISOString(),
   });
+
+  // Subtle shake animation for validation feedback
+  const descriptionShakeAnim = useRef(new Animated.Value(0)).current;
+  const [descriptionNeedsAttention, setDescriptionNeedsAttention] = useState(false);
+
+  // Gentle shake animation - subtle, not alarming
+  const triggerDescriptionShake = () => {
+    setDescriptionNeedsAttention(true);
+
+    // Very subtle shake sequence - small movements
+    Animated.sequence([
+      Animated.timing(descriptionShakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(descriptionShakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(descriptionShakeAnim, { toValue: 3, duration: 50, useNativeDriver: true }),
+      Animated.timing(descriptionShakeAnim, { toValue: -3, duration: 50, useNativeDriver: true }),
+      Animated.timing(descriptionShakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+
+    // Clear the attention state after a moment
+    setTimeout(() => {
+      setDescriptionNeedsAttention(false);
+    }, 2000);
+  };
   
   // Get reminder settings
   const reminderSettings = useQuery(
@@ -177,14 +200,30 @@ export default function SymptomAssessment() {
   };
 
   const handleContinue = async () => {
-    if (!selectedCategory && !symptomDescription.trim()) {
-      setAlertModalTitle("Information Required");
-      setAlertModalMessage("Please select a symptom category or describe your symptoms.");
+    // Description is required for accurate AI assessment
+    if (!symptomDescription.trim()) {
+      // Trigger subtle shake animation - draws attention without alarming
+      triggerDescriptionShake();
+      return;
+    }
+
+    // Photo is now required for AI assessment
+    if (uploadedPhotos.length === 0) {
+      setAlertModalTitle("Photo Required");
+      setAlertModalMessage("Please add at least one photo of your symptoms for accurate AI assessment.");
       setAlertModalButtons([
         {
-          label: "OK",
-          onPress: () => setAlertModalVisible(false),
+          label: "Add Photo",
+          onPress: () => {
+            setAlertModalVisible(false);
+            handleUploadPhoto();
+          },
           variant: "primary",
+        },
+        {
+          label: "Cancel",
+          onPress: () => setAlertModalVisible(false),
+          variant: "secondary",
         },
       ]);
       setAlertModalVisible(true);
@@ -397,9 +436,6 @@ export default function SymptomAssessment() {
     { id: "Custom", name: "Something Else", icon: "help-circle-outline" },
   ];
 
-  // State for collapsed search section
-  const [showDescribeInput, setShowDescribeInput] = useState(false);
-
   const getFileName = (uri: string) => {
     return uri.split("/").pop() || "photo.jpg";
   };
@@ -469,34 +505,32 @@ export default function SymptomAssessment() {
                 ))}
               </View>
 
-              {/* Secondary fallback - Collapsed describe option */}
-              <TouchableOpacity
-                style={styles.describeToggle}
-                onPress={() => {
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setShowDescribeInput(!showDescribeInput);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.describeToggleText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  Not sure? Describe it instead
+              {/* Description Input */}
+              <View style={styles.describeSection}>
+                <Text style={[styles.describeLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Describe your symptoms
                 </Text>
-                <Ionicons
-                  name={showDescribeInput ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color="#6B7280"
-                />
-              </TouchableOpacity>
-
-              {/* Expanded describe input - Only shows when toggled */}
-              {showDescribeInput && (
-                <View style={styles.describeSection}>
+                <Animated.View
+                  style={{
+                    transform: [{ translateX: descriptionShakeAnim }],
+                  }}
+                >
                   <TextInput
-                    style={[styles.describeInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+                    style={[
+                      styles.describeInput,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      descriptionNeedsAttention && styles.describeInputAttention,
+                    ]}
                     placeholder='e.g., "burn on my hand, blistering"'
                     placeholderTextColor="#9CA3AF"
                     value={symptomDescription}
-                    onChangeText={setSymptomDescription}
+                    onChangeText={(text) => {
+                      setSymptomDescription(text);
+                      // Clear attention state when user starts typing
+                      if (descriptionNeedsAttention && text.trim()) {
+                        setDescriptionNeedsAttention(false);
+                      }
+                    }}
                     multiline
                     numberOfLines={3}
                     textAlignVertical="top"
@@ -504,29 +538,22 @@ export default function SymptomAssessment() {
                     blurOnSubmit
                     onSubmitEditing={() => Keyboard.dismiss()}
                   />
-                  <Text style={[styles.describeHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Plain language works—no medical terms needed.
-                  </Text>
-                </View>
-              )}
+                </Animated.View>
+              </View>
 
-              {/* Photo Upload - Compact, asset-like */}
+              {/* Photo Upload */}
               <View style={styles.photoUploadSection}>
                 {uploadedPhotos.length === 0 ? (
-                  // Empty state - subtle prompt
                   <TouchableOpacity
                     style={styles.photoPrompt}
                     onPress={handleUploadPhoto}
                     activeOpacity={0.7}
                   >
                     <View style={styles.photoPromptIcon}>
-                      <Ionicons name="camera-outline" size={20} color="#9CA3AF" />
+                      <Ionicons name="camera-outline" size={20} color="#6B7280" />
                     </View>
                     <Text style={[styles.photoPromptText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                       Add a photo
-                    </Text>
-                    <Text style={[styles.photoPromptHint, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      optional
                     </Text>
                   </TouchableOpacity>
                 ) : (
@@ -581,15 +608,11 @@ export default function SymptomAssessment() {
                 <TouchableOpacity
                   style={[
                     styles.continueButton,
-                    ((!selectedCategory && !symptomDescription.trim()) ||
-                      isProcessing) &&
+                    (uploadedPhotos.length === 0 || isProcessing) &&
                       styles.continueButtonDisabled,
                   ]}
                   onPress={handleContinue}
-                  disabled={
-                    (!selectedCategory && !symptomDescription.trim()) ||
-                    isProcessing
-                  }
+                  disabled={isProcessing}
                 >
                   <Text
                     style={[
@@ -642,7 +665,7 @@ export default function SymptomAssessment() {
           </View>
         </Modal>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
       {/* Alert Modal */}
       <Modal
@@ -750,20 +773,7 @@ const styles = StyleSheet.create({
     color: "#2A7DE1",
     fontWeight: "600",
   },
-  // Describe Toggle (Secondary fallback)
-  describeToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    marginBottom: 4,
-  },
-  describeToggleText: {
-    fontSize: 15,
-    color: "#6B7280",
-    marginRight: 6,
-  },
-  // Describe Section (Expanded)
+  // Description Section
   describeSection: {
     marginBottom: 16,
   },
@@ -779,13 +789,18 @@ const styles = StyleSheet.create({
     color: "#1F2937",
     lineHeight: 22,
   },
-  describeHint: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginTop: 8,
-    textAlign: "center",
+  // Subtle attention state - calm light blue
+  describeInputAttention: {
+    borderColor: "#93C5FD", // Soft sky blue - calming
+    backgroundColor: "#F0F7FF", // Very subtle blue tint
   },
-  // Photo Upload - Compact, asset-like
+  describeLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 10,
+  },
+  // Photo Upload
   photoUploadSection: {
     marginBottom: 20,
   },
@@ -808,11 +823,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#6B7280",
     fontWeight: "500",
-  },
-  photoPromptHint: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginLeft: 8,
   },
   photoStrip: {
     backgroundColor: "#F9FAFB",

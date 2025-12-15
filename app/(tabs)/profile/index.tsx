@@ -4,18 +4,31 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Image,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { ReminderItem, setConvexSyncCallback, setReminderUserKey } from "../../_utils/notifications";
+import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
+import {
+  ReminderItem,
+  addReminder,
+  deleteReminder,
+  getReminders,
+  scheduleAllReminderItems,
+  setConvexSyncCallback,
+  setReminderUserKey,
+  updateReminder,
+} from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -51,6 +64,11 @@ export default function Profile() {
     (api as any)["medicalHistoryOnboarding/update"].withAllConditions
   );
   const updatePhone = useMutation(api.users.updatePhone);
+  const updateUserImage = useMutation((api as any).users.updateImage);
+    const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+    const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const currentUserOnline = useQuery(
     api.users.getCurrentUser,
     isAuthenticated && !isLoading ? {} : "skip"
@@ -73,6 +91,9 @@ export default function Profile() {
         console.error("Failed to cache user:", err)
       );
       setCachedUser(currentUserOnline);
+      // If backend provides photo URL in future, prefer it
+      const maybePhoto = (currentUserOnline as any)?.photoUrl || (currentUserOnline as any)?.avatarUrl || (currentUserOnline as any)?.image;
+      if (maybePhoto) setAvatarUrl(String(maybePhoto));
     }
   }, [isOnline, currentUserOnline]);
 
@@ -100,8 +121,67 @@ export default function Profile() {
           if (cached) setCachedProfile(JSON.parse(cached));
         })
         .catch((err) => console.error("Failed to load cached profile:", err));
+
+          // Load cached avatar
+          AsyncStorage.getItem("@profile_avatar_url")
+            .then((url) => { if (url) setAvatarUrl(url); })
+            .catch(() => {});
     }
   }, [isOnline]);
+
+  // Save avatar URL cache when it changes
+  useEffect(() => {
+    if (avatarUrl) {
+      AsyncStorage.setItem("@profile_avatar_url", avatarUrl).catch(() => {});
+    }
+  }, [avatarUrl]);
+
+  const pickAndUploadAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        setModalTitle("Permissions Needed");
+        setModalMessage("Please allow photo library access to set your profile picture.");
+        setModalButtons([{ label: "OK", onPress: () => setModalVisible(false), variant: 'primary' }]);
+        setModalVisible(true);
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1,1],
+        quality: 0.8,
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const uri = result.assets[0].uri;
+      setUploadingAvatar(true);
+      if (isOnline) {
+        try {
+          const uploadUrl = await generateUploadUrl();
+          const res = await fetch(uri);
+          const blob = await res.blob();
+          const put = await fetch(uploadUrl, { method: 'POST', headers: { 'Content-Type': blob.type }, body: blob });
+          if (!put.ok) throw new Error('Upload failed');
+          const { storageId } = await put.json();
+          const photoUrl = await storeUploadedPhoto({ storageId });
+          setAvatarUrl(photoUrl);
+          try { await updateUserImage({ image: photoUrl } as any); } catch (err) { console.warn('Failed to persist avatar URL', err); }
+        } catch (e) {
+          // Fallback to local URI even if upload fails
+          setAvatarUrl(uri);
+        }
+      } else {
+        setAvatarUrl(uri);
+      }
+    } catch (e) {
+      setModalTitle('Error');
+      setModalMessage('Failed to choose photo. Please try again.');
+      setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
+      setModalVisible(true);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Use online or cached data
   const currentUser = isOnline ? currentUserOnline : (cachedUser || currentUserOnline);
@@ -243,11 +323,23 @@ export default function Profile() {
   const [modalTitle, setModalTitle] = useState<string>("");
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const latestAddressQueryTsRef = useRef<number>(0);
+  const [addressSuggestions, setAddressSuggestions] = useState<{ id: string; label: string; address1: string; city?: string; province?: string; postalCode?: string }[]>([]);
+  const [isFetchingAddress, setIsFetchingAddress] = useState(false);
   
   // Reminders manager (local)
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [reminderForm, setReminderForm] = useState<{ frequency: 'daily' | 'weekly'; time: string; dayOfWeek?: string }>({ frequency: 'daily', time: '09:00' });
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const [reminderEditorVisible, setReminderEditorVisible] = useState(false);
   const [showTimeSelectModal, setShowTimeSelectModal] = useState(false);
 
+  // Notification frequency and time picker states
+  const [notificationFrequencyModalVisible, setNotificationFrequencyModalVisible] = useState(false);
+  const [notificationTimePickerVisible, setNotificationTimePickerVisible] = useState(false);
+  const [selectedNotificationTime, setSelectedNotificationTime] = useState<string>("09:00");
+  const [notificationTimeUnit, setNotificationTimeUnit] = useState<'hour' | 'minute'>('hour');
   const handleUpdatePersonalInfo = async (): Promise<boolean> => {
     try {
       // Validate only personal info fields before saving
@@ -378,51 +470,22 @@ export default function Profile() {
     }
   };
 
-  /* Unused helper functions - functionality moved to separate pages */
-  const refreshReminders = async () => {};
-  const validatePersonalInfo = (): boolean => true;
-  const validateEmergencyContact = (): boolean => true;
-  const validateMedicalInfo = (): boolean => true;
-  const to12h = (time24?: string) => ({ hour: '09', minute: '00', ampm: 'AM' as const });
+  // Helper conversions
+  const normalizeTimeInput = (time?: string): string | null => {
+    if (!time || !time.includes(':')) return null;
+    const [rawH, rawM] = time.split(':');
+    const h = Math.max(0, Math.min(23, parseInt(rawH, 10) || 0));
+    const m = Math.max(0, Math.min(59, parseInt(rawM, 10) || 0));
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
 
-  /* Unused functions removed - functionality moved to separate pages
-  // Toggle section expansion
-  const toggleSection = async (section: keyof typeof expandedSections) => { ... }
-  // Handle input changes  
-  const handleInputChange = async (field, value) => { ... }
-  // Handle save single reminder
-  const handleSaveSingleReminder = async () => { ... }
-  // Load reminders when enabled
-  const refreshReminders = async () => { ... }
-  // Debounced address fetch
-  const debouncedFetchAddressSuggestions = debounce(...) => { ... }
-  // Handle select address suggestion
-  const handleSelectAddressSuggestion = (s) => { ... }
-  */
-
-  /* OLD UNUSED CODE - COMMENTING OUT TO FIX COMPILATION
-  // Handle sign out
-        const ok = await handleUpdatePersonalInfo();
-        if (!ok) {
-          // Keep section open to show validation errors
-          return;
-        }
-      } else if (section === "emergencyContacts") {
-        const ok = await handleUpdateEmergencyContact();
-        if (!ok) {
-          return;
-        }
-      } else if (section === "medicalInfo") {
-        const ok = await handleUpdateMedicalInfo();
-        if (!ok) {
-          return;
-        }
-      }
-    }
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+  const to12h = (time24?: string) => {
+    const normalized = normalizeTimeInput(time24 || '09:00') || '09:00';
+    const [h, m] = normalized.split(':');
+    const hours = parseInt(h, 10);
+    const isPM = hours >= 12;
+    const hr12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    return { hour: String(hr12).padStart(2, '0'), minute: String(m).padStart(2, '0'), ampm: isPM ? 'PM' : 'AM' as const };
   };
 
   // Handle input changes
@@ -493,8 +556,17 @@ export default function Profile() {
           dayOfWeek: userData.reminderFrequency === 'weekly' ? userData.reminderDayOfWeek : undefined,
         }).catch(() => {});
         if (value) {
-          // best-effort schedule all current reminders when enabling
-          try { scheduleAllReminderItems().catch(() => {}); } catch {}
+          // Schedule all current reminders when enabling
+          console.log('🔔 Reminder toggle ON - scheduling all reminders...');
+          try { 
+            scheduleAllReminderItems()
+              .then(() => console.log('✅ Reminders scheduled successfully'))
+              .catch((err) => console.error('❌ Failed to schedule reminders:', err));
+          } catch (err) {
+            console.error('❌ Error calling scheduleAllReminderItems:', err);
+          }
+        } else {
+          console.log('🔕 Reminder toggle OFF - cancelling all reminders...');
         }
       } catch {}
     }
@@ -546,59 +618,54 @@ export default function Profile() {
         setModalVisible(true);
         return;
       }
-      if (reminderForm.frequency !== 'hourly' && !reminderForm.time) {
-        setModalTitle('Missing Time');
-        setModalMessage('Please choose a time for the reminder.');
+      const normalizedTime = normalizeTimeInput(reminderForm.time);
+      if (!normalizedTime) {
+        setModalTitle('Invalid Time');
+        setModalMessage('Time must be in HH:mm (00-23:00-59).');
         setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
         setModalVisible(true);
         return;
       }
-      // Final time normalization check for safety
-      let payload = { ...reminderForm } as typeof reminderForm;
-      if (reminderForm.frequency !== 'hourly' && reminderForm.time) {
-        const norm = normalizeTimeInput(reminderForm.time);
-        if (!norm) {
-          setModalTitle('Invalid Time');
-          setModalMessage('Time must be in HH:mm (00-23:00-59).');
-          setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
-          setModalVisible(true);
-          return;
-        }
-        payload = { ...reminderForm, time: norm };
-      }
-      
-      // Save locally first (works offline)
+
+      const payload = {
+        frequency: reminderForm.frequency,
+        time: normalizedTime,
+        dayOfWeek: reminderForm.frequency === 'weekly' ? reminderForm.dayOfWeek : undefined,
+      } as const;
+
+      let updatedList: ReminderItem[] = [];
       if (editingReminderId) {
-        await updateReminder(editingReminderId, { ...payload, enabled: true });
+        updatedList = await updateReminder(editingReminderId, { ...payload, enabled: true });
       } else {
-        await addReminder({ ...payload, enabled: true });
+        updatedList = await addReminder({ ...payload, enabled: true });
       }
-      
-      // Refresh local reminders
-      await refreshReminders();
-      
-      // Try to sync to backend (may fail if offline, but that's okay)
+
+      setUserData((prev) => ({ ...prev, reminderEnabled: true, reminderTime: `${to12h(payload.time).hour}:${to12h(payload.time).minute} ${to12h(payload.time).ampm}` }));
+      setReminders(updatedList);
+
+      // Schedule locally and try to sync the primary settings to backend
+      console.log('🔔 Scheduling reminders after save...');
+      try { 
+        await scheduleAllReminderItems(updatedList);
+        console.log('✅ Reminders scheduled successfully');
+      } catch (err) {
+        console.error('❌ Failed to schedule reminders:', err);
+      }
       try {
-        if (payload.frequency !== 'hourly') {
-          await updateReminderSettings({
-            enabled: true,
-            frequency: payload.frequency as 'daily'|'weekly',
-            time: payload.time!,
-            dayOfWeek: payload.frequency === 'weekly' ? payload.dayOfWeek : undefined,
-          });
-          // Also reflect in UI userData.reminderTime for consistency
-          const { hour, minute, ampm } = to12h(payload.time!);
-          setUserData((prev) => ({ ...prev, reminderTime: `${parseInt(hour,10)}:${minute} ${ampm}`, reminderFrequency: payload.frequency as any, reminderDayOfWeek: payload.dayOfWeek || prev.reminderDayOfWeek }));
-        }
+        await updateReminderSettings({
+          enabled: true,
+          frequency: payload.frequency,
+          time: payload.time,
+          dayOfWeek: payload.dayOfWeek,
+        });
       } catch (syncError) {
         console.log('Could not sync to backend (may be offline)', syncError);
-        // Don't show error, local save was successful
       }
-      
-      // Clear form and show success
-      setAddingReminder(false);
+
+      // Clear form and close editor
       setEditingReminderId(null);
       setReminderForm({ frequency: 'daily', time: '09:00' });
+      setReminderEditorVisible(false);
       setModalTitle('Saved');
       setModalMessage('Reminder saved successfully!');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
@@ -609,6 +676,41 @@ export default function Profile() {
       setModalMessage('Failed to save reminder. Please try again.');
       setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
       setModalVisible(true);
+    }
+  };
+
+  const openReminderEditor = (rem?: ReminderItem) => {
+    if (rem) {
+      setEditingReminderId(rem.id);
+      setReminderForm({
+        frequency: rem.frequency === 'weekly' ? 'weekly' : 'daily',
+        time: rem.time || '09:00',
+        dayOfWeek: rem.dayOfWeek || 'Mon',
+      });
+    } else {
+      setEditingReminderId(null);
+      setReminderForm({ frequency: 'daily', time: selectedNotificationTime || '09:00' });
+    }
+    setReminderEditorVisible(true);
+  };
+
+  const handleToggleReminderItem = async (reminder: ReminderItem) => {
+    try {
+      const updated = await updateReminder(reminder.id, { enabled: !reminder.enabled });
+      setReminders(updated);
+      try { await scheduleAllReminderItems(updated); } catch {}
+    } catch (e) {
+      console.error('Failed to toggle reminder', e);
+    }
+  };
+
+  const handleDeleteReminderItem = async (id: string) => {
+    try {
+      const updated = await deleteReminder(id);
+      setReminders(updated);
+      try { await scheduleAllReminderItems(updated); } catch {}
+    } catch (e) {
+      console.error('Failed to delete reminder', e);
     }
   };
 
@@ -709,7 +811,7 @@ export default function Profile() {
     return !error;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const validateAll = (): boolean => {
     const fieldsToCheck: (keyof typeof userData)[] = [
       'age','address1','city','province','postalCode','location','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'
@@ -817,8 +919,6 @@ export default function Profile() {
     if (s.province) validateField('province', s.province);
     if (s.postalCode) validateField('postalCode', s.postalCode);
   };
-  */
-
   // Handle sign out
   const handleSignOut = async () => {
     setModalTitle("Sign Out");
@@ -962,92 +1062,238 @@ export default function Profile() {
           }}
         />
         <DueReminderBanner topOffset={120} />
-        <ScrollView style={styles.container}>
-          {/* Privacy Notice */}
-          <View style={styles.card}>
-            <View style={styles.privacyHeader}>
-              <View style={styles.privacyIcon}>
-                <Text style={styles.privacyIconText}>✓</Text>
+        <ScrollView style={[styles.container, styles.scroll]} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic">
+          {/* Profile Header */}
+          <View style={styles.headerSection}>
+            <View style={styles.headerCard}>
+              {/* Dock avatar to the card top */}
+              <View style={styles.avatarDock}>
+                <View style={styles.avatarHolder}>
+                  <View style={styles.avatar}>
+                    {avatarUrl ? (
+                      <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                    ) : (
+                      <Text style={styles.avatarText}>
+                        {(() => {
+                          const n = (currentUser?.firstName || currentUser?.name || 'U') as string;
+                          return String(n).trim().charAt(0).toUpperCase();
+                        })()}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.avatarEditBtn}
+                    onPress={pickAndUploadAvatar}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name={uploadingAvatar ? 'hourglass-empty' : 'photo-camera'} size={18} color={COLORS.white} />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Text style={styles.cardTitle}>Privacy Protected</Text>
+              <View style={styles.headerCenter}>
+                <View style={styles.headerTextWrap}>
+                <Text style={styles.nameText} numberOfLines={1}>
+                  {currentUser?.firstName ? `${currentUser.firstName} ${currentUser?.lastName || ''}`.trim() : 'Your Profile'}
+                </Text>
+                <Text style={[styles.metaText, styles.centerText]} numberOfLines={1}>
+                  {(() => {
+                    const year = (() => {
+                      const d = (userProfile as any)?.createdAt || (currentUser as any)?.createdAt || (currentUser as any)?._creationTime;
+                      if (!d) return null;
+                      const dt = new Date(d);
+                      return isNaN(dt.getTime()) ? null : dt.getFullYear();
+                    })();
+                    return year ? `Member since ${year}` : 'Welcome back';
+                  })()}
+                </Text>
+              </View>
+              </View>
+
+            {/* Stats Grid (2x2) */}
+            <View style={styles.statsGrid}>
+              <View style={[styles.statBox, styles.statBoxFirst]}>
+                <Text style={styles.statNumber}>{(() => {
+                  const fields: (keyof typeof userData)[] = ['age','address1','city','province','postalCode','emergencyContactName','emergencyContactPhone','allergies','currentMedications','medicalConditions'];
+                  const done = fields.filter(k => String((userData as any)[k] || '').trim().length > 0).length;
+                  return Math.round((done / fields.length) * 100) || 0;
+                })()}%</Text>
+                <Text style={styles.statLabel}>Complete</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>{userData.reminderEnabled ? 'On' : 'Off'}</Text>
+                <Text style={styles.statLabel}>Reminders</Text>
+              </View>
+              <View style={[styles.statBox, styles.statBoxFirst]}>
+                <Text style={styles.statNumber}>{userData.locationServices ? 'On' : 'Off'}</Text>
+                <Text style={styles.statLabel}>Location</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>{isOnline ? 'Online' : 'Offline'}</Text>
+                <Text style={styles.statLabel}>Sync</Text>
+              </View>
             </View>
-            <Text style={styles.privacyText}>
-              Your personal information is encrypted and stored locally. No data
-              is shared without your consent.
-            </Text>
+            </View>
           </View>
 
-          {/* Profile Information - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/profile-information" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="person" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Profile Information</Text>
+          {/* Profile Information Tile */}
+          <View style={styles.listCard}>
+            <TouchableOpacity style={styles.listItem} onPress={() => router.push("/profile/profile-information" as any)} activeOpacity={0.85}>
+              <View style={styles.listIconWrap}><Icon name="person" size={20} color={COLORS.primary} /></View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>Profile Information</Text>
+                <Text style={styles.listSubtitle}>Personal details & medical history</Text>
               </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
-            </View>
-            <Text style={styles.cardSubtitle}>
-              View and edit your personal information, emergency contact, and medical history
-            </Text>
-          </TouchableOpacity>
+              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
+            </TouchableOpacity>
+          </View>
 
-          {/* App Settings - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/app-settings" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="settings" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>App Settings</Text>
-              </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
+          {/* Notifications Toggle */}
+          <View style={styles.toggleCard}>
+            <View style={styles.toggleIconWrap}>
+              <Icon name="notifications" size={20} color={COLORS.primary} />
             </View>
-            <Text style={styles.cardSubtitle}>
-              Manage symptom assessment reminders and location services
-            </Text>
-          </TouchableOpacity>
-
-          {/* Help & Support - Navigation Card */}
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => router.push("/profile/help-support" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.cardHeader}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="help-outline" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Help & Support</Text>
-              </View>
-              <Icon name="chevron-right" size={24} color={COLORS.darkGray} />
+            <View style={styles.toggleTextWrap}>
+              <Text style={styles.toggleTitle}>Notifications</Text>
+              <Text style={styles.toggleSubtitle}>Reminder alerts</Text>
             </View>
-            <Text style={styles.cardSubtitle}>
-              FAQs, user guide, feedback, and report issues
-            </Text>
-          </TouchableOpacity>
-
-          {/* Sign Out Button */}
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            activeOpacity={0.7}
-          >
-            <Icon
-              name="exit-to-app"
-              size={20}
-              color={COLORS.white}
-              style={styles.signOutIcon}
+            <Switch
+              value={userData.reminderEnabled}
+              onValueChange={async (value) => {
+                if (value) {
+                  // Show frequency chooser when enabling
+                  setNotificationFrequencyModalVisible(true);
+                } else {
+                  // Disable directly
+                  setUserData(prev => ({ ...prev, reminderEnabled: false }));
+                  if (isOnline) {
+                    try {
+                      await updateReminderSettings({ enabled: false });
+                    } catch (error) {
+                      console.error("Failed to update reminder settings:", error);
+                    }
+                  }
+                }
+              }}
+              trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+              thumbColor={COLORS.white}
             />
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
+          </View>
+
+          {/* Multi-reminder list */}
+          {userData.reminderEnabled && (
+            <View style={styles.reminderListCard}>
+              <View style={styles.reminderListHeader}>
+                <View>
+                  <Text style={styles.reminderListTitle}>Reminders</Text>
+                  <Text style={styles.reminderListSubtitle}>Add multiple reminder times</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.reminderAddBtn}
+                  onPress={() => openReminderEditor()}
+                  activeOpacity={0.9}
+                >
+                  <Icon name="add" size={18} color={COLORS.white} />
+                  <Text style={styles.reminderAddText}>New</Text>
+                </TouchableOpacity>
+              </View>
+
+              {reminders.length === 0 ? (
+                <Text style={styles.reminderEmptyText}>No reminders yet. Add one to get started.</Text>
+              ) : (
+                reminders.map((rem) => {
+                  const timeNorm = normalizeTimeInput(rem.time || '09:00') || '09:00';
+                  const { hour, minute, ampm } = to12h(timeNorm);
+                  const label = rem.frequency === 'weekly'
+                    ? `Weekly on ${rem.dayOfWeek || 'Mon'}`
+                    : 'Daily';
+                  return (
+                    <View key={rem.id} style={styles.reminderRow}>
+                      <View style={styles.reminderRowText}>
+                        <Text style={styles.reminderTimeText}>{`${parseInt(hour, 10)}:${minute} ${ampm}`}</Text>
+                        <Text style={styles.reminderMetaText}>{label}</Text>
+                      </View>
+                      <View style={styles.reminderRowActions}>
+                        <Switch
+                          value={rem.enabled}
+                          onValueChange={() => handleToggleReminderItem(rem)}
+                          trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+                          thumbColor={COLORS.white}
+                        />
+                        <TouchableOpacity onPress={() => openReminderEditor(rem)} style={styles.reminderIconBtn} activeOpacity={0.85}>
+                          <Icon name="edit" size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDeleteReminderItem(rem.id)} style={styles.reminderIconBtn} activeOpacity={0.85}>
+                          <Icon name="delete" size={18} color={COLORS.error} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {/* Location Services Toggle */}
+          <View style={styles.toggleCard}>
+            <View style={styles.toggleIconWrap}>
+              <Icon name="location-on" size={20} color={COLORS.primary} />
+            </View>
+            <View style={styles.toggleTextWrap}>
+              <Text style={styles.toggleTitle}>Location Services</Text>
+              <Text style={styles.toggleSubtitle}>Enable location tracking</Text>
+            </View>
+            <Switch
+              value={userData.locationServices}
+              onValueChange={async (value) => {
+                // Update local state
+                setUserData(prev => ({ ...prev, locationServices: value }));
+                // Persist to backend if online
+                if (isOnline) {
+                  try {
+                    await toggleLocationServices({ enabled: value });
+                  } catch (error) {
+                    console.error("Failed to update location services:", error);
+                  }
+                }
+              }}
+              trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
+              thumbColor={COLORS.white}
+            />
+          </View>
+
+          {/* Notification Debug Link */}
+          <View style={styles.listCard}>
+            <TouchableOpacity 
+              style={styles.listItem} 
+              onPress={() => router.push("/(tabs)/profile/notification-debug")} 
+              activeOpacity={0.85}
+            >
+              <View style={styles.listIconWrap}>
+                <Icon name="bug-report" size={20} color={COLORS.primary} />
+              </View>
+              <View style={styles.listTextWrap}>
+                <Text style={styles.listTitle}>Notification Debug</Text>
+                <Text style={styles.listSubtitle}>Test notification settings & permissions</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Sign Out */}
+          <View style={styles.signOutSection}>
+            <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} activeOpacity={0.9}>
+              <Icon name="logout" size={20} color={COLORS.error} />
+              <Text style={styles.signOutButtonText}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Privacy footnote */}
+          <View style={styles.privacyFootnote}>
+            <Text style={styles.privacyFootnoteText}>Your data stays on your device and is encrypted.</Text>
+          </View>
         </ScrollView>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
 
 
@@ -1060,6 +1306,257 @@ export default function Profile() {
         onClose={() => setModalVisible(false)}
         buttons={modalButtons.length > 0 ? modalButtons : undefined}
       />
+
+      {/* Notification Frequency Chooser Modal */}
+      <StatusModal
+        visible={notificationFrequencyModalVisible}
+        type="info"
+        title="Reminder Frequency"
+        message="How often should you be reminded?"
+        onClose={() => setNotificationFrequencyModalVisible(false)}
+        buttons={[
+          {
+            label: "Daily",
+            variant: "primary",
+            onPress: async () => {
+              setNotificationFrequencyModalVisible(false);
+              setUserData(prev => ({ ...prev, reminderFrequency: 'daily' }));
+              // Show time picker
+              setSelectedNotificationTime("09:00");
+              setNotificationTimePickerVisible(true);
+            },
+          },
+          {
+            label: "Cancel",
+            variant: "secondary",
+            onPress: () => setNotificationFrequencyModalVisible(false),
+          },
+        ]}
+      />
+
+      {/* Multi-reminder Editor Overlay */}
+      {reminderEditorVisible && (
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationCard}>
+            <Text style={styles.notificationTimePickerLabel}>{editingReminderId ? 'Edit Reminder' : 'Add Reminder'}</Text>
+            <Text style={styles.notificationTimePickerSub}>Choose frequency and time.</Text>
+
+            <View style={styles.reminderFrequencyRow}>
+              {['daily', 'weekly'].map((freq) => (
+                <TouchableOpacity
+                  key={freq}
+                  style={[
+                    styles.reminderFrequencyChip,
+                    reminderForm.frequency === freq ? styles.reminderFrequencyChipActive : null,
+                  ]}
+                  onPress={() => setReminderForm((p) => ({ ...p, frequency: freq as 'daily' | 'weekly' }))}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.reminderFrequencyText,
+                      reminderForm.frequency === freq ? styles.reminderFrequencyTextActive : null,
+                    ]}
+                  >
+                    {freq === 'daily' ? 'Daily' : 'Weekly'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {reminderForm.frequency === 'weekly' && (
+              <View style={styles.dayChipRow}>
+                {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.reminderDayChip, reminderForm.dayOfWeek === d ? styles.reminderDayChipActive : null]}
+                    onPress={() => setReminderForm((p) => ({ ...p, dayOfWeek: d }))}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.reminderDayChipText, reminderForm.dayOfWeek === d ? styles.reminderDayChipTextActive : null]}>
+                      {d}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {(() => {
+              const normalized = normalizeTimeInput(reminderForm.time) || '09:00';
+              const [h, m] = normalized.split(':');
+              return (
+                <View style={styles.notificationTimeInputRow}>
+                  <View style={styles.timeUnitColumn}>
+                    <TouchableOpacity
+                      style={styles.notificationTimeAdjustBtn}
+                      onPress={() => {
+                        const newH = Math.max(0, Math.min(23, parseInt(h, 10) - 1));
+                        setReminderForm((p) => ({ ...p, time: `${String(newH).padStart(2, '0')}:${m}` }));
+                      }}
+                    >
+                      <Icon name="expand-less" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.notificationTimeValue}>{h}</Text>
+                    <TouchableOpacity
+                      style={styles.notificationTimeAdjustBtn}
+                      onPress={() => {
+                        const newH = Math.max(0, Math.min(23, parseInt(h, 10) + 1));
+                        setReminderForm((p) => ({ ...p, time: `${String(newH).padStart(2, '0')}:${m}` }));
+                      }}
+                    >
+                      <Icon name="expand-more" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.notificationTimeLabel}>Hour</Text>
+                  </View>
+
+                  <Text style={styles.notificationTimeSeparator}>:</Text>
+
+                  <View style={styles.timeUnitColumn}>
+                    <TouchableOpacity
+                      style={styles.notificationTimeAdjustBtn}
+                      onPress={() => {
+                        const newM = Math.max(0, Math.min(59, parseInt(m, 10) - 5));
+                        setReminderForm((p) => ({ ...p, time: `${h}:${String(newM).padStart(2, '0')}` }));
+                      }}
+                    >
+                      <Icon name="expand-less" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.notificationTimeValue}>{m}</Text>
+                    <TouchableOpacity
+                      style={styles.notificationTimeAdjustBtn}
+                      onPress={() => {
+                        const newM = Math.max(0, Math.min(59, parseInt(m, 10) + 5));
+                        setReminderForm((p) => ({ ...p, time: `${h}:${String(newM).padStart(2, '0')}` }));
+                      }}
+                    >
+                      <Icon name="expand-more" size={24} color={COLORS.primary} />
+                    </TouchableOpacity>
+                    <Text style={styles.notificationTimeLabel}>Minute</Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            <View style={styles.notificationTimeActions}>
+              <TouchableOpacity
+                style={[styles.notificationTimeActionBtn, styles.notificationTimeSecondary]}
+                onPress={() => {
+                  setReminderEditorVisible(false);
+                  setEditingReminderId(null);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.notificationTimeActionTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.notificationTimeActionBtn, styles.notificationTimePrimary]}
+                onPress={handleSaveSingleReminder}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.notificationTimeActionTextPrimary}>{editingReminderId ? 'Update' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Notification Time Picker Overlay */}
+      {notificationTimePickerVisible && (
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationCard}>
+            <Text style={styles.notificationTimePickerLabel}>Select Reminder Time</Text>
+            <Text style={styles.notificationTimePickerSub}>Adjust hour and minute, then set time.</Text>
+
+            <View style={styles.notificationTimeInputRow}>
+              {/* Hour Selector */}
+              <View style={styles.timeUnitColumn}>
+                <TouchableOpacity
+                  style={styles.notificationTimeAdjustBtn}
+                  onPress={() => {
+                    const [h, m] = selectedNotificationTime.split(':');
+                    const newH = Math.max(0, parseInt(h) - 1).toString().padStart(2, '0');
+                    setSelectedNotificationTime(newH + ':' + m);
+                  }}
+                >
+                  <Icon name="expand-less" size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.notificationTimeValue}>{selectedNotificationTime.split(':')[0]}</Text>
+                <TouchableOpacity
+                  style={styles.notificationTimeAdjustBtn}
+                  onPress={() => {
+                    const [h, m] = selectedNotificationTime.split(':');
+                    const newH = Math.min(23, parseInt(h) + 1).toString().padStart(2, '0');
+                    setSelectedNotificationTime(newH + ':' + m);
+                  }}
+                >
+                  <Icon name="expand-more" size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.notificationTimeLabel}>Hour</Text>
+              </View>
+
+              {/* Separator */}
+              <Text style={styles.notificationTimeSeparator}>:</Text>
+
+              {/* Minute Selector */}
+              <View style={styles.timeUnitColumn}>
+                <TouchableOpacity
+                  style={styles.notificationTimeAdjustBtn}
+                  onPress={() => {
+                    const [h, m] = selectedNotificationTime.split(':');
+                    const newM = Math.max(0, parseInt(m) - 5).toString().padStart(2, '0');
+                    setSelectedNotificationTime(h + ':' + newM);
+                  }}
+                >
+                  <Icon name="expand-less" size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.notificationTimeValue}>{selectedNotificationTime.split(':')[1]}</Text>
+                <TouchableOpacity
+                  style={styles.notificationTimeAdjustBtn}
+                  onPress={() => {
+                    const [h, m] = selectedNotificationTime.split(':');
+                    const newM = Math.min(59, parseInt(m) + 5).toString().padStart(2, '0');
+                    setSelectedNotificationTime(h + ':' + newM);
+                  }}
+                >
+                  <Icon name="expand-more" size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.notificationTimeLabel}>Minute</Text>
+              </View>
+            </View>
+
+            <View style={styles.notificationTimeActions}>
+              <TouchableOpacity
+                style={[styles.notificationTimeActionBtn, styles.notificationTimeSecondary]}
+                onPress={() => setNotificationTimePickerVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.notificationTimeActionTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.notificationTimeActionBtn, styles.notificationTimePrimary]}
+                onPress={async () => {
+                  setNotificationTimePickerVisible(false);
+                  setUserData(prev => ({ ...prev, reminderEnabled: true, reminderTime: selectedNotificationTime }));
+                  if (isOnline) {
+                    try {
+                      await updateReminderSettings({
+                        enabled: true,
+                        frequency: 'daily',
+                        time: selectedNotificationTime,
+                      });
+                    } catch (error) {
+                      console.error("Failed to update reminder settings:", error);
+                    }
+                  }
+                }}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.notificationTimeActionTextPrimary}>Set Time</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Legacy reminder modals removed in favor of inline manager */}
 
@@ -1089,11 +1586,317 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   container: {
+    backgroundColor: "transparent",
+  },
+  scroll: {
     flex: 1,
+  },
+  contentContainer: {
     paddingHorizontal: 16,
     paddingTop: 0,
-    paddingBottom: 16,
-    backgroundColor: "transparent",
+    // Extra bottom space so the Sign out button clears the inline BottomNavigation
+    paddingBottom: 160,
+    backgroundColor: 'transparent',
+  },
+  headerCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 0,
+    marginTop: 50,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    overflow: 'visible',
+    position: 'relative',
+    paddingTop: 64,
+  },
+  headerSection: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  headerGradient: {
+    // gradient removed
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerCenter: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerTextWrap: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#E8F1FF',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 0,
+  },
+  avatarDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  avatarHolder: {
+    width: 96,
+    height: 96,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: 94,
+    height: 94,
+    borderRadius: 47,
+  },
+  avatarText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.primary,
+    fontSize: 28,
+  },
+  avatarEditBtn: {
+    position: 'absolute',
+    left: -8,
+    bottom: -6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  nameText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 20,
+    color: COLORS.darkText,
+  },
+  metaText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 13,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  editProfileBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  editProfileBtnText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+  },
+  statBox: {
+    width: '48%',
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  statBoxFirst: {
+    marginLeft: 0,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  statCardFirst: {
+    marginLeft: 0,
+  },
+  statNumber: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 18,
+    color: COLORS.darkText,
+  },
+  statLabel: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 12,
+  },
+  tile: {
+    width: '48%',
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  tileIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  tileText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
+    color: COLORS.darkText,
+    textAlign: 'center',
+  },
+  tileDanger: {
+    backgroundColor: '#FFF5F5',
+    borderColor: '#F2D6D6',
+  },
+  tileDangerIcon: {
+    backgroundColor: '#DC3545',
+    borderColor: '#DC3545',
+  },
+  tileDangerText: {
+    color: '#DC3545',
+  },
+  listCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    paddingVertical: 4,
+    marginBottom: 12,
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  listIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginRight: 12,
+  },
+  listTextWrap: {
+    flex: 1,
+  },
+  listTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  listSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  suggestionCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    padding: 12,
+    marginBottom: 12,
+  },
+  suggestionTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+    marginBottom: 8,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  suggestionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  suggestionText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkText,
+  },
+  suggestionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  suggestionBadge: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.darkText,
+    fontSize: 12,
+  },
+  privacyFootnote: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  privacyFootnoteText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
   },
   loadingContainer: {
     flex: 1,
@@ -1214,7 +2017,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  suggestionText: {
+  suggestionRowText: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
     color: COLORS.darkText,
@@ -1241,6 +2044,182 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.darkText,
     flex: 1,
+  },
+  toggleCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggleIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#E8F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  toggleTextWrap: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  toggleSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  reminderListCard: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  reminderListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reminderListTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  reminderListSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  reminderAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+  },
+  reminderAddText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 13,
+  },
+  reminderEmptyText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 13,
+    color: COLORS.darkGray,
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EEF1F3',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+    backgroundColor: COLORS.white,
+  },
+  reminderRowText: {
+    flex: 1,
+  },
+  reminderTimeText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+  reminderMetaText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 2,
+  },
+  reminderRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 10,
+  },
+  reminderIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E8EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  reminderFrequencyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  reminderFrequencyChip: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+  },
+  reminderFrequencyChipActive: {
+    backgroundColor: '#E8F1FF',
+    borderColor: COLORS.primary,
+  },
+  reminderFrequencyText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+    fontSize: 13,
+  },
+  reminderFrequencyTextActive: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    color: COLORS.primary,
+  },
+  reminderDayChip: {
+    flexGrow: 1,
+    flexBasis: 0,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+  },
+  reminderDayChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  reminderDayChipText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    color: COLORS.darkText,
+    fontSize: 12,
+  },
+  reminderDayChipTextActive: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+  },
+  dayChipRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 10,
   },
   editButton: {
     color: COLORS.primary,
@@ -1333,24 +2312,31 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 16,
   },
-  signOutButton: {
-    backgroundColor: COLORS.error,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 100,
-    marginTop: 8,
+  signOutSection: {
+    alignItems: 'center',
+    marginVertical: 20,
   },
-  signOutText: {
-    color: COLORS.white,
+  signOutHeadline: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
-    marginLeft: 8,
+    fontSize: 14,
+    color: COLORS.darkGray,
+    marginBottom: 8,
   },
-  signOutIcon: {
-    marginRight: 8,
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: COLORS.error,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+  },
+  signOutButtonText: {
+    color: COLORS.error,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 14,
   },
   addButton: {
     flexDirection: 'row',
@@ -1464,4 +2450,112 @@ const styles = StyleSheet.create({
     color: COLORS.darkText,
     fontSize: 16,
   },
+  notificationOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 999,
+  },
+  notificationCard: {
+    width: '100%',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  notificationTimePickerLabel: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 18,
+    color: COLORS.darkText,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  notificationTimePickerSub: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: COLORS.darkGray,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  notificationTimeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  timeUnitColumn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  notificationTimeAdjustBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#E8F1FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  notificationTimeValue: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 32,
+    color: COLORS.darkText,
+    minWidth: 50,
+    textAlign: 'center',
+  },
+  notificationTimeSeparator: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 28,
+    color: COLORS.darkText,
+    marginBottom: 20,
+  },
+  notificationTimeLabel: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+  },
+  notificationTimeActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 8,
+  },
+  notificationTimeActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationTimePrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  notificationTimeSecondary: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+  },
+  notificationTimeActionTextPrimary: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+  },
+  notificationTimeActionTextSecondary: {
+    color: COLORS.darkText,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+  },
 });
+

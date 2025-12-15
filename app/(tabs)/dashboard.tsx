@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, Polyline, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
-import Icon from "react-native-vector-icons/MaterialIcons";
 // PNG icons from assets
 // If filenames differ, update the require() paths below accordingly.
 
@@ -484,7 +483,7 @@ export default function Dashboard() {
 
 
   const navigateToHistory = (): void => {
-    router.push("/tracker/history");
+    router.push("/tracker");
   };
 
   const navigateToDailyLog = (): void => {
@@ -767,44 +766,33 @@ export default function Dashboard() {
                       Health Tracker
                     </Text>
                   </TouchableOpacity>
-                </View>
 
-                {/* Find Care Card */}
-                <TouchableOpacity
-                  style={styles.findCareCard}
-                  onPress={navigateToFindCare}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient
-                    colors={["#F0F9FF", "#E0F2FE"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.findCareGradient}
+                  <TouchableOpacity
+                    style={styles.quickActionButton}
+                    onPress={navigateToFindCare}
                   >
-                    <View style={styles.findCareIconContainer}>
-                      <Icon name="local-hospital" size={28} color="#0EA5E9" />
-                    </View>
-                    <View style={styles.findCareContent}>
-                      <Text
-                        style={[
-                          styles.findCareTitle,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Find Care
-                      </Text>
-                      <Text
-                        style={[
-                          styles.findCareSubtitle,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Discover clinics and healthcare services nearby
-                      </Text>
-                    </View>
-                    <Icon name="chevron-right" size={24} color="#64748B" />
-                  </LinearGradient>
-                </TouchableOpacity>
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/location-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
+                    <Text
+                      style={[
+                        styles.quickActionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Find Care
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Medical Disclaimer */}
@@ -843,7 +831,7 @@ export default function Dashboard() {
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
       {/* Side Menu rendered globally via SideMenuProvider */}
 
@@ -1192,47 +1180,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     textAlign: "center",
-  },
-  findCareCard: {
-    borderRadius: 16,
-    overflow: "hidden",
-    shadowColor: "#0EA5E9",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  findCareGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-  },
-  findCareIconContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-    shadowColor: "#0EA5E9",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  findCareContent: {
-    flex: 1,
-  },
-  findCareTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 2,
-  },
-  findCareSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
   },
   assessmentButton: {
     backgroundColor: "#2A7DE1",

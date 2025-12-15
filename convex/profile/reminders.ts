@@ -38,8 +38,8 @@ export const getReminderSettings = query({
 export const updateReminderSettings = mutation({
   args: {
     enabled: v.boolean(),
-    frequency: v.string(), // "daily" | "weekly"
-    time: v.string(), // HH:mm (24h)
+    frequency: v.optional(v.string()), // "daily" | "weekly"
+    time: v.optional(v.string()), // HH:mm (24h)
     dayOfWeek: v.optional(v.string()), // Mon..Sun when weekly
   },
   handler: async (ctx, args) => {
@@ -51,18 +51,31 @@ export const updateReminderSettings = mutation({
       .withIndex("byUserId", (q: any) => q.eq("userId", userId))
       .unique();
 
-    // Basic validation
-    const freq = args.frequency === "weekly" ? "weekly" : "daily";
-    const timeOk = /^([01]\d|2[0-3]):([0-5]\d)$/.test(args.time);
-    if (!timeOk) throw new ConvexError("Invalid time format. Use HH:mm 24h.");
-
-    const patch = {
+    // Build patch with only provided fields
+    const patch: any = {
       symptomReminderEnabled: args.enabled,
-      symptomReminderFrequency: freq,
-      symptomReminderTime: args.time,
-      symptomReminderDayOfWeek: freq === "weekly" ? (args.dayOfWeek || "Mon") : undefined,
       updatedAt: Date.now(),
-    } as any;
+    };
+
+    // Only validate and set frequency/time if provided
+    if (args.frequency !== undefined) {
+      const freq = args.frequency === "weekly" ? "weekly" : "daily";
+      patch.symptomReminderFrequency = freq;
+      
+      // If frequency provided, time should also be provided
+      if (args.time === undefined) {
+        throw new ConvexError("Time is required when updating frequency");
+      }
+      
+      const timeOk = /^([01]\d|2[0-3]):([0-5]\d)$/.test(args.time);
+      if (!timeOk) throw new ConvexError("Invalid time format. Use HH:mm 24h.");
+      
+      patch.symptomReminderTime = args.time;
+      patch.symptomReminderDayOfWeek = freq === "weekly" ? (args.dayOfWeek || "Mon") : undefined;
+    } else if (args.time !== undefined) {
+      // Time provided without frequency is an error
+      throw new ConvexError("Frequency is required when updating time");
+    }
 
     if (profile) {
       await ctx.db.patch(profile._id, patch);

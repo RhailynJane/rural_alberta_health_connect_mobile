@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -19,7 +19,15 @@ import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
+import TTSButton from "../../components/TTSButton";
+import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { FONTS } from "../../constants/constants";
+import {
+  prepareTextForTTS,
+  prepareNextStepsForTTS,
+  prepareRecommendationsForTTS,
+  useTTS,
+} from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 // Renders AI assessment text matching assessment-results UI (priority + accordions)
@@ -106,38 +114,114 @@ function renderAssessmentCards(
     items: string[];
     icon: React.ReactNode;
     sectionKey: string;
-  }) => (
-    <View style={styles.primaryAssessmentCard}>
-      <View style={styles.primaryCardHeader}>
-        {icon}
-        <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+  }) => {
+    // Prepare text for TTS
+    const ttsText = items.map((item, idx) => {
+      if (sectionKey === "NEXT STEPS") {
+        return `Step ${idx + 1}: ${prepareTextForTTS(item)}`;
+      }
+      return prepareTextForTTS(item);
+    }).join('. ');
+
+    // Get TTS state for highlighting
+    const {
+      status: ttsStatus,
+      speak,
+      stop,
+      chunks: ttsChunks,
+      chunkStates: ttsChunkStates,
+      isAvailable: ttsAvailable,
+      hasPlayed: ttsHasPlayed,
+      isOtherPlaying,
+    } = useTTS();
+
+    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+    const isDisabled = isOtherPlaying;
+    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+    const handleTTSPress = async () => {
+      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+        await stop();
+      } else if (ttsStatus === 'ready' && ttsText) {
+        await speak(ttsText);
+      }
+    };
+
+    return (
+      <View style={styles.primaryAssessmentCard}>
+        <View style={styles.primaryCardHeaderWithTTS}>
+          <View style={styles.primaryCardHeaderLeft}>
+            {icon}
+            <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+          </View>
+          {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+            <>
+              {ttsStatus === 'generating' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <ActivityIndicator size="small" color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'speaking' && (
+                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <Ionicons name="pause" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'ready' && (
+                <TouchableOpacity
+                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                  onPress={handleTTSPress}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
+                >
+                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                    {ttsHasPlayed ? 'Replay' : 'Listen'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Show TTS highlighted text when active */}
+        {isTTSActive && ttsChunks.length > 0 ? (
+          <TTSHighlightedText
+            chunks={ttsChunks}
+            chunkStates={ttsChunkStates}
+            isActive={isTTSActive}
+            asBulletList={sectionKey !== "NEXT STEPS"}
+            containerStyle={{ marginTop: 4 }}
+            parentPadding={16}
+          />
+        ) : (
+          sectionKey === "NEXT STEPS"
+            ? items.slice(0, 4).map((it, idx) => (
+                <View key={idx} style={styles.stepRow}>
+                  <View style={styles.stepNumberContainer}>
+                    <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+                  </View>
+                  <View style={styles.stepContent}>
+                    <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                      {it.split(':')[0] || `Step ${idx + 1}`}
+                    </Text>
+                    <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                      {it.replace(/^.*?:\s*/, '') || it}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            : items.slice(0, 4).map((it, idx) => (
+                <View key={idx} style={styles.cardItem}>
+                  <Text style={styles.bulletPoint}>•</Text>
+                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                    {it}
+                  </Text>
+                </View>
+              ))
+        )}
       </View>
-      {sectionKey === "NEXT STEPS"
-        ? items.slice(0, 4).map((it, idx) => (
-            <View key={idx} style={styles.stepRow}>
-              <View style={styles.stepNumberContainer}>
-                <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
-                  {it.split(':')[0] || `Step ${idx + 1}`}
-                </Text>
-                <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
-                  {it.replace(/^.*?:\s*/, '') || it}
-                </Text>
-              </View>
-            </View>
-          ))
-        : items.slice(0, 4).map((it, idx) => (
-            <View key={idx} style={styles.cardItem}>
-              <Text style={styles.bulletPoint}>•</Text>
-              <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-                {it}
-              </Text>
-            </View>
-          ))}
-    </View>
-  );
+    );
+  };
 
   const AccordionCard = ({ title, items, icon, sectionKey }: {
     title: string;
@@ -148,6 +232,34 @@ function renderAssessmentCards(
     const isExpanded = expandedSections[sectionKey] || false;
     const previewCount = 2;
     const previewItems = items.slice(0, previewCount);
+
+    // Prepare text for TTS
+    const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
+
+    // Get TTS state for highlighting
+    const {
+      status: ttsStatus,
+      speak,
+      stop,
+      chunks: ttsChunks,
+      chunkStates: ttsChunkStates,
+      isAvailable: ttsAvailable,
+      hasPlayed: ttsHasPlayed,
+      isOtherPlaying,
+    } = useTTS();
+
+    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+    const isDisabled = isOtherPlaying;
+    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+    const handleTTSPress = async () => {
+      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+        await stop();
+      } else if (ttsStatus === 'ready' && ttsText) {
+        await speak(ttsText);
+      }
+    };
+
     return (
       <View style={styles.accordionCard}>
         <TouchableOpacity
@@ -159,22 +271,63 @@ function renderAssessmentCards(
             {icon}
             <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
           </View>
-          <Ionicons
-            name={isExpanded ? "chevron-up" : "chevron-down"}
-            size={20}
-            color="#6B7280"
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+              <>
+                {ttsStatus === 'generating' && (
+                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                    <ActivityIndicator size="small" color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                {ttsStatus === 'speaking' && (
+                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                    <Ionicons name="pause" size={18} color="#94A3B8" />
+                  </TouchableOpacity>
+                )}
+                {ttsStatus === 'ready' && (
+                  <TouchableOpacity
+                    style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                    onPress={handleTTSPress}
+                    activeOpacity={isDisabled ? 1 : 0.7}
+                    disabled={isDisabled}
+                  >
+                    <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                    <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                      {ttsHasPlayed ? 'Replay' : 'Listen'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+            <Ionicons
+              name={isExpanded ? "chevron-up" : "chevron-down"}
+              size={20}
+              color="#6B7280"
+            />
+          </View>
         </TouchableOpacity>
         {isExpanded && (
           <View style={styles.accordionContent}>
-            {(items.length > 0 ? items : previewItems).map((it, idx) => (
-              <View key={idx} style={styles.cardItem}>
-                <Text style={styles.bulletPoint}>•</Text>
-                <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {it}
-                </Text>
-              </View>
-            ))}
+            {/* Show TTS highlighted text when active */}
+            {isTTSActive && ttsChunks.length > 0 ? (
+              <TTSHighlightedText
+                chunks={ttsChunks}
+                chunkStates={ttsChunkStates}
+                isActive={isTTSActive}
+                asBulletList={true}
+                containerStyle={{ marginTop: 4 }}
+                parentPadding={14}
+              />
+            ) : (
+              (items.length > 0 ? items : previewItems).map((it, idx) => (
+                <View key={idx} style={styles.cardItem}>
+                  <Text style={styles.bulletPoint}>•</Text>
+                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                    {it}
+                  </Text>
+                </View>
+              ))
+            )}
           </View>
         )}
       </View>
@@ -688,7 +841,7 @@ export default function LogDetails() {
               </ScrollView>
             </View>
           </CurvedBackground>
-          <BottomNavigation />
+          <BottomNavigation floating={true} />
         </SafeAreaView>
       );
     }
@@ -716,7 +869,7 @@ export default function LogDetails() {
             </ScrollView>
           </View>
         </CurvedBackground>
-        <BottomNavigation />
+        <BottomNavigation floating={true} />
       </SafeAreaView>
     );
   }
@@ -890,16 +1043,27 @@ export default function LogDetails() {
               {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(resolvedEntry.aiContext, expandedSections, toggleSection)}
+                  {renderAssessmentCards(
+                    resolvedEntry.aiContext,
+                    expandedSections,
+                    toggleSection
+                  )}
                 </View>
               )}
 
               {/* Notes */}
               {resolvedEntry.notes && (
                 <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="document-text" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Additional Notes</Text>
+                  <View style={styles.cardHeaderWithTTS}>
+                    <View style={styles.cardHeaderLeft}>
+                      <Ionicons name="document-text" size={20} color="#2A7DE1" />
+                      <Text style={styles.cardTitle}>Additional Notes</Text>
+                    </View>
+                    <TTSButton
+                      text={prepareTextForTTS(resolvedEntry.notes)}
+                      compact
+                      style={styles.cardTTSButton}
+                    />
                   </View>
                   <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>
@@ -910,7 +1074,7 @@ export default function LogDetails() {
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
       {/* Delete Confirmation Modal - replaces Alert.alert */}
       <StatusModal
@@ -1167,6 +1331,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  cardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  cardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
   cardTitle: {
     fontSize: 16,
     fontWeight: "600",
@@ -1223,10 +1398,26 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 8,
   },
+  primaryCardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  primaryCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   primaryCardTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#111827",
+  },
+  cardTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   accordionCard: {
     backgroundColor: "#FFFFFF",
@@ -1260,6 +1451,14 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
+  },
+  accordionTTSRow: {
+    marginBottom: 10,
+    alignItems: "flex-start",
+  },
+  accordionTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   // Next Steps timeline (match assessment-results)
   stepRow: {
@@ -1359,5 +1558,24 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     fontFamily: FONTS.BarlowSemiCondensed,
     fontWeight: "500",
+  },
+  // Inline TTS button styles
+  inlineTtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inlineIconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
   },
 });

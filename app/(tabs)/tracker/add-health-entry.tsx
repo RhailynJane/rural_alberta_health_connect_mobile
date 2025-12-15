@@ -1399,7 +1399,7 @@ export default function AddHealthEntry() {
 
         {/* Bottom navigation */}
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
 
       {/* Alert Modal */}
       <Modal
