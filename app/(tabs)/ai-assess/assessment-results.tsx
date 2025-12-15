@@ -850,14 +850,11 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
       return null;
     }
 
-    // Account for imageWrapper padding (8px on each side)
-    const WRAPPER_PADDING = 8;
-    const imageContainerWidth = containerLayout.width - WRAPPER_PADDING * 2;
-    const imageContainerHeight = 260; // Fixed image height
-
+    // Image is now edge-to-edge, no wrapper padding
+    const IMAGE_HEIGHT = 280;
     const layout = calculateContainLayout(
-      imageContainerWidth,
-      imageContainerHeight,
+      containerLayout.width,
+      IMAGE_HEIGHT,
       dims.width,
       dims.height
     );
@@ -869,9 +866,8 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
     return detections.map((detection, idx) => {
       const { x1, y1 } = detection.boxCorners;
       // Position label at top-left of bounding box
-      // Add WRAPPER_PADDING to account for the padding offset
-      const labelX = WRAPPER_PADDING + offsetX + x1 * scaleX;
-      const labelY = WRAPPER_PADDING + offsetY + y1 * scaleY;
+      const labelX = offsetX + x1 * scaleX;
+      const labelY = offsetY + y1 * scaleY;
 
       return (
         <View
@@ -881,7 +877,7 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
             {
               backgroundColor: getDetectionColor(detection.className),
               left: labelX,
-              top: Math.max(WRAPPER_PADDING, labelY - 22), // Position above the box
+              top: Math.max(8, labelY - 24), // Position above the box with min padding
             },
           ]}
         >
@@ -901,29 +897,30 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={handleScroll}
-        contentContainerStyle={carouselStyles.scrollContent}
         decelerationRate="fast"
         snapToInterval={IMAGE_WIDTH}
         snapToAlignment="start"
       >
         {photos.map((_, index) => (
-          <View key={index} style={[carouselStyles.imageContainer, { width: IMAGE_WIDTH }]}>
-            <View style={carouselStyles.imageWrapper} onLayout={handleContainerLayout}>
-              <Image
-                source={getImageSource(index)}
-                style={carouselStyles.image}
-                resizeMode="contain"
-              />
-              {/* Detection labels overlay */}
-              {renderDetectionLabels(index)}
-            </View>
+          <View
+            key={index}
+            style={[carouselStyles.imageSlide, { width: IMAGE_WIDTH }]}
+            onLayout={handleContainerLayout}
+          >
+            <Image
+              source={getImageSource(index)}
+              style={carouselStyles.image}
+              resizeMode="contain"
+            />
+            {/* Detection labels overlay */}
+            {renderDetectionLabels(index)}
           </View>
         ))}
       </ScrollView>
 
-      {/* Page Indicators */}
+      {/* Floating Page Indicators */}
       {photos.length > 1 && (
-        <View style={carouselStyles.indicators}>
+        <View style={carouselStyles.indicatorsOverlay}>
           {photos.map((_, index) => (
             <View
               key={index}
@@ -942,59 +939,51 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
 // Carousel-specific styles
 const carouselStyles = StyleSheet.create({
   container: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  scrollContent: {
-    paddingHorizontal: 0,
-  },
-  imageContainer: {
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-  },
-  imageWrapper: {
     backgroundColor: "#F8F9FA",
-    padding: 8,
-    borderRadius: 10,
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+  imageSlide: {
     position: "relative",
   },
   image: {
     width: "100%",
-    height: 260,
-    borderRadius: 8,
+    height: 280,
+    borderRadius: 16,
   },
   detectionLabel: {
     position: "absolute",
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     zIndex: 10,
   },
   detectionLabelText: {
     color: "#FFFFFF",
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
   },
-  indicators: {
+  indicatorsOverlay: {
+    position: "absolute",
+    bottom: 12,
+    left: 0,
+    right: 0,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingBottom: 12,
-    gap: 8,
+    gap: 6,
   },
   indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E5E7EB",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.5)",
   },
   indicatorActive: {
-    backgroundColor: "#2A7DE1",
-    width: 20,
-    borderRadius: 4,
+    backgroundColor: "#FFFFFF",
+    width: 18,
+    borderRadius: 3,
   },
 });
 
