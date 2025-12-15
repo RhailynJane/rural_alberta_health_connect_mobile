@@ -260,9 +260,13 @@ function renderAssessmentCards(
       chunks: ttsChunks,
       chunkStates: ttsChunkStates,
       isAvailable: ttsAvailable,
+      hasPlayed: ttsHasPlayed,
     } = useTTS();
 
     const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+
+    // Different colors: Cyan for new, Green for replay
+    const listenColor = ttsHasPlayed ? '#10B981' : '#22D3EE';
 
     const handleTTSPress = async () => {
       if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
@@ -300,19 +304,23 @@ function renderAssessmentCards(
                   <Ionicons name="pause" size={18} color="#94A3B8" />
                 </TouchableOpacity>
               )}
-              {/* Ready state - Listen button with icon and text */}
+              {/* Ready state - Listen/Replay button with icon and text */}
               {ttsStatus === 'ready' && (
                 <TouchableOpacity
                   style={styles.inlineTtsButton}
                   onPress={handleTTSPress}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="volume-medium-outline" size={16} color="#22D3EE" />
+                  <Ionicons
+                    name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"}
+                    size={16}
+                    color={listenColor}
+                  />
                   <Text style={[
                     styles.inlineTtsButtonText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
+                    { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor },
                   ]}>
-                    Listen
+                    {ttsHasPlayed ? 'Replay' : 'Listen'}
                   </Text>
                 </TouchableOpacity>
               )}

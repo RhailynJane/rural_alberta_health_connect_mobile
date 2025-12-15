@@ -35,6 +35,8 @@ export interface UseTTSReturn {
   chunks: string[];
   chunkStates: ChunkState[];
   currentChunk: number; // 1-indexed, 0 when not active
+  // Track if audio has been played (for UI differentiation)
+  hasPlayed: boolean;
 }
 
 export interface UseTTSOptions {
@@ -78,6 +80,9 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
   const [chunks, setChunks] = useState<string[]>([]);
   const [chunkStates, setChunkStates] = useState<ChunkState[]>([]);
   const [currentChunk, setCurrentChunk] = useState(0);
+
+  // Track if audio has been played at least once (for UI differentiation)
+  const [hasPlayed, setHasPlayed] = useState(false);
 
   const isInitialized = useRef(false);
   const isMounted = useRef(true);
@@ -264,6 +269,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
           if (streamStatus.overallProgress >= 1) {
             setStatus('ready');
             setGenerationProgress(0);
+            setHasPlayed(true); // Mark as played for UI differentiation
             // Clear chunk state when done
             setChunks([]);
             setChunkStates([]);
@@ -276,6 +282,7 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
       if (isMounted.current) {
         setStatus('ready');
         setGenerationProgress(0);
+        setHasPlayed(true); // Mark as played for UI differentiation
         setChunks([]);
         setChunkStates([]);
         setCurrentChunk(0);
@@ -323,6 +330,8 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
     chunks,
     chunkStates,
     currentChunk,
+    // Track if audio has been played
+    hasPlayed,
   };
 }
 

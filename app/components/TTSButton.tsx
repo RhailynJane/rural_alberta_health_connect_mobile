@@ -36,7 +36,12 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     stop,
     download,
     isAvailable,
+    hasPlayed,
   } = useTTS();
+
+  // Different colors for played vs not played
+  // Cyan (#22D3EE) for new, Green (#10B981) for replay
+  const listenColor = hasPlayed ? '#10B981' : '#22D3EE';
 
   const handlePress = useCallback(async () => {
     switch (status) {
@@ -150,22 +155,25 @@ export default function TTSButton({ text, style, compact = false, onError }: TTS
     );
   }
 
-  // Ready state - Listen button
+  // Ready state - Listen button (different color for replay)
   return (
     <TouchableOpacity
       style={[styles.button, styles.readyButton, style]}
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      <Ionicons name="volume-medium-outline" size={16} color="#22D3EE" />
+      <Ionicons
+        name={hasPlayed ? "refresh-outline" : "volume-medium-outline"}
+        size={16}
+        color={listenColor}
+      />
       <Text
         style={[
           styles.buttonText,
-          styles.readyText,
-          { fontFamily: FONTS.BarlowSemiCondensed },
+          { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor },
         ]}
       >
-        {compact ? 'Listen' : 'Listen'}
+        {hasPlayed ? 'Replay' : 'Listen'}
       </Text>
     </TouchableOpacity>
   );
