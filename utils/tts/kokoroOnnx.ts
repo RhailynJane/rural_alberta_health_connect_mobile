@@ -605,6 +605,11 @@ class KokoroOnnx {
       return this.numberToOrdinal(parseInt(num));
     });
 
+    // Handle number ranges like "24-48" -> "24 to 48" (before standalone number conversion)
+    text = text.replace(/(\d+)\s*[-–—]\s*(\d+)/g, (_, num1, num2) => {
+      return `${num1} to ${num2}`;
+    });
+
     // Handle remaining standalone numbers
     text = text.replace(/\b(\d+\.?\d*)\b/g, (_, num) => {
       return this.numberToWords(parseFloat(num));

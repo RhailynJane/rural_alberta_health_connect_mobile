@@ -25,6 +25,8 @@ interface TTSHighlightedTextProps {
   asBulletList?: boolean;
   /** Custom bullet character */
   bulletChar?: string;
+  /** Parent horizontal padding to extend background to edges (default: 20) */
+  parentPadding?: number;
 }
 
 /**
@@ -35,6 +37,8 @@ interface TTSHighlightedTextProps {
  * - Playing: Dark text with solid subtle cyan highlight
  * - Completed: Normal dark text
  * - Pending: Dimmed gray text
+ *
+ * Background extends full-width of parent card for better visual impact.
  */
 export default function TTSHighlightedText({
   chunks,
@@ -44,6 +48,7 @@ export default function TTSHighlightedText({
   containerStyle,
   asBulletList = false,
   bulletChar = '•',
+  parentPadding = 20,
 }: TTSHighlightedTextProps) {
   // Animation values for each chunk
   const pulseAnims = useRef<Animated.Value[]>([]).current;
@@ -73,17 +78,17 @@ export default function TTSHighlightedText({
 
     chunkStates.forEach((state, index) => {
       if (state === 'generating' && pulseAnims[index]) {
-        // Smooth, gentle breathing animation for glow effect
+        // Gentle pulse animation - calm but noticeable
         const pulse = Animated.loop(
           Animated.sequence([
             Animated.timing(pulseAnims[index], {
               toValue: 1,
-              duration: 800, // Faster for more noticeable blink
+              duration: 1400,
               useNativeDriver: false,
             }),
             Animated.timing(pulseAnims[index], {
               toValue: 0.2,
-              duration: 800,
+              duration: 1400,
               useNativeDriver: false,
             }),
           ])
@@ -110,14 +115,14 @@ export default function TTSHighlightedText({
     return null;
   }
 
-  // Get animated background style for glow effect
+  // Get animated background style for glow effect - full width
   const getChunkStyle = (state: ChunkState, animValue: Animated.Value): ViewStyle => {
+    // Extend background to parent edges with negative margin, restore text position with padding
     const baseStyle: ViewStyle = {
-      paddingHorizontal: 4,
-      paddingVertical: 2,
-      marginVertical: 1,
-      marginHorizontal: -4,
-      borderRadius: 4,
+      marginHorizontal: -parentPadding,
+      paddingHorizontal: parentPadding,
+      paddingVertical: 10,
+      marginBottom: 8, // Space between paragraphs
     };
 
     switch (state) {
@@ -127,14 +132,14 @@ export default function TTSHighlightedText({
           // Pulsing cyan glow background
           backgroundColor: animValue.interpolate({
             inputRange: [0, 1],
-            outputRange: ['rgba(34, 211, 238, 0.08)', 'rgba(34, 211, 238, 0.25)'],
+            outputRange: ['rgba(34, 211, 238, 0.06)', 'rgba(34, 211, 238, 0.18)'],
           }) as unknown as string,
         };
       case 'playing':
         return {
           ...baseStyle,
           // Solid subtle cyan highlight
-          backgroundColor: 'rgba(34, 211, 238, 0.15)',
+          backgroundColor: 'rgba(34, 211, 238, 0.12)',
         };
       case 'completed':
         return {
@@ -145,7 +150,7 @@ export default function TTSHighlightedText({
       default:
         return {
           ...baseStyle,
-          backgroundColor: 'transparent',
+          backgroundColor: 'rgba(148, 163, 184, 0.05)', // Very subtle gray for pending
         };
     }
   };
@@ -185,9 +190,9 @@ export default function TTSHighlightedText({
           const animValue = pulseAnims[index] || new Animated.Value(0);
 
           return (
-            <View key={index} style={styles.bulletItem}>
-              <Text style={[styles.bullet, getTextStyle(state)]}>{bulletChar}</Text>
-              <Animated.View style={[styles.chunkWrapper, getChunkStyle(state, animValue)]}>
+            <Animated.View key={index} style={getChunkStyle(state, animValue)}>
+              <View style={styles.bulletItem}>
+                <Text style={[styles.bullet, getTextStyle(state)]}>{bulletChar}</Text>
                 <Text
                   style={[
                     styles.text,
@@ -198,23 +203,23 @@ export default function TTSHighlightedText({
                 >
                   {chunk}
                 </Text>
-              </Animated.View>
-            </View>
+              </View>
+            </Animated.View>
           );
         })}
       </View>
     );
   }
 
-  // Inline text with highlighting
+  // Block layout - each chunk as a separate paragraph with full-width background
   return (
-    <View style={[styles.inlineContainer, containerStyle]}>
+    <View style={[styles.container, containerStyle]}>
       {chunks.map((chunk, index) => {
         const state = chunkStates[index] || 'pending';
         const animValue = pulseAnims[index] || new Animated.Value(0);
 
         return (
-          <Animated.View key={index} style={[styles.inlineChunk, getChunkStyle(state, animValue)]}>
+          <Animated.View key={index} style={getChunkStyle(state, animValue)}>
             <Text
               style={[
                 styles.text,
@@ -224,7 +229,6 @@ export default function TTSHighlightedText({
               ]}
             >
               {chunk}
-              {index < chunks.length - 1 ? ' ' : ''}
             </Text>
           </Animated.View>
         );
@@ -237,29 +241,19 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
   },
-  inlineContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
   bulletItem: {
     flexDirection: 'row',
-    marginBottom: 8,
     alignItems: 'flex-start',
   },
   bullet: {
-    fontSize: 14,
-    marginRight: 8,
-    marginTop: 2,
-  },
-  chunkWrapper: {
-    flex: 1,
-  },
-  inlineChunk: {
-    flexShrink: 1,
+    fontSize: 15,
+    marginRight: 10,
+    marginTop: 1,
   },
   text: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 22,
     color: '#374151',
+    flex: 1,
   },
 });
