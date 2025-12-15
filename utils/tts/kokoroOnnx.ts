@@ -299,8 +299,13 @@ class KokoroOnnx {
   private streamingTokens: number[] = [];
   private streamingPhonemes: string = "";
   private streamingCallback: ((status: StreamStatus) => void) | null = null;
-  // Audio cache: key = hash(text + voiceId + speed), value = array of audio URIs
-  private audioCache: Map<string, string[]> = new Map();
+  // Audio cache: key = hash(text + voiceId + speed), value = cached audio data
+  // Supports progressive caching - chunks are saved as they're generated
+  private audioCache: Map<string, {
+    chunks: string[];      // Text chunks (for verification)
+    uris: string[];        // Generated audio URIs (filled progressively)
+    complete: boolean;     // True when all chunks have been generated
+  }> = new Map();
   // Pre-warmed state
   private isPreWarmed: boolean = false;
   private preWarmPromise: Promise<boolean> | null = null;
@@ -1090,26 +1095,34 @@ class KokoroOnnx {
     // Create cache key
     const cacheKey = simpleHash(`${text}|${voiceId}|${speed}`);
 
-    // Store generated audio URIs for caching
-    const audioUris: string[] = [];
-
     try {
       await this.downloadVoice(voiceId);
 
-      // Check if we have cached audio - if so, just play it
-      if (this.audioCache.has(cacheKey)) {
-        console.log('[TTS] Using cached audio (instant playback)');
-        const cachedUris = this.audioCache.get(cacheKey)!;
+      // Check if we have COMPLETE cached audio - if so, just play it (instant playback)
+      const existingCache = this.audioCache.get(cacheKey);
+      if (existingCache?.complete && existingCache.uris.length === totalChunks) {
+        console.log('[TTS] Using fully cached audio (instant playback)');
         const cachedChunkStates: ('pending' | 'generating' | 'playing' | 'completed')[] =
           chunks.map(() => 'pending');
 
-        for (let i = 0; i < cachedUris.length; i++) {
+        for (let i = 0; i < existingCache.uris.length; i++) {
           if (!this.isStreaming) break;
-          await this._playChunk(cachedUris[i], i, totalChunks, onProgress, 0, 0, chunks, cachedChunkStates);
+          await this._playChunk(existingCache.uris[i], i, totalChunks, onProgress, 0, 0, chunks, cachedChunkStates);
         }
 
         this.isStreaming = false;
         return { tokensPerSecond: 0, timeToFirstToken: 0, totalTokens: 0, totalChunks };
+      }
+
+      // Initialize or reuse partial cache - supports resuming from where we left off
+      let cacheEntry = existingCache;
+      if (!cacheEntry || cacheEntry.chunks.join('') !== chunks.join('')) {
+        // No cache or chunks changed - start fresh
+        cacheEntry = { chunks: [...chunks], uris: [], complete: false };
+        this.audioCache.set(cacheKey, cacheEntry);
+        console.log('[TTS] Starting fresh cache entry');
+      } else {
+        console.log(`[TTS] Found partial cache with ${cacheEntry.uris.length}/${totalChunks} chunks`);
       }
 
       // ═══════════════════════════════════════════════════════════════
@@ -1134,24 +1147,43 @@ class KokoroOnnx {
         });
       }
 
+      // Helper: Get or generate chunk audio (uses cache if available)
+      const getOrGenerateChunk = async (chunkIndex: number): Promise<{ audioUri: string; numTokens: number; inferenceTime: number; fromCache: boolean }> => {
+        // Check if this chunk is already cached
+        if (cacheEntry.uris[chunkIndex]) {
+          console.log(`[TTS] Using cached chunk ${chunkIndex + 1}/${totalChunks}`);
+          return { audioUri: cacheEntry.uris[chunkIndex], numTokens: 0, inferenceTime: 0, fromCache: true };
+        }
+
+        // Generate the chunk
+        const result = await this._generateChunkAudio(chunks[chunkIndex], voiceId, speed);
+
+        // PROGRESSIVE CACHING: Save immediately after generation
+        cacheEntry.uris[chunkIndex] = result.audioUri;
+        console.log(`[TTS] Chunk ${chunkIndex + 1} cached (progressive)`);
+
+        return { ...result, fromCache: false };
+      };
+
       // Generate first chunk (must wait for this before any playback)
-      console.log(`[TTS] Generating chunk 1/${totalChunks}...`);
-      let currentAudio = await this._generateChunkAudio(chunks[0], voiceId, speed);
-      audioUris.push(currentAudio.audioUri);
-      totalTokensProcessed += currentAudio.numTokens;
-      totalInferenceTime += currentAudio.inferenceTime;
-      firstChunkTimeToFirstToken = currentAudio.inferenceTime;
+      console.log(`[TTS] Getting chunk 1/${totalChunks}...`);
+      let currentAudio = await getOrGenerateChunk(0);
+      if (!currentAudio.fromCache) {
+        totalTokensProcessed += currentAudio.numTokens;
+        totalInferenceTime += currentAudio.inferenceTime;
+        firstChunkTimeToFirstToken = currentAudio.inferenceTime;
+      }
 
-      console.log(`[TTS] Chunk 1 ready in ${currentAudio.inferenceTime}ms`);
+      console.log(`[TTS] Chunk 1 ready ${currentAudio.fromCache ? '(from cache)' : `in ${currentAudio.inferenceTime}ms`}`);
 
-      // Lookahead: start generating next chunk BEFORE playing current
-      type GenResult = { audioUri: string; numTokens: number; inferenceTime: number };
+      // Lookahead: start generating/fetching next chunk BEFORE playing current
+      type GenResult = { audioUri: string; numTokens: number; inferenceTime: number; fromCache: boolean };
       let nextChunkPromise: Promise<GenResult> | null = null;
 
-      // Start generating chunk 2 (if exists) before playing chunk 1
+      // Start getting chunk 2 (if exists) before playing chunk 1
       if (totalChunks > 1) {
-        console.log(`[TTS] Starting lookahead: generating chunk 2/${totalChunks}...`);
-        nextChunkPromise = this._generateChunkAudio(chunks[1], voiceId, speed);
+        console.log(`[TTS] Starting lookahead: chunk 2/${totalChunks}...`);
+        nextChunkPromise = getOrGenerateChunk(1);
       }
 
       // Now play chunks in a pipeline: play N while N+1 generates
@@ -1210,29 +1242,30 @@ class KokoroOnnx {
             }
 
             const nextResult = await nextChunkPromise;
-            audioUris.push(nextResult.audioUri);
-            totalTokensProcessed += nextResult.numTokens;
-            totalInferenceTime += nextResult.inferenceTime;
+            if (!nextResult.fromCache) {
+              totalTokensProcessed += nextResult.numTokens;
+              totalInferenceTime += nextResult.inferenceTime;
+            }
             currentAudio = nextResult;
 
-            console.log(`[TTS] Chunk ${i + 2} ready (${nextResult.inferenceTime}ms inference)`);
+            console.log(`[TTS] Chunk ${i + 2} ready ${nextResult.fromCache ? '(from cache)' : `(${nextResult.inferenceTime}ms inference)`}`);
           }
 
-          // Start generating the chunk AFTER next (lookahead for next iteration)
+          // Start getting the chunk AFTER next (lookahead for next iteration)
           // This ensures chunk N+2 generates while chunk N+1 plays
           if (i + 2 < totalChunks) {
-            console.log(`[TTS] Starting lookahead: generating chunk ${i + 3}/${totalChunks}...`);
-            nextChunkPromise = this._generateChunkAudio(chunks[i + 2], voiceId, speed);
+            console.log(`[TTS] Starting lookahead: chunk ${i + 3}/${totalChunks}...`);
+            nextChunkPromise = getOrGenerateChunk(i + 2);
           } else {
             nextChunkPromise = null;
           }
         }
       }
 
-      // Cache for future playback
-      if (audioUris.length === totalChunks) {
-        this.audioCache.set(cacheKey, audioUris);
-        console.log('[TTS] Audio cached for future playback');
+      // Mark cache as complete if all chunks were generated
+      if (cacheEntry.uris.length === totalChunks && cacheEntry.uris.every(uri => uri)) {
+        cacheEntry.complete = true;
+        console.log('[TTS] Cache marked complete for future instant playback');
       }
 
       this.isStreaming = false;
@@ -1362,7 +1395,25 @@ class KokoroOnnx {
    */
   isAudioCached(text: string, voiceId: string, speed: number): boolean {
     const cacheKey = this.getCacheKey(text, voiceId, speed);
-    return this.audioCache.has(cacheKey);
+    const cached = this.audioCache.get(cacheKey);
+    return cached?.complete === true;
+  }
+
+  /**
+   * Check if audio has partial cache (some chunks generated)
+   */
+  hasPartialCache(text: string, voiceId: string, speed: number): { hasPartial: boolean; cachedChunks: number; totalChunks: number } {
+    const cacheKey = this.getCacheKey(text, voiceId, speed);
+    const cached = this.audioCache.get(cacheKey);
+    if (!cached) {
+      return { hasPartial: false, cachedChunks: 0, totalChunks: 0 };
+    }
+    const cachedChunks = cached.uris.filter(uri => uri).length;
+    return {
+      hasPartial: cachedChunks > 0 && !cached.complete,
+      cachedChunks,
+      totalChunks: cached.chunks.length,
+    };
   }
 
   /**
@@ -1394,11 +1445,11 @@ class KokoroOnnx {
 
     const cacheKey = this.getCacheKey(text, voiceId, speed);
 
-    // Already cached - skip generation
-    if (this.audioCache.has(cacheKey)) {
+    // Already fully cached - skip generation
+    const existingCache = this.audioCache.get(cacheKey);
+    if (existingCache?.complete) {
       console.log('[TTS] Audio already cached, skipping pre-generation');
-      const cached = this.audioCache.get(cacheKey)!;
-      return { cached: true, totalChunks: cached.length };
+      return { cached: true, totalChunks: existingCache.uris.length };
     }
 
     // Ensure model is loaded
@@ -1418,12 +1469,23 @@ class KokoroOnnx {
         return { cached: false, totalChunks: 0 };
       }
 
-      console.log(`[TTS] Pre-generating ${totalChunks} chunks in background...`);
+      // Initialize or reuse cache entry
+      let cacheEntry = existingCache;
+      if (!cacheEntry || cacheEntry.chunks.join('') !== chunks.join('')) {
+        cacheEntry = { chunks: [...chunks], uris: [], complete: false };
+        this.audioCache.set(cacheKey, cacheEntry);
+      }
 
-      const audioUris: string[] = [];
+      console.log(`[TTS] Pre-generating ${totalChunks} chunks in background...`);
 
       // Generate all chunks sequentially (no playback)
       for (let i = 0; i < totalChunks; i++) {
+        // Skip if already cached
+        if (cacheEntry.uris[i]) {
+          console.log(`[TTS] Chunk ${i + 1}/${totalChunks} already cached, skipping`);
+          continue;
+        }
+
         // Check if we should abort (e.g., if streaming started)
         if (this.isStreaming) {
           console.log('[TTS] Pre-generation aborted: streaming started');
@@ -1431,7 +1493,7 @@ class KokoroOnnx {
         }
 
         const result = await this._generateChunkAudio(chunks[i], voiceId, speed);
-        audioUris.push(result.audioUri);
+        cacheEntry.uris[i] = result.audioUri;
 
         if (onProgress) {
           onProgress((i + 1) / totalChunks, i + 1, totalChunks);
@@ -1440,8 +1502,8 @@ class KokoroOnnx {
         console.log(`[TTS] Pre-generated chunk ${i + 1}/${totalChunks}`);
       }
 
-      // Cache the audio
-      this.audioCache.set(cacheKey, audioUris);
+      // Mark as complete
+      cacheEntry.complete = true;
       console.log(`[TTS] Pre-generation complete: ${totalChunks} chunks cached`);
 
       return { cached: true, totalChunks };
@@ -1462,9 +1524,11 @@ class KokoroOnnx {
     onProgress: ((status: ChunkedStreamStatus) => void) | null = null
   ): Promise<boolean> {
     const cacheKey = this.getCacheKey(text, voiceId, speed);
+    const cached = this.audioCache.get(cacheKey);
 
-    if (!this.audioCache.has(cacheKey)) {
-      console.log('[TTS] Audio not cached, falling back to streaming');
+    // If not fully cached, fall back to streaming (which will use partial cache if available)
+    if (!cached?.complete) {
+      console.log('[TTS] Audio not fully cached, falling back to streaming');
       await this.streamChunkedAudio(text, voiceId, speed, onProgress);
       return false;
     }
@@ -1474,11 +1538,11 @@ class KokoroOnnx {
     }
 
     this.isStreaming = true;
-    const cachedUris = this.audioCache.get(cacheKey)!;
+    const cachedUris = cached.uris;
     const totalChunks = cachedUris.length;
 
-    // Reconstruct chunks for UI highlighting
-    const chunks = splitTextIntoChunks(text);
+    // Use cached chunks for UI highlighting
+    const chunks = cached.chunks;
     const chunkStates: ('pending' | 'generating' | 'playing' | 'completed')[] =
       chunks.map(() => 'pending');
 
