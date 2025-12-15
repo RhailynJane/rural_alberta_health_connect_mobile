@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import KokoroOnnx, { StreamStatus } from './kokoroOnnx';
+import KokoroOnnx, { ChunkedStreamStatus } from './kokoroOnnx';
 import { downloadModel, isModelDownloaded, DEFAULT_MODEL_ID, MODELS, ModelId } from './models';
 import { DEFAULT_VOICE_ID, VoiceId } from './voices';
 
