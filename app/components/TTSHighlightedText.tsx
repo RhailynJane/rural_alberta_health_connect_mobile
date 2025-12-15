@@ -202,23 +202,24 @@ function ChunkItem({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'column',
+    // Remove any extra margin so backgrounds can extend to card edges
+    marginHorizontal: 0,
   },
   chunkContainer: {
     position: 'relative',
-    marginBottom: 8,
-    // Ensure overflow is hidden so background can't escape
-    overflow: 'hidden',
-    borderRadius: 8,
+    marginBottom: 4,
+    // No border radius - let it fill full width of parent card
+    // Parent card already has rounded corners
   },
   backgroundOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 8,
+    // No border radius - extends full width
   },
   bulletItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 0, // No padding - parent card handles padding
   },
   bullet: {
     fontSize: 15,
@@ -235,7 +236,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     color: '#374151',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 0, // No padding - parent card handles padding
   },
 });
