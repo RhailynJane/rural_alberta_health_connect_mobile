@@ -921,9 +921,12 @@ export default function LogDetails() {
               {/* Notes */}
               {resolvedEntry.notes && (
                 <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="document-text" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Additional Notes</Text>
+                  <View style={styles.cardHeaderWithTTS}>
+                    <View style={styles.cardHeaderLeft}>
+                      <Ionicons name="document-text" size={20} color="#2A7DE1" />
+                      <Text style={styles.cardTitle}>Additional Notes</Text>
+                    </View>
+                    <TTSButton text={prepareTextForTTS(resolvedEntry.notes)} compact style={styles.cardTTSButton} />
                   </View>
                   <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>
