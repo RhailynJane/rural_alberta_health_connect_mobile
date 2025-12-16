@@ -3,16 +3,16 @@ import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
@@ -164,6 +164,7 @@ export default function MedicalHistory() {
               height={150}
               showLogo={true}
               screenType="signin"
+              showMenuButton={false}
             />
 
             {/* Progress Bar */}
@@ -403,11 +404,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 100,
     marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   buttonContainer: {
     flexDirection: 'row',

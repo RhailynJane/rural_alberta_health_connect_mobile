@@ -134,24 +134,23 @@ class LLMSingletonManager {
   }
 
   /**
-   * Initialize the LLM model (called ONCE per app lifecycle)
+   * Initialize/update the LLM model reference
    *
    * Note: This must be called from within a React component because
-   * useLLM is a React hook. We use a "host" component approach.
+   * useLLM is a React hook. The llm object from useLLM changes when
+   * the model loads, so we must always accept the latest reference.
    */
   initializeWithHook(llm: ReturnType<typeof useLLMHook>): void {
-    if (this.isInitialized && this.llmInstance) {
-      console.log(`${LOG_PREFIX} Already initialized, skipping`);
-      return;
-    }
-
-    console.log(`${LOG_PREFIX} Initializing with hook instance`);
+    // Always update the llmInstance reference - it changes when model loads
     this.llmInstance = llm;
-    this.isInitialized = true;
 
-    this.updateState({
-      isLoading: true,
-    });
+    if (!this.isInitialized) {
+      console.log(`${LOG_PREFIX} First initialization with hook instance`);
+      this.isInitialized = true;
+      this.updateState({
+        isLoading: true,
+      });
+    }
   }
 
   /**

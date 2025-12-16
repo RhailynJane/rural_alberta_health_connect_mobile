@@ -4,14 +4,14 @@ import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Yup from 'yup';
@@ -148,6 +148,7 @@ export default function ForgotPassword() {
               title="Alberta Health Connect"
               height={150}
               showLogo={true}
+              showMenuButton={false}
             />
 
             <View style={styles.contentSection}>

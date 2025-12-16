@@ -1,3 +1,4 @@
+import { usePathname } from "expo-router";
 import React, { createContext, useContext, useMemo, useState } from "react";
 import SideMenu from "./SideMenu";
 
@@ -23,20 +24,30 @@ interface Props {
 
 const SideMenuProvider: React.FC<Props> = ({ children }) => {
   const [visible, setVisible] = useState(false);
+  const pathname = usePathname();
+
+  // Hide menu during auth and onboarding flows
+  const isAuthOrOnboarding = pathname?.startsWith('/auth') || pathname?.startsWith('/onboarding') || pathname === '/';
+  const menuVisible = visible && !isAuthOrOnboarding;
+  
+  // Debug logging
+  if (isAuthOrOnboarding) {
+    console.log(`🚫 [SideMenu] Hidden on route: ${pathname}`);
+  }
 
   const value = useMemo(
     () => ({
-      visible,
-      open: () => setVisible(true),
+      visible: menuVisible,
+      open: () => !isAuthOrOnboarding && setVisible(true),
       close: () => setVisible(false),
     }),
-    [visible]
+    [menuVisible, isAuthOrOnboarding]
   );
 
   return (
     <SideMenuContext.Provider value={value}>
       {children}
-      <SideMenu visible={visible} onClose={() => setVisible(false)} />
+      <SideMenu visible={menuVisible} onClose={() => setVisible(false)} />
     </SideMenuContext.Provider>
   );
 };

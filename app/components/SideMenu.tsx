@@ -14,7 +14,8 @@ import {
   View
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Icon from "react-native-vector-icons/MaterialIcons";
+import MaterialIcon from "react-native-vector-icons/MaterialIcons";
+import IonIcon from "react-native-vector-icons/Ionicons";
 import { FONTS } from "../constants/constants";
 
 interface SideMenuProps {
@@ -65,12 +66,11 @@ const SideMenu: React.FC<SideMenuProps> = ({
     }
   };
 
-  const menuItems = [
+  const menuItems: Array<{ label: string; iconSource?: any; iconName?: string; route: string }> = [
     { label: "Home", iconSource: require("../../assets/images/home-icon.png"), route: "/(tabs)/dashboard" },
     { label: "AI Assessment", iconSource: require("../../assets/images/assess-icon.png"), route: "/(tabs)/ai-assess" },
     { label: "Tracker", iconSource: require("../../assets/images/tracker-icon.png"), route: "/(tabs)/tracker" },
-    { label: "Emergency Services", iconSource: require("../../assets/images/emergency-icon.png"), route: "/(tabs)/emergency" },
-    { label: "Location Services", iconSource: require("../../assets/images/location-icon.png"), route: "/location-services" },
+    { label: "Map", iconName: "map-outline", route: "/find-care/clinics" },
     { label: "Resources", iconSource: require("../../assets/images/resources-icon.png"), route: "/resources" },
     { label: "Profile", iconSource: require("../../assets/images/profile-icon.png"), route: "/(tabs)/profile" },
   ];
@@ -104,7 +104,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
                     <Image source={{ uri: displayAvatar }} style={styles.headerAvatar} />
                   ) : (
                     <View style={styles.headerAvatarPlaceholder}>
-                      <Icon name="person" size={36} color="#fff" />
+                      <MaterialIcon name="person" size={36} color="#fff" />
                     </View>
                   )}
                 </View>
@@ -125,17 +125,21 @@ const SideMenu: React.FC<SideMenuProps> = ({
                 style={styles.menuItem}
                 onPress={() => handleNavigation(item.route)}
               >
-                <Image source={item.iconSource} style={{ width: 22, height: 22 }} resizeMode="contain" />
+                {item.iconName ? (
+                  <IonIcon name={item.iconName} size={22} color="#6F7682" />
+                ) : (
+                  <Image source={item.iconSource} style={{ width: 22, height: 22 }} resizeMode="contain" />
+                )}
                 <Text style={[styles.menuItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
                   {item.label}
                 </Text>
-                <Icon name="chevron-right" size={20} color="#9AA1AA" style={styles.menuChevron} />
+                <MaterialIcon name="chevron-right" size={20} color="#9AA1AA" style={styles.menuChevron} />
               </TouchableOpacity>
             ))}
           </ScrollView>
 
           <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-            <Icon name="logout" size={18} color="#DC3545" style={{ marginRight: 8 }} />
+            <MaterialIcon name="logout" size={18} color="#DC3545" style={{ marginRight: 8 }} />
             <Text style={[styles.signOutText, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>Sign out</Text>
           </TouchableOpacity>
         </SafeAreaView>

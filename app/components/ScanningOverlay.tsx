@@ -343,6 +343,14 @@ export default function ScanningOverlay({
         style={[styles.imageContainer, { opacity: imageOpacity }]}
         onLayout={handleContainerLayout}
       >
+        {/* Blurred background fill for portrait/narrow images */}
+        <Image
+          source={{ uri: currentImage }}
+          style={styles.blurredBackground}
+          resizeMode="cover"
+          blurRadius={20}
+        />
+        <View style={styles.blurOverlay} />
         {/* The actual image with contain mode for proper bounding box alignment */}
         <Image
           source={{ uri: currentImage }}
@@ -497,12 +505,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  blurredBackground: {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ scale: 1.1 }],
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+  },
   image: {
     width: '100%',
     height: '100%',
+    zIndex: 1,
   },
   detectionsContainer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
   detectionBox: {
     borderWidth: 2,
@@ -523,6 +541,7 @@ const styles = StyleSheet.create({
   },
   riveContainer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
   },
   riveAnimation: {
     width: '100%',

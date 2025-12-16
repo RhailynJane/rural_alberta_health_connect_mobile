@@ -1,24 +1,24 @@
 import { api } from "@/convex/_generated/api";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import * as ExpoLocation from "expo-location";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
+  Linking,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { getCachedClinics, cacheClinics } from "../../watermelon/hooks/useCachedClinics";
 import MapboxOfflineMap from "../components/MapboxOfflineMap";
+import OfflineMapDownloader from "../components/OfflineMapDownloader";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
@@ -48,20 +48,21 @@ interface FilterState {
 
 export default function FindCareClinics() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
 
-  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [selectedClinic, setSelectedClinic] = useState<Clinic | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     clinicType: "all",
     openNow: false,
     is24Hours: false,
   });
+  const [deviceLocation, setDeviceLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showOfflineDownloader, setShowOfflineDownloader] = useState(false);
+  const [mapFocusCenter, setMapFocusCenter] = useState<{ latitude: number; longitude: number; zoom?: number } | null>(null);
 
   const locationStatus = useQuery(
     api.locationServices.getLocationServicesStatus,
@@ -98,6 +99,8 @@ export default function FindCareClinics() {
             });
             latitude = location.coords.latitude;
             longitude = location.coords.longitude;
+            // Save device location for map display
+            setDeviceLocation({ latitude, longitude });
           }
         }
 
@@ -134,18 +137,9 @@ export default function FindCareClinics() {
     }
   }, [locationStatus, isOnline]);
 
-  // Filter clinics
+  // Filter clinics based on filter state
   const filteredClinics = clinics.filter((clinic) => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      if (
-        !clinic.name.toLowerCase().includes(query) &&
-        !clinic.address.toLowerCase().includes(query)
-      ) {
-        return false;
-      }
-    }
-    // Add more filter logic here based on filters state
+    // TODO: Implement actual filtering when we have real data for hours
     return true;
   });
 
@@ -154,17 +148,61 @@ export default function FindCareClinics() {
     (filters.is24Hours ? 1 : 0) +
     (filters.clinicType !== "all" ? 1 : 0);
 
+  // Handle clinic selection - focus map and expand card
+  const handleClinicSelect = useCallback((clinic: Clinic) => {
+    const isAlreadySelected = selectedClinic?.id === clinic.id;
+
+    if (isAlreadySelected) {
+      // Deselect if tapping same clinic
+      setSelectedClinic(null);
+      setMapFocusCenter(null);
+    } else {
+      // Select and focus map
+      setSelectedClinic(clinic);
+      if (clinic.coordinates?.latitude && clinic.coordinates?.longitude) {
+        setMapFocusCenter({
+          latitude: clinic.coordinates.latitude,
+          longitude: clinic.coordinates.longitude,
+          zoom: 14,
+        });
+      }
+    }
+  }, [selectedClinic]);
+
+  // Handle call action
+  const handleCall = useCallback((phone: string) => {
+    const cleanPhone = phone.replace(/[^0-9+]/g, "");
+    Linking.openURL(`tel:${cleanPhone}`).catch(() => {
+      console.error("Failed to open phone dialer");
+    });
+  }, []);
+
+  // Handle directions action
+  const handleDirections = useCallback((clinic: Clinic) => {
+    const { latitude, longitude } = clinic.coordinates;
+    const label = encodeURIComponent(clinic.name);
+    const url = Platform.select({
+      ios: `maps:0,0?q=${label}@${latitude},${longitude}`,
+      android: `geo:0,0?q=${latitude},${longitude}(${label})`,
+    });
+    if (url) {
+      Linking.openURL(url).catch(() => {
+        // Fallback to Google Maps web
+        Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`);
+      });
+    }
+  }, []);
+
   const renderClinicCard = useCallback(
     ({ item }: { item: Clinic }) => {
       const isSelected = selectedClinic?.id === item.id;
       return (
         <TouchableOpacity
           style={[styles.clinicCard, isSelected && styles.clinicCardSelected]}
-          onPress={() => {
-            setSelectedClinic(item);
-          }}
+          onPress={() => handleClinicSelect(item)}
           activeOpacity={0.7}
         >
+          {/* Header Row */}
           <View style={styles.clinicCardHeader}>
             <Text style={styles.clinicName} numberOfLines={1}>
               {item.name}
@@ -174,90 +212,90 @@ export default function FindCareClinics() {
             </View>
           </View>
 
-          <Text style={styles.clinicAddress} numberOfLines={1}>
+          {/* Address */}
+          <Text style={styles.clinicAddress} numberOfLines={isSelected ? 2 : 1}>
             {item.address}
           </Text>
 
+          {/* Status Row */}
           <View style={styles.clinicMeta}>
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
               <Text style={styles.statusText}>Open</Text>
             </View>
-            <Text style={styles.clinicType}>Walk-in</Text>
+            <Text style={styles.clinicType}>{item.type || "Walk-in"}</Text>
           </View>
 
+          {/* Expanded Details - shown when selected */}
           {isSelected && (
-            <TouchableOpacity
-              style={styles.viewDetailsButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/find-care/[id]",
-                  params: { id: item.id, clinic: JSON.stringify(item) },
-                })
-              }
-            >
-              <Text style={styles.viewDetailsText}>View details</Text>
-              <Icon name="chevron-right" size={18} color="#0EA5E9" />
-            </TouchableOpacity>
+            <View style={styles.expandedDetails}>
+              {/* Phone */}
+              {item.phone && (
+                <View style={styles.detailRow}>
+                  <Icon name="phone" size={18} color="#64748B" />
+                  <Text style={styles.detailText}>{item.phone}</Text>
+                </View>
+              )}
+
+              {/* Hours */}
+              {item.hours && (
+                <View style={styles.detailRow}>
+                  <Icon name="schedule" size={18} color="#64748B" />
+                  <Text style={styles.detailText}>{item.hours}</Text>
+                </View>
+              )}
+
+              {/* Action Buttons */}
+              <View style={styles.actionButtons}>
+                {item.phone && (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => handleCall(item.phone!)}
+                  >
+                    <Icon name="phone" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Call</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.actionButtonSecondary]}
+                  onPress={() => handleDirections(item)}
+                >
+                  <Icon name="directions" size={20} color="#0EA5E9" />
+                  <Text style={styles.actionButtonTextSecondary}>Directions</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         </TouchableOpacity>
       );
     },
-    [selectedClinic, router]
+    [selectedClinic, handleClinicSelect, handleCall, handleDirections]
   );
 
+  // Use locationStatus from Convex, fallback to device GPS location
   const userLocation = (() => {
     try {
       const loc = locationStatus?.location;
-      if (!loc || typeof loc !== "string") return null;
-      const parts = loc.split(",");
-      if (parts.length < 2) return null;
-      const lat = parseFloat(parts[0]);
-      const lng = parseFloat(parts[1]);
-      if (!isFinite(lat) || !isFinite(lng)) return null;
-      return { latitude: lat, longitude: lng };
+      if (loc && typeof loc === "string") {
+        const parts = loc.split(",");
+        if (parts.length >= 2) {
+          const lat = parseFloat(parts[0]);
+          const lng = parseFloat(parts[1]);
+          if (isFinite(lat) && isFinite(lng)) {
+            return { latitude: lat, longitude: lng };
+          }
+        }
+      }
+      // Fallback to device location from GPS
+      return deviceLocation;
     } catch {
-      return null;
+      return deviceLocation;
     }
   })();
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Icon name="arrow-back" size={24} color="#334155" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Find Care</Text>
-        <View style={{ width: 44 }} />
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Icon name="search" size={20} color="#94A3B8" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Enter city, postal code, or address"
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <Icon name="close" size={20} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity style={styles.locationButton}>
-          <Icon name="my-location" size={20} color="#0EA5E9" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Map */}
+    <View style={styles.container}>
+      {/* Full-bleed Map */}
       <View style={styles.mapContainer}>
         <MapboxOfflineMap
           clinics={filteredClinics.map((c) => ({
@@ -270,37 +308,26 @@ export default function FindCareClinics() {
             phone: c.phone || undefined,
           }))}
           userLocation={userLocation}
+          focusCenter={mapFocusCenter}
+          topOffset={insets.top + 12}
           onClinicPress={(clinic) => {
             const found = filteredClinics.find((c) => c.id === clinic.id);
-            if (found) setSelectedClinic(found);
+            if (found) handleClinicSelect(found);
           }}
         />
+
+        {/* Floating Back Button - Glass Style */}
+        <TouchableOpacity
+          style={[styles.floatingButton, { top: insets.top + 12, left: 16 }]}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Icon name="arrow-back" size={22} color="#334155" />
+        </TouchableOpacity>
       </View>
 
       {/* Filter Row */}
       <View style={styles.filterRow}>
-        <TouchableOpacity
-          style={[
-            styles.filterPill,
-            activeFilterCount > 0 && styles.filterPillActive,
-          ]}
-          onPress={() => setShowFilters(true)}
-        >
-          <Icon
-            name="tune"
-            size={18}
-            color={activeFilterCount > 0 ? "#0EA5E9" : "#64748B"}
-          />
-          <Text
-            style={[
-              styles.filterPillText,
-              activeFilterCount > 0 && styles.filterPillTextActive,
-            ]}
-          >
-            Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[styles.filterPill, filters.openNow && styles.filterPillActive]}
           onPress={() =>
@@ -335,6 +362,18 @@ export default function FindCareClinics() {
             24/7
           </Text>
         </TouchableOpacity>
+
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
+
+        {/* Offline Download Button */}
+        <TouchableOpacity
+          style={styles.offlineButton}
+          onPress={() => setShowOfflineDownloader(true)}
+        >
+          <Icon name="download" size={18} color="#64748B" />
+          <Text style={styles.offlineButtonText}>Offline</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Results List */}
@@ -356,14 +395,24 @@ export default function FindCareClinics() {
                 <Icon name="search-off" size={48} color="#CBD5E1" />
                 <Text style={styles.emptyText}>No clinics found</Text>
                 <Text style={styles.emptySubtext}>
-                  Try adjusting your search or filters
+                  Try adjusting your filters
                 </Text>
               </View>
             }
           />
         )}
       </View>
-    </SafeAreaView>
+
+      {/* Offline Map Downloader Modal */}
+      <OfflineMapDownloader
+        visible={showOfflineDownloader}
+        onClose={() => setShowOfflineDownloader(false)}
+        onRegionDownloaded={(center) => {
+          setMapFocusCenter(center);
+        }}
+      />
+
+    </View>
   );
 }
 
@@ -372,64 +421,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+  mapContainer: {
+    height: SCREEN_HEIGHT * 0.45,
+    position: "relative",
   },
-  backButton: {
+  floatingButton: {
+    position: "absolute",
     width: 44,
     height: 44,
-    alignItems: "center",
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
     justifyContent: "center",
-  },
-  headerTitle: {
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 20,
-    color: "#0F172A",
-  },
-  searchContainer: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    gap: 12,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 16,
-    color: "#334155",
-  },
-  locationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#F0F9FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapContainer: {
-    height: SCREEN_HEIGHT * 0.32,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.9)",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   filterRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: "#FFFFFF",
@@ -457,6 +477,20 @@ const styles = StyleSheet.create({
   filterPillTextActive: {
     color: "#0EA5E9",
     fontWeight: "600",
+  },
+  offlineButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#F1F5F9",
+    gap: 4,
+  },
+  offlineButtonText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 13,
+    color: "#64748B",
   },
   resultsContainer: {
     flex: 1,
@@ -556,21 +590,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#94A3B8",
   },
-  viewDetailsButton: {
+  // Expanded details styles
+  expandedDetails: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  detailText: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 14,
+    color: "#334155",
+    flex: 1,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  actionButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    gap: 4,
+    backgroundColor: "#0EA5E9",
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
   },
-  viewDetailsText: {
-    fontFamily: FONTS.BarlowSemiCondensed,
+  actionButtonSecondary: {
+    backgroundColor: "#E0F2FE",
+  },
+  actionButtonText: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 15,
+    color: "#FFFFFF",
+  },
+  actionButtonTextSecondary: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 15,
     color: "#0EA5E9",
-    fontWeight: "600",
   },
   emptyContainer: {
     alignItems: "center",

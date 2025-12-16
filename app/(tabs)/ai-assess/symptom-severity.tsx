@@ -1,8 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+    Animated,
     ScrollView,
     StyleSheet,
     Text,
@@ -17,19 +18,52 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
+// App primary color for all severity levels
+const PRIMARY_COLOR = '#2A7DE1';
+
+const getSeverityLabel = (level: number): string => {
+  if (level <= 3) return 'Mild';
+  if (level <= 5) return 'Moderate';
+  if (level <= 7) return 'Moderate-High';
+  return 'Severe';
+};
+
 export default function SymptomSeverity() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { isOnline } = useNetworkStatus();
   const [severityLevel, setSeverityLevel] = useState<number | null>(null);
 
+  // Shake animation
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const [needsAttention, setNeedsAttention] = useState(false);
+
   const handleSelection = (level: number) => {
     setSeverityLevel(level);
+    setNeedsAttention(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  const triggerShake = () => {
+    setNeedsAttention(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => setNeedsAttention(false), 2000);
+  };
+
   const handleContinue = () => {
-    if (severityLevel === null) return;
+    if (severityLevel === null) {
+      triggerShake();
+      return;
+    }
 
     router.push({
       pathname: "/(tabs)/ai-assess/symptom-duration",
@@ -38,13 +72,6 @@ export default function SymptomSeverity() {
         severity: severityLevel.toString(),
       },
     });
-  };
-
-  const getSeverityDescription = () => {
-    if (severityLevel === null) return "";
-    if (severityLevel <= 3) return "Mild";
-    if (severityLevel <= 7) return "Moderate";
-    return "Severe";
   };
 
   const isSelected = severityLevel !== null;
@@ -80,8 +107,13 @@ export default function SymptomSeverity() {
                 Rate your overall discomfort level.
               </Text>
 
-              {/* Scale with endpoint anchors */}
-              <View style={styles.scaleWrapper}>
+              {/* Scale with gradient colors */}
+              <Animated.View
+                style={[
+                  styles.scaleWrapper,
+                  { transform: [{ translateX: shakeAnim }] }
+                ]}
+              >
                 {/* Endpoint labels */}
                 <View style={styles.endpointLabels}>
                   <Text
@@ -102,7 +134,7 @@ export default function SymptomSeverity() {
                   </Text>
                 </View>
 
-                {/* Scale dots */}
+                {/* Scale dots - single color */}
                 <View style={styles.scaleContainer}>
                   {[...Array(10)].map((_, index) => {
                     const dotLevel = index + 1;
@@ -116,11 +148,14 @@ export default function SymptomSeverity() {
                         onPress={() => handleSelection(dotLevel)}
                         activeOpacity={0.7}
                       >
+                        {/* Glow ring behind selected dot */}
+                        {isCurrentSelection && <View style={styles.dotGlow} />}
                         <View
                           style={[
                             styles.dot,
                             isActive && styles.dotActive,
                             isCurrentSelection && styles.dotSelected,
+                            needsAttention && !isSelected && styles.dotAttention,
                           ]}
                         />
                       </TouchableOpacity>
@@ -128,20 +163,20 @@ export default function SymptomSeverity() {
                   })}
                 </View>
 
-                {/* Severity descriptor - centered beneath */}
+                {/* Severity descriptor - shows level and label */}
                 <View style={styles.descriptorContainer}>
-                  {isSelected && (
+                  {isSelected && severityLevel && (
                     <Text
                       style={[
                         styles.severityDescriptor,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      {getSeverityDescription()}
+                      {severityLevel} — {getSeverityLabel(severityLevel)}
                     </Text>
                   )}
                 </View>
-              </View>
+              </Animated.View>
 
               {/* Action buttons */}
               <View style={styles.buttonContainer}>
@@ -166,7 +201,6 @@ export default function SymptomSeverity() {
                     !isSelected && styles.continueButtonDisabled,
                   ]}
                   onPress={handleContinue}
-                  disabled={!isSelected}
                 >
                   <Text
                     style={[
@@ -207,7 +241,7 @@ const styles = StyleSheet.create({
   },
   contentSection: {
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 56,
   },
   instruction: {
     fontSize: 17,
@@ -227,9 +261,9 @@ const styles = StyleSheet.create({
   },
   endpointLabel: {
     fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "500",
+    fontWeight: "600",
     letterSpacing: 0.3,
+    color: "#6B7280",
   },
   scaleContainer: {
     flexDirection: "row",
@@ -238,27 +272,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   dotTouchArea: {
-    padding: 8,
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotGlow: {
+    position: "absolute",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(42, 125, 225, 0.12)",
   },
   dot: {
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#B0B5BC",
   },
   dotActive: {
     backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
   },
   dotSelected: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#2A7DE1",
     shadowColor: "#2A7DE1",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  dotAttention: {
+    borderColor: "#93C5FD",
+    borderWidth: 2,
   },
   descriptorContainer: {
     alignItems: "center",
@@ -266,10 +315,10 @@ const styles = StyleSheet.create({
     minHeight: 24,
   },
   severityDescriptor: {
-    fontSize: 15,
-    color: "#4B5563",
-    fontWeight: "500",
-    letterSpacing: 0.2,
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    color: "#374151",
   },
   buttonContainer: {
     flexDirection: "row",
@@ -279,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#E5E7EB",
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 30,
@@ -287,10 +336,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   backButtonText: {
-    color: "#6B7280",
+    color: "#4B5563",
     fontSize: 16,
     fontWeight: "600",
-    marginLeft: 8,
+    marginLeft: 6,
+    lineHeight: 20,
   },
   continueButton: {
     flexDirection: "row",
@@ -310,7 +360,8 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "600",
-    marginRight: 8,
+    marginRight: 6,
+    lineHeight: 20,
   },
   continueButtonTextDisabled: {
     color: "#9CA3AF",

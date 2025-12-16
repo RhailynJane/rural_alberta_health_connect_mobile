@@ -130,6 +130,10 @@ export default function SymptomAssessment() {
   const descriptionShakeAnim = useRef(new Animated.Value(0)).current;
   const [descriptionNeedsAttention, setDescriptionNeedsAttention] = useState(false);
 
+  // Photo slot shake animation
+  const photoShakeAnim = useRef(new Animated.Value(0)).current;
+  const [photoNeedsAttention, setPhotoNeedsAttention] = useState(false);
+
   // Gentle shake animation - subtle, not alarming
   const triggerDescriptionShake = () => {
     setDescriptionNeedsAttention(true);
@@ -146,6 +150,23 @@ export default function SymptomAssessment() {
     // Clear the attention state after a moment
     setTimeout(() => {
       setDescriptionNeedsAttention(false);
+    }, 2000);
+  };
+
+  // Gentle shake for photo slot
+  const triggerPhotoShake = () => {
+    setPhotoNeedsAttention(true);
+
+    Animated.sequence([
+      Animated.timing(photoShakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(photoShakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(photoShakeAnim, { toValue: 3, duration: 50, useNativeDriver: true }),
+      Animated.timing(photoShakeAnim, { toValue: -3, duration: 50, useNativeDriver: true }),
+      Animated.timing(photoShakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+
+    setTimeout(() => {
+      setPhotoNeedsAttention(false);
     }, 2000);
   };
   
@@ -209,24 +230,7 @@ export default function SymptomAssessment() {
 
     // Photo is now required for AI assessment
     if (uploadedPhotos.length === 0) {
-      setAlertModalTitle("Photo Required");
-      setAlertModalMessage("Please add at least one photo of your symptoms for accurate AI assessment.");
-      setAlertModalButtons([
-        {
-          label: "Add Photo",
-          onPress: () => {
-            setAlertModalVisible(false);
-            handleUploadPhoto();
-          },
-          variant: "primary",
-        },
-        {
-          label: "Cancel",
-          onPress: () => setAlertModalVisible(false),
-          variant: "secondary",
-        },
-      ]);
-      setAlertModalVisible(true);
+      triggerPhotoShake();
       return;
     }
 
@@ -467,11 +471,6 @@ export default function SymptomAssessment() {
             onScrollBeginDrag={() => Keyboard.dismiss()}
           >
             <View style={styles.contentSection}>
-              {/* Primary Question - Direct, human */}
-              <Text style={[styles.primaryQuestion, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                What&apos;s bothering you?
-              </Text>
-
               {/* 2-Column Category Grid - THE primary action */}
               <View style={styles.categoryGrid}>
                 {categories.map((cat, index) => (
@@ -541,52 +540,90 @@ export default function SymptomAssessment() {
                 </Animated.View>
               </View>
 
-              {/* Photo Upload */}
+              {/* Photo Upload - 3 fixed slots */}
               <View style={styles.photoUploadSection}>
-                {uploadedPhotos.length === 0 ? (
+                <View style={styles.photoSlotRow}>
+                  {[0, 1, 2].map((slotIndex) => {
+                    const photo = uploadedPhotos[slotIndex];
+                    const isFirstSlot = slotIndex === 0;
+                    const slotContent = (
+                      <View style={[
+                        styles.photoSlotWrapper,
+                        isFirstSlot && photoNeedsAttention && styles.photoSlotAttention,
+                      ]}>
+                        {photo ? (
+                          <>
+                            <Image source={{ uri: photo }} style={styles.photoSlotImage} />
+                            <TouchableOpacity
+                              style={styles.photoRemoveBtn}
+                              onPress={() => handleRemovePhoto(photo)}
+                            >
+                              <Ionicons name="close" size={10} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.photoSlotPlaceholder}
+                            onPress={handleUploadPhoto}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name="camera-outline" size={24} color="#C9CDD3" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+
+                    // Only first slot shakes
+                    return slotIndex === 0 ? (
+                      <Animated.View
+                        key={slotIndex}
+                        style={{ flex: 1, transform: [{ translateX: photoShakeAnim }] }}
+                      >
+                        {slotContent}
+                      </Animated.View>
+                    ) : (
+                      <View key={slotIndex} style={{ flex: 1 }}>
+                        {slotContent}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Minimal AI Source Toggle - only shows when device AI available */}
+              {llmAvailable && (
+                <View style={styles.aiSourceRow}>
                   <TouchableOpacity
-                    style={styles.photoPrompt}
-                    onPress={handleUploadPhoto}
+                    style={[styles.aiSourceChip, aiSource === "cloud" && styles.aiSourceChipActive]}
+                    onPress={() => setAiSource("cloud")}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.photoPromptIcon}>
-                      <Ionicons name="camera-outline" size={20} color="#6B7280" />
-                    </View>
-                    <Text style={[styles.photoPromptText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      Add a photo
+                    <Ionicons name="cloud-outline" size={14} color={aiSource === "cloud" ? "#fff" : "#6B7280"} />
+                    <Text style={[styles.aiSourceChipText, { fontFamily: FONTS.BarlowSemiCondensed }, aiSource === "cloud" && styles.aiSourceChipTextActive]}>
+                      Cloud
                     </Text>
                   </TouchableOpacity>
-                ) : (
-                  // Photos added - thumbnail strip
-                  <View style={styles.photoStrip}>
-                    <View style={styles.photoThumbnails}>
-                      {uploadedPhotos.map((photo, index) => (
-                        <View key={index} style={styles.photoThumbWrapper}>
-                          <Image source={{ uri: photo }} style={styles.photoThumb} />
-                          <TouchableOpacity
-                            style={styles.photoRemoveBtn}
-                            onPress={() => handleRemovePhoto(photo)}
-                          >
-                            <Ionicons name="close" size={12} color="#FFFFFF" />
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                      {uploadedPhotos.length < 3 && (
-                        <TouchableOpacity
-                          style={styles.photoAddMore}
-                          onPress={handleUploadPhoto}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="add" size={20} color="#9CA3AF" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                    <Text style={[styles.photoCount, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                      {uploadedPhotos.length}/3 photos
+                  <TouchableOpacity
+                    style={[
+                      styles.aiSourceChip,
+                      aiSource === "device" && styles.aiSourceChipActive,
+                      !llmReady && styles.aiSourceChipDisabled,
+                    ]}
+                    onPress={() => llmReady && setAiSource("device")}
+                    activeOpacity={llmReady ? 0.7 : 1}
+                  >
+                    <Ionicons name="phone-portrait-outline" size={14} color={aiSource === "device" ? "#fff" : (llmReady ? "#6B7280" : "#C9CDD3")} />
+                    <Text style={[
+                      styles.aiSourceChipText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      aiSource === "device" && styles.aiSourceChipTextActive,
+                      !llmReady && styles.aiSourceChipTextDisabled,
+                    ]}>
+                      {llmLoading ? `${Math.round(llmProgress)}%` : "Device"}
                     </Text>
-                  </View>
-                )}
-              </View>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
@@ -608,11 +645,11 @@ export default function SymptomAssessment() {
                 <TouchableOpacity
                   style={[
                     styles.continueButton,
-                    (uploadedPhotos.length === 0 || isProcessing) &&
+                    (uploadedPhotos.length === 0 || isProcessing || (aiSource === "device" && !llmReady)) &&
                       styles.continueButtonDisabled,
                   ]}
                   onPress={handleContinue}
-                  disabled={isProcessing}
+                  disabled={isProcessing || (aiSource === "device" && !llmReady)}
                 >
                   <Text
                     style={[
@@ -620,9 +657,9 @@ export default function SymptomAssessment() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {isProcessing ? "Processing..." : "Continue"}
+                    {isProcessing ? "Processing..." : (aiSource === "device" && !llmReady) ? "Model Loading..." : "Continue"}
                   </Text>
-                  {!isProcessing && (
+                  {!isProcessing && !(aiSource === "device" && !llmReady) && (
                     <Ionicons name="arrow-forward" size={20} color="white" />
                   )}
                 </TouchableOpacity>
@@ -723,14 +760,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 8,
   },
-  // Primary Question
-  primaryQuestion: {
-    fontSize: 22,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 20,
-    textAlign: "center",
-  },
   // 2-Column Category Grid
   categoryGrid: {
     flexDirection: "row",
@@ -800,75 +829,45 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 10,
   },
-  // Photo Upload
+  // Photo Upload - 3 slot layout
   photoUploadSection: {
     marginBottom: 20,
   },
-  photoPrompt: {
+  photoSlotRow: {
     flexDirection: "row",
+    gap: 10,
+  },
+  photoSlotWrapper: {
+    flex: 1,
+    aspectRatio: 1,
+    position: "relative",
+    backgroundColor: "#F3F4F6",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.06)",
+  },
+  photoSlotAttention: {
+    borderColor: "#93C5FD",
+    backgroundColor: "#F0F7FF",
+  },
+  photoSlotImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  photoSlotPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderStyle: "dashed",
-  },
-  photoPromptIcon: {
-    marginRight: 8,
-  },
-  photoPromptText: {
-    fontSize: 15,
-    color: "#6B7280",
-    fontWeight: "500",
-  },
-  photoStrip: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 12,
-  },
-  photoThumbnails: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  photoThumbWrapper: {
-    position: "relative",
-    marginRight: 10,
-  },
-  photoThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    backgroundColor: "#E5E7EB",
   },
   photoRemoveBtn: {
     position: "absolute",
-    top: -6,
-    right: -6,
+    top: 6,
+    right: 6,
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#6B7280",
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  photoAddMore: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderStyle: "dashed",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  photoCount: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 8,
   },
   // Legacy styles kept for compatibility
   categoryCard: {
@@ -1013,6 +1012,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 8,
+  },
+  // Minimal AI Source Toggle
+  aiSourceRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
+  aiSourceChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    gap: 4,
+  },
+  aiSourceChipActive: {
+    backgroundColor: "#2A7DE1",
+  },
+  aiSourceChipDisabled: {
+    backgroundColor: "#F9FAFB",
+  },
+  aiSourceChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  aiSourceChipTextActive: {
+    color: "#FFFFFF",
+  },
+  aiSourceChipTextDisabled: {
+    color: "#C9CDD3",
   },
   buttonContainer: {
     flexDirection: "row",

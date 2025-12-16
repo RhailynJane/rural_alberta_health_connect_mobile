@@ -25,9 +25,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import {
-  getLLMSingleton,
-  useLLMHook,
-  QWEN3_0_6B_QUANTIZED_MODEL,
+    getLLMSingleton,
+    QWEN3_0_6B_QUANTIZED_MODEL,
+    useLLMHook,
 } from './LLMSingleton';
 
 const LOG_PREFIX = '[LLM:Host]';
@@ -37,18 +37,15 @@ const LOG_PREFIX = '[LLM:Host]';
  */
 function LLMHostAndroid(): null {
   const singleton = getLLMSingleton();
-  const hasInitialized = useRef(false);
 
   // useLLMHook is guaranteed to exist on Android (checked in parent)
   const llm = useLLMHook!({ model: QWEN3_0_6B_QUANTIZED_MODEL! });
 
-  // Initialize singleton with hook instance (once)
+  // Keep singleton's llmInstance reference updated
+  // The llm object from useLLM changes when model loads - we must track the latest
   useEffect(() => {
-    if (!hasInitialized.current) {
-      console.log(`${LOG_PREFIX} Initializing singleton with hook`);
-      singleton.initializeWithHook(llm);
-      hasInitialized.current = true;
-    }
+    console.log(`${LOG_PREFIX} Updating singleton with hook instance (isReady: ${llm.isReady})`);
+    singleton.initializeWithHook(llm);
   }, [llm, singleton]);
 
   // Sync hook state to singleton on every update
@@ -83,9 +80,14 @@ function LLMHostAndroid(): null {
     const isGeneratingFn = () => llm.isGenerating;
 
     return () => {
-      if (isGeneratingFn()) {
-        console.log(`${LOG_PREFIX} Interrupting generation before app unmount`);
-        interruptFn();
+      try {
+        if (isGeneratingFn() && interruptFn) {
+          console.log(`${LOG_PREFIX} Interrupting generation before app unmount`);
+          interruptFn();
+        }
+      } catch (e) {
+        // Silently ignore cleanup errors (hook may be tearing down)
+        console.debug(`${LOG_PREFIX} Cleanup error (safe to ignore):`, e);
       }
     };
   }, [llm.interrupt, llm.isGenerating]);
