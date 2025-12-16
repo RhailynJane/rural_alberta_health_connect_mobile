@@ -26,6 +26,7 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import { isModelDownloaded, downloadModel, DEFAULT_MODEL_ID } from "../../../utils/tts";
 
 // AI Context Types
 type SymptomCategory =
