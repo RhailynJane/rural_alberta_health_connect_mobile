@@ -633,7 +633,7 @@ export default function Dashboard() {
                         <Text style={[styles.dayTabLabel, idx === selectedDayIndex && styles.dayTabLabelActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           {day.label}
                         </Text>
-                        <Text style={[styles.dayTabDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day.dateLabel}</Text>
+                        <Text style={[styles.dayTabDate, idx === selectedDayIndex && styles.dayTabDateActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day.dateLabel}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -793,6 +793,41 @@ export default function Dashboard() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Get Help Button - Emergency Access */}
+                <TouchableOpacity
+                  style={styles.getHelpButton}
+                  onPress={() => router.push('/(tabs)/emergency')}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={["#FF6B6B", "#FF4757"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.getHelpGradient}
+                  >
+                    <View style={styles.getHelpContent}>
+                      <View style={styles.getHelpIconContainer}>
+                        <Image
+                          source={require("../../assets/images/emergency-icon.png")}
+                          style={styles.getHelpIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.getHelpTextContainer}>
+                        <Text style={[styles.getHelpTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
+                          Get Help Now
+                        </Text>
+                        <Text style={[styles.getHelpSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Access emergency services
+                        </Text>
+                      </View>
+                      <View style={styles.getHelpArrow}>
+                        <Text style={styles.getHelpArrowText}>→</Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
 
               {/* Medical Disclaimer */}
@@ -922,6 +957,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+    minWidth: 60,
+    paddingHorizontal: 4,
   },
   healthScoreContent: {
     alignItems: "center",
@@ -1076,6 +1113,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
+  dayTabDateActive: {
+    color: "#ffffff",
+  },
   chartSurface: {
     height: 170,
     borderRadius: 12,
@@ -1180,6 +1220,66 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1A1A1A",
     textAlign: "center",
+  },
+  // Get Help Button Styles
+  getHelpButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#FF4757",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  getHelpGradient: {
+    borderRadius: 16,
+  },
+  getHelpContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 20,
+    paddingVertical: 18,
+  },
+  getHelpIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  getHelpIcon: {
+    width: 32,
+    height: 32,
+    tintColor: "#FFFFFF",
+  },
+  getHelpTextContainer: {
+    flex: 1,
+  },
+  getHelpTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  getHelpSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  getHelpArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  getHelpArrowText: {
+    fontSize: 20,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   assessmentButton: {
     backgroundColor: "#2A7DE1",

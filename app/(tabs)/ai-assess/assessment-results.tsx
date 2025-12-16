@@ -8,26 +8,21 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    LayoutAnimation,
-    LayoutChangeEvent,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    UIManager,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  LayoutAnimation,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  UIManager,
+  View,
 } from "react-native";
-
-// Enable LayoutAnimation for Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
@@ -38,18 +33,22 @@ import { formatForGemini, runPipeline, type PipelineResult } from "../../../util
 
 // On-device LLM for offline assessment (use Static variant - no streaming re-renders)
 import { useWoundLLMStatic } from "../../../utils/llm";
-import { getSeverityBasedGuidance, formatOfflineResult } from "../../../utils/llm/offlineFallback";
+import { formatOfflineResult, getSeverityBasedGuidance } from "../../../utils/llm/offlineFallback";
 
+import { prepareNextStepsForTTS, prepareRecommendationsForTTS, prepareTextForTTS, useTTS } from "../../../utils/tts";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import ScanningOverlay from "../../components/ScanningOverlay";
-import TTSButton from "../../components/TTSButton";
-import { FONTS } from "../../constants/constants";
-import { prepareNextStepsForTTS, prepareTextForTTS, prepareRecommendationsForTTS, useTTS, splitTextIntoChunks } from "../../../utils/tts";
 import TTSHighlightedText from "../../components/TTSHighlightedText";
+import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 /**
  * Compresses and resizes an image to reduce file size for API transmission
@@ -774,20 +773,9 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
   // Fetch image dimensions for all photos
   useEffect(() => {
     photos.forEach((uri, index) => {
-      // For annotated images (base64), get dimensions from the result
+      // For annotated images (base64), get dimensions from URI
       const result = yoloResult?.results[index];
-      if (result?.annotatedImageBase64) {
-        // Use original image dimensions from preprocessing if available
-        const originalDims = result.originalDimensions;
-        if (originalDims) {
-          setImageDimensions(prev => ({
-            ...prev,
-            [index]: { width: originalDims.width, height: originalDims.height },
-          }));
-          return;
-        }
-      }
-      // Fallback: get dimensions from URI
+      // Note: Image dimensions are fetched from URI below for all images
       Image.getSize(
         uri,
         (width, height) => {
@@ -1212,7 +1200,32 @@ export default function AssessmentResults() {
         try {
           // Use generateContext directly with detections (like LLMTest does)
           const llmResult = await llmGenerateFromPipeline(
-            yoloPipelineResult || { results: [], totalDetections: 0, successfulImages: 0, failedImages: 0, summary: { byClass: {}, highestConfidence: null, averageConfidence: 0 } },
+            yoloPipelineResult || {
+              results: [],
+              totalDetections: 0,
+              successfulImages: 0,
+              failedImages: 0,
+              summary: {
+                byClass: {},
+                totalCount: 0,
+                highestConfidence: null,
+                highestConfidenceImageIndex: null,
+                averageConfidence: 0
+              },
+              totalProcessingTimeMs: 0,
+              modelLoadTimeMs: 0,
+              metadata: {
+                startedAt: new Date().toISOString(),
+                completedAt: new Date().toISOString(),
+                inputImageCount: 0,
+                modelConfig: {
+                  inputSize: 640,
+                  confidenceThreshold: 0.25,
+                  iouThreshold: 0.45,
+                  classes: []
+                }
+              }
+            },
             {
               userSymptoms: description,
               bodyLocation: category,
@@ -1902,7 +1915,7 @@ For immediate medical emergencies (difficulty breathing, chest pain, severe blee
           )}
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </SafeAreaView>
   );
 }

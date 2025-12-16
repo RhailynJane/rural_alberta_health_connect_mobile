@@ -10,6 +10,7 @@ const BELL_READ_NOT_CLEARED_KEY = "notificationBellReadNotCleared";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
 const REMINDER_HISTORY_KEY = "symptomReminderHistory"; // array of { id, title, body, createdAt, read }
+const REMINDER_LAST_FIRED_KEY = "symptomReminderLastFired"; // track when each reminder last fired
 // Android heads-up reminder channel
 const REMINDER_CHANNEL_ID = "reminders-high";
 // Per-user namespace for AsyncStorage keys to avoid cross-user leakage on the same device
@@ -232,14 +233,15 @@ export async function initializeNotificationsOnce() {
           }
         }
         
-        // Show ALL notifications on device (both reminders and push notifications)
+        // Show ALL notifications as heads-up notifications (push-style)
+        // Android will display these as system notifications with the correct channel priority
+        // Use shouldShowBanner/shouldShowList instead of deprecated shouldShowAlert
         const result = {
-          // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
-          shouldShowAlert: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
+          shouldShowAlert: true,     // DEPRECATED but still works on older Expo versions
+          shouldShowBanner: true,    // iOS 17+: Show banner at top
+          shouldShowList: true,      // iOS 17+: Add to notification list
+          shouldPlaySound: true,     // Play notification sound
+          shouldSetBadge: true,      // Update badge count
         };
         
         console.log('🔔 [handleNotification] Returning:', result);
@@ -1145,7 +1147,6 @@ export async function scheduleReminderItem(item: ReminderItem) {
         sound: true,
         priority: (Notifications as any).AndroidNotificationPriority.HIGH,
         categoryIdentifier: 'reminder',
-        channelId: REMINDER_CHANNEL_ID,
         data: {
           type: item.frequency === 'daily' ? 'daily_reminder' : 'weekly_reminder',
           timestamp: Date.now(),
@@ -1155,7 +1156,10 @@ export async function scheduleReminderItem(item: ReminderItem) {
           reminderTime: item.time,
         },
       },
-      trigger: { date: nextTriggerDate },
+      trigger: {
+        date: nextTriggerDate,
+        channelId: REMINDER_CHANNEL_ID,  // Android requires channelId in trigger for push notifications
+      },
     });
     console.log('🗓️ Scheduled notification id:', schedId);
     
@@ -1314,6 +1318,15 @@ export async function checkAndFireDueReminders(): Promise<void> {
       }
     } catch {}
     
+    // Load last fired timestamps to prevent duplicate notifications within the same 5-minute window
+    let lastFiredMap: Record<string, number> = {};
+    try {
+      const lastFiredStr = await AsyncStorage.getItem(nk(REMINDER_LAST_FIRED_KEY));
+      if (lastFiredStr) {
+        lastFiredMap = JSON.parse(lastFiredStr);
+      }
+    } catch {}
+    
     console.log(`🔄 [checkAndFireDueReminders] Checking ${reminders.length} reminders at ${now.toLocaleTimeString()}`);
     
     for (const reminder of reminders) {
@@ -1334,28 +1347,66 @@ export async function checkAndFireDueReminders(): Promise<void> {
       }
       
       if (isDue && !recentMutation) {
+        // Check if this reminder was already fired today (for daily) or this week (for weekly) to prevent duplicates
+        const todayDate = now.toLocaleDateString(); // e.g., "12/16/2025"
+        const reminderKey = `${reminder.id || reminder.time}-${reminder.frequency}`;
+        const lastFiredData = lastFiredMap[reminderKey];
+        
+        // Check if we already fired this reminder today
+        let shouldSkip = false;
+        if (lastFiredData) {
+          const lastFiredDate = new Date(lastFiredData);
+          const lastFiredDateStr = lastFiredDate.toLocaleDateString();
+          
+          if (reminder.frequency === 'daily') {
+            // For daily reminders, only fire once per day
+            shouldSkip = lastFiredDateStr === todayDate;
+          } else if (reminder.frequency === 'weekly') {
+            // For weekly reminders, only fire once per week on the correct day
+            const lastFiredWeekday = lastFiredDate.getDay() + 1;
+            const targetWeekday = weekdayStringToNumber(reminder.dayOfWeek || 'Monday');
+            shouldSkip = lastFiredWeekday === currentWeekday && lastFiredWeekday === targetWeekday && lastFiredDateStr === todayDate;
+          }
+        }
+        
+        if (shouldSkip) {
+          console.log(`⏭️ [checkAndFireDueReminders] Skipping reminder (already fired today): ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
+          continue;
+        }
+        
         console.log(`⏰ [checkAndFireDueReminders] Reminder is due: ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
         
         try {
-          // Fire the notification immediately
-          if (typeof (Notifications as any).presentNotificationAsync === 'function') {
-            await (Notifications as any).presentNotificationAsync({
-              title: "Symptom Assessment Reminder",
-              body: "It's time to complete your symptoms check.",
-              sound: true,
-              priority: (Notifications as any).AndroidNotificationPriority?.HIGH || 'high',
-              categoryIdentifier: 'reminder',
-              channelId: REMINDER_CHANNEL_ID,
-              data: {
-                type: reminder.frequency === 'weekly' ? 'weekly_reminder' : 'daily_reminder',
-                reminderFrequency: reminder.frequency,
-                reminderTime: reminder.time,
-                dayOfWeek: reminder.dayOfWeek,
-                reminderId: reminder.id,
-                timestamp: Date.now(),
+          // Fire the notification immediately as a push notification
+          // Use scheduleNotificationAsync with immediate trigger (1 second) for proper push notification display
+          if (typeof (Notifications as any).scheduleNotificationAsync === 'function') {
+            await (Notifications as any).scheduleNotificationAsync({
+              content: {
+                title: "Symptom Assessment Reminder",
+                body: "It's time to complete your symptoms check.",
+                sound: true,
+                priority: (Notifications as any).AndroidNotificationPriority?.HIGH,
+                categoryIdentifier: 'reminder',
+                data: {
+                  type: reminder.frequency === 'weekly' ? 'weekly_reminder' : 'daily_reminder',
+                  reminderFrequency: reminder.frequency,
+                  reminderTime: reminder.time,
+                  dayOfWeek: reminder.dayOfWeek,
+                  reminderId: reminder.id,
+                  timestamp: Date.now(),
+                },
+              },
+              trigger: {
+                seconds: 1,  // Fire in 1 second for immediate display as push notification
+                channelId: REMINDER_CHANNEL_ID,  // Use high-priority channel for heads-up display
               },
             });
-            console.log(`✅ [checkAndFireDueReminders] Fired due reminder: ${reminder.frequency} reminder at ${reminder.time}`);
+            
+            // Record that this reminder was fired with current timestamp
+            lastFiredMap[reminderKey] = now.getTime();
+            await AsyncStorage.setItem(nk(REMINDER_LAST_FIRED_KEY), JSON.stringify(lastFiredMap));
+            
+            console.log(`✅ [checkAndFireDueReminders] Scheduled immediate notification for ${reminder.frequency} reminder at ${reminder.time}`);
           }
         } catch (err) {
           console.error(`❌ [checkAndFireDueReminders] Failed to fire reminder:`, err);
