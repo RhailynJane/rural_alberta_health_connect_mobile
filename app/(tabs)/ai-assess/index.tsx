@@ -100,6 +100,21 @@ export default function SymptomAssessment() {
   } = useWoundLLM();
   const [llmCardDismissed, setLlmCardDismissed] = useState(false);
 
+  // Auto-download TTS model in background when visiting this tab
+  useEffect(() => {
+    (async () => {
+      const downloaded = await isModelDownloaded(DEFAULT_MODEL_ID);
+      if (!downloaded) {
+        console.log('[TTS] Auto-downloading model in background...');
+        downloadModel(DEFAULT_MODEL_ID, (progress) => {
+          if (progress === 1) {
+            console.log('[TTS] Background download complete');
+          }
+        });
+      }
+    })();
+  }, []);
+
   // AI Source Selection: "cloud" (Gemini) or "device" (ExecuTorch)
   // Default to cloud when online, device when offline (if ready)
   const [aiSource, setAiSource] = useState<"cloud" | "device">(
