@@ -8,8 +8,6 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CurvedBackground from "../app/components/curvedBackground";
-import CurvedHeader from "../app/components/curvedHeader";
 import { FONTS } from "../app/constants/constants";
 
 export default function Onboarding() {
@@ -17,18 +15,14 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.contentContainer}
-        >
-          <CurvedHeader
-            title="Your trusted healthcare companion for rural Alberta communities"
-            height={150}
-            showMenuButton={false}
-          />
-
-          <View style={styles.contentSection}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <View style={styles.contentSection}>
+          <Text style={[styles.mainTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Your trusted healthcare companion for rural Alberta communities
+          </Text>
             {/* Feature 1: AI-Powered Triage */}
             <View style={styles.featureContainer}>
               <View style={styles.iconContainer}>
@@ -94,9 +88,8 @@ export default function Onboarding() {
               information only and does not replace professional medical advice,
               diagnosis, or treatment.
             </Text>
-          </View>
-        </ScrollView>
-      </CurvedBackground>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -105,6 +98,15 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  mainTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
+    marginBottom: 40,
+    lineHeight: 36,
+    paddingHorizontal: 16,
   },
   container: {
     flex: 1,
