@@ -506,15 +506,15 @@ function renderAssessmentCards(
     | 'NEXT STEPS'
     | 'OTHER';
 
-  // Layer 2: Next Steps - Most prominent, actionable guidance
+  // Layer 2: Primary cards - Always visible, most important info
   const prioritySections: SectionKey[] = [
+    'CLINICAL ASSESSMENT',
     'NEXT STEPS',
     'RECOMMENDATIONS',
   ];
 
   // Layer 3: Supporting Details - Collapsible accordions (default collapsed)
   const accordionSections: SectionKey[] = [
-    'CLINICAL ASSESSMENT',
     'VISUAL FINDINGS',
     'CLINICAL INTERPRETATION',
     'BURN/WOUND GRADING',
@@ -618,7 +618,7 @@ function renderAssessmentCards(
 
   return (
     <View>
-      {/* Priority Sections - Next Steps uses 3-step layout, others use standard cards */}
+      {/* Priority Sections - Clinical Assessment, Next Steps, Recommendations */}
       {prioritySections.map((key) => {
         if (!sections[key] || sections[key].length === 0) return null;
 
@@ -627,7 +627,7 @@ function renderAssessmentCards(
           return <NextStepsCard key={key} items={sections[key]} />;
         }
 
-        // Standard card for Recommendations
+        // Standard card for Clinical Assessment and Recommendations
         return (
           <PrimaryCard
             key={key}

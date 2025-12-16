@@ -645,11 +645,11 @@ export default function SymptomAssessment() {
                 <TouchableOpacity
                   style={[
                     styles.continueButton,
-                    (uploadedPhotos.length === 0 || isProcessing) &&
+                    (uploadedPhotos.length === 0 || isProcessing || (aiSource === "device" && !llmReady)) &&
                       styles.continueButtonDisabled,
                   ]}
                   onPress={handleContinue}
-                  disabled={isProcessing}
+                  disabled={isProcessing || (aiSource === "device" && !llmReady)}
                 >
                   <Text
                     style={[
@@ -657,9 +657,9 @@ export default function SymptomAssessment() {
                       { fontFamily: FONTS.BarlowSemiCondensed },
                     ]}
                   >
-                    {isProcessing ? "Processing..." : "Continue"}
+                    {isProcessing ? "Processing..." : (aiSource === "device" && !llmReady) ? "Model Loading..." : "Continue"}
                   </Text>
-                  {!isProcessing && (
+                  {!isProcessing && !(aiSource === "device" && !llmReady) && (
                     <Ionicons name="arrow-forward" size={20} color="white" />
                   )}
                 </TouchableOpacity>
