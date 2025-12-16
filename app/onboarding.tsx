@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
-  ScrollView,
+  Dimensions,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -10,86 +12,116 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FONTS } from "../app/constants/constants";
 
+const { width } = Dimensions.get('window');
+
+const onboardingData = [
+  {
+    image: require("../assets/images/onboarding-1.gif"),
+    title: "AI Health, Instantly",
+    description: "Get smart guidance in seconds, tuned for rural care.",
+    color: "#101c40",
+    iconColor: "#2A7DE1",
+  },
+  {
+    icon: "location-outline",
+    title: "Care for Rural Alberta",
+    description: "Find clinics, emergency contacts, and support built for remote communities.",
+    color: "#FFE8F0",
+    iconColor: "#E91E63",
+  },
+  {
+    icon: "shield-checkmark-outline",
+    title: "Privacy as Standard",
+    description: "Your health data stays encrypted and in your control—always.",
+    color: "#E8F5E9",
+    iconColor: "#4CAF50",
+  },
+];
+
 export default function Onboarding() {
   const router = useRouter();
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handleNext = () => {
+    if (currentIndex < onboardingData.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      router.push("/auth/signin");
+    }
+  };
+
+  const handleSkip = () => {
+    router.push("/auth/signin");
+  };
+
+  const current = onboardingData[currentIndex];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentContainer}
-      >
-        <View style={styles.contentSection}>
-          <Text style={[styles.mainTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-            Your trusted healthcare companion for rural Alberta communities
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: current.color }]}>
+      <View style={[styles.container, { backgroundColor: current.color }]}>
+        {/* Skip Button */}
+        <TouchableOpacity 
+          style={styles.skipButton}
+          onPress={handleSkip}
+        >
+          <Text style={[styles.skipText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            Skip
           </Text>
-            {/* Feature 1: AI-Powered Triage */}
-            <View style={styles.featureContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="medical" size={32} color="#2A7DE1" />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  AI-Powered Triage
-                </Text>
-                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  Get instant guidance for your health concerns
-                </Text>
-              </View>
-            </View>
+        </TouchableOpacity>
 
-            {/* Feature 2: Rural-Focused */}
-            <View style={styles.featureContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="location" size={32} color="#2A7DE1" />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  Rural-Focused
-                </Text>
-                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  Designed specifically for Alberta&#39;s remote communities
-                </Text>
-              </View>
-            </View>
+        {/* Main Content */}
+        <View style={styles.contentContainer}>
+          {/* Icon Circle */}
+          <View style={styles.iconCircle}>
+            {current.image ? (
+              <Image 
+                source={current.image} 
+                style={styles.onboardingImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <Ionicons name={current.icon as any} size={80} color={current.iconColor} />
+            )}
+          </View>
 
-            {/* Feature 3: Secure & Private */}
-            <View style={styles.featureContainer}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="lock-closed" size={32} color="#2A7DE1" />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={[styles.featureTitle, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  Secure & Private
-                </Text>
-                <Text style={[styles.featureDescription, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                  Your health data is protected and confidential
-                </Text>
-              </View>
-            </View>
+          {/* Title */}
+          <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            {current.title}
+          </Text>
 
-            {/* Get Started Button */}
-            <TouchableOpacity
-              style={styles.getStartedButton}
-              onPress={() => {
-                console.log("🔘 Get Started button pressed!");
-                router.push("/auth/signin");
-                console.log("📤 router.push('/auth/signin') called");
-              }}
-            >
-              <Text style={[styles.getStartedText, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-                Get Started
-              </Text>
-            </TouchableOpacity>
-
-            {/* Disclaimer */}
-            <Text style={[styles.disclaimer, {fontFamily: FONTS.BarlowSemiCondensed}]}>
-              By continuing, you acknowledge that this app provides health
-              information only and does not replace professional medical advice,
-              diagnosis, or treatment.
-            </Text>
+          {/* Description */}
+          <Text style={[styles.description, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+            {current.description}
+          </Text>
         </View>
-      </ScrollView>
+
+        {/* Pagination Dots */}
+        <View style={styles.pagination}>
+          {onboardingData.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                index === currentIndex ? styles.activeDot : styles.inactiveDot,
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Minimal Arrow CTA with arc accent */}
+        <View style={[styles.arrowWrapper, { backgroundColor: current.color }]}>
+          <View style={styles.outerArc} />
+          <View style={[styles.arcMask, { backgroundColor: current.color }]} />
+          <TouchableOpacity style={styles.arrowButton} onPress={handleNext}>
+            <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Disclaimer */}
+        <Text style={[styles.disclaimer, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          This app provides health information only and does not replace professional medical advice
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -97,75 +129,120 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  mainTitle: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    textAlign: "center",
-    marginBottom: 40,
-    lineHeight: 36,
-    paddingHorizontal: 16,
+    backgroundColor: "#fff",
   },
   container: {
     flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  skipButton: {
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  skipText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "500",
   },
   contentContainer: {
-    flexGrow: 1,
-  },
-  contentSection: {
-    padding: 24,
-    paddingTop: 40,
-  },
-  featureContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: "#E8F2FF",
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
+    paddingHorizontal: 20,
+    gap: 12,
   },
-  textContainer: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginBottom: 4,
-  },
-  featureDescription: {
-    fontSize: 14,
-    color: "#666",
-    lineHeight: 20,
-  },
-  getStartedButton: {
-    backgroundColor: "#2A7DE1",
-    paddingVertical: 16,
-    borderRadius: 30,
+  iconCircle: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 90,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    marginBottom: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-  getStartedText: {
-    color: "#fff",
+  onboardingImage: {
+    width: 350,
+    height: 350,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#E8EDFF",
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 10,
+    lineHeight: 36,
+  },
+  description: {
     fontSize: 16,
-    fontWeight: "600",
+    color: "#C8D4FF",
+    textAlign: "center",
+    lineHeight: 24,
+    paddingHorizontal: 10,
+  },
+  pagination: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 30,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+  },
+  activeDot: {
+    backgroundColor: "#8FB5FF",
+    width: 24,
+  },
+  inactiveDot: {
+    backgroundColor: "#4B5470",
+  },
+  arrowWrapper: {
+    alignSelf: "center",
+    width: 72,
+    height: 72,
+    marginBottom: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  outerArc: {
+    position: "absolute",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+  },
+  arcMask: {
+    position: "absolute",
+    right: 6,
+    width: 40,
+    height: 90,
+    borderRadius: 30,
+  },
+  arrowButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 8,
   },
   disclaimer: {
-    fontSize: 12,
-    color: "#888",
+    fontSize: 11,
+    color: "#95A3CC",
     textAlign: "center",
-    lineHeight: 16,
+    lineHeight: 14,
+    paddingHorizontal: 20,
   },
 });
