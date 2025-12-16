@@ -769,7 +769,7 @@ export default function Dashboard() {
 
                   <TouchableOpacity
                     style={styles.quickActionButton}
-                    onPress={navigateToFindCare}
+                    onPress={navigateToClinics}
                   >
                     <LinearGradient
                       colors={["#E8F4FF", "#D0E9FF"]}
@@ -789,7 +789,7 @@ export default function Dashboard() {
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      Find Care
+                      Clinics
                     </Text>
                   </TouchableOpacity>
                 </View>
