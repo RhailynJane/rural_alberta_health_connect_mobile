@@ -289,17 +289,6 @@ const styles = StyleSheet.create({
     borderColor: "#93C5FD",
     borderWidth: 2,
   },
-  descriptorContainer: {
-    alignItems: "center",
-    marginTop: 16,
-    minHeight: 24,
-  },
-  severityDescriptor: {
-    fontSize: 16,
-    fontWeight: "600",
-    letterSpacing: 0.3,
-    color: "#374151",
-  },
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
