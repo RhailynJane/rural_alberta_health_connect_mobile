@@ -52,7 +52,8 @@ app-example
 # generated native folders
 /ios
 /android/build
-/android/gradle
+/android/gradle/*
+!/android/gradle/wrapper
 /android/.gradle
 
 # Firebase configs
