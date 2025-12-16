@@ -10,6 +10,7 @@ const BELL_READ_NOT_CLEARED_KEY = "notificationBellReadNotCleared";
 const LAST_READ_DATE_KEY = "notificationLastReadDate";
 const REMINDERS_KEY = "symptomRemindersList";
 const REMINDER_HISTORY_KEY = "symptomReminderHistory"; // array of { id, title, body, createdAt, read }
+const REMINDER_LAST_FIRED_KEY = "symptomReminderLastFired"; // track when each reminder last fired
 // Android heads-up reminder channel
 const REMINDER_CHANNEL_ID = "reminders-high";
 // Per-user namespace for AsyncStorage keys to avoid cross-user leakage on the same device
@@ -1317,6 +1318,15 @@ export async function checkAndFireDueReminders(): Promise<void> {
       }
     } catch {}
     
+    // Load last fired timestamps to prevent duplicate notifications within the same 5-minute window
+    let lastFiredMap: Record<string, number> = {};
+    try {
+      const lastFiredStr = await AsyncStorage.getItem(nk(REMINDER_LAST_FIRED_KEY));
+      if (lastFiredStr) {
+        lastFiredMap = JSON.parse(lastFiredStr);
+      }
+    } catch {}
+    
     console.log(`🔄 [checkAndFireDueReminders] Checking ${reminders.length} reminders at ${now.toLocaleTimeString()}`);
     
     for (const reminder of reminders) {
@@ -1337,6 +1347,33 @@ export async function checkAndFireDueReminders(): Promise<void> {
       }
       
       if (isDue && !recentMutation) {
+        // Check if this reminder was already fired today (for daily) or this week (for weekly) to prevent duplicates
+        const todayDate = now.toLocaleDateString(); // e.g., "12/16/2025"
+        const reminderKey = `${reminder.id || reminder.time}-${reminder.frequency}`;
+        const lastFiredData = lastFiredMap[reminderKey];
+        
+        // Check if we already fired this reminder today
+        let shouldSkip = false;
+        if (lastFiredData) {
+          const lastFiredDate = new Date(lastFiredData);
+          const lastFiredDateStr = lastFiredDate.toLocaleDateString();
+          
+          if (reminder.frequency === 'daily') {
+            // For daily reminders, only fire once per day
+            shouldSkip = lastFiredDateStr === todayDate;
+          } else if (reminder.frequency === 'weekly') {
+            // For weekly reminders, only fire once per week on the correct day
+            const lastFiredWeekday = lastFiredDate.getDay() + 1;
+            const targetWeekday = weekdayStringToNumber(reminder.dayOfWeek || 'Monday');
+            shouldSkip = lastFiredWeekday === currentWeekday && lastFiredWeekday === targetWeekday && lastFiredDateStr === todayDate;
+          }
+        }
+        
+        if (shouldSkip) {
+          console.log(`⏭️ [checkAndFireDueReminders] Skipping reminder (already fired today): ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
+          continue;
+        }
+        
         console.log(`⏰ [checkAndFireDueReminders] Reminder is due: ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
         
         try {
@@ -1364,6 +1401,11 @@ export async function checkAndFireDueReminders(): Promise<void> {
                 channelId: REMINDER_CHANNEL_ID,  // Use high-priority channel for heads-up display
               },
             });
+            
+            // Record that this reminder was fired with current timestamp
+            lastFiredMap[reminderKey] = now.getTime();
+            await AsyncStorage.setItem(nk(REMINDER_LAST_FIRED_KEY), JSON.stringify(lastFiredMap));
+            
             console.log(`✅ [checkAndFireDueReminders] Scheduled immediate notification for ${reminder.frequency} reminder at ${reminder.time}`);
           }
         } catch (err) {
