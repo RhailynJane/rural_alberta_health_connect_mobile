@@ -87,11 +87,29 @@ function genId(): string {
 export async function getReminders(): Promise<ReminderItem[]> {
   await ensureUserNamespace();
   try {
+    // First try AsyncStorage (fastest, local cache)
     const raw = await AsyncStorage.getItem(nk(REMINDERS_KEY));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as ReminderItem[];
-    return [];
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as ReminderItem[];
+    }
+    
+    // Fallback: try WatermelonDB
+    try {
+      const wmdb = require('@/watermelon/database').default;
+      const remindersCollection = wmdb.get('reminders');
+      const all = await remindersCollection.query().fetch();
+      return all.map((r: any) => ({
+        id: r.id,
+        time: r.time,
+        frequency: r.frequency,
+        enabled: r.enabled,
+        notes: r.notes,
+        weekdays: r.weekdays,
+      })) as ReminderItem[];
+    } catch {
+      return [];
+    }
   } catch {
     return [];
   }

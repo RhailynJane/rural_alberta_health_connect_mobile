@@ -25,9 +25,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import {
-  getLLMSingleton,
-  useLLMHook,
-  QWEN3_0_6B_QUANTIZED_MODEL,
+    getLLMSingleton,
+    QWEN3_0_6B_QUANTIZED_MODEL,
+    useLLMHook,
 } from './LLMSingleton';
 
 const LOG_PREFIX = '[LLM:Host]';
@@ -83,9 +83,14 @@ function LLMHostAndroid(): null {
     const isGeneratingFn = () => llm.isGenerating;
 
     return () => {
-      if (isGeneratingFn()) {
-        console.log(`${LOG_PREFIX} Interrupting generation before app unmount`);
-        interruptFn();
+      try {
+        if (isGeneratingFn() && interruptFn) {
+          console.log(`${LOG_PREFIX} Interrupting generation before app unmount`);
+          interruptFn();
+        }
+      } catch (e) {
+        // Silently ignore cleanup errors (hook may be tearing down)
+        console.debug(`${LOG_PREFIX} Cleanup error (safe to ignore):`, e);
       }
     };
   }, [llm.interrupt, llm.isGenerating]);
