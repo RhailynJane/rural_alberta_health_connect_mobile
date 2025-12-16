@@ -37,8 +37,8 @@ const tabs: Tab[] = [
     iconSourceFocused: require('../../assets/images/assess-icon.png'),
   },
   {
-    name: 'Map',
-    label: 'Map',
+    name: 'Clinics',
+    label: 'Clinics',
     route: '/find-care/clinics',
     iconName: 'map-outline',
   },
