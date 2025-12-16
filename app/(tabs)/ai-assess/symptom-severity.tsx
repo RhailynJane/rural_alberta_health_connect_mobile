@@ -21,13 +21,6 @@ import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 // App primary color for all severity levels
 const PRIMARY_COLOR = '#2A7DE1';
 
-const getSeverityLabel = (level: number): string => {
-  if (level <= 3) return 'Mild';
-  if (level <= 5) return 'Moderate';
-  if (level <= 7) return 'Moderate-High';
-  return 'Severe';
-};
-
 export default function SymptomSeverity() {
   const router = useRouter();
   const params = useLocalSearchParams();
