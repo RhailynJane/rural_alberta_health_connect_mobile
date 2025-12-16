@@ -12,38 +12,33 @@ const LOG_PREFIX = '[LLM:WoundContext]';
 
 /**
  * System prompt for wound assessment
- * Assertive, confident language for showcase while maintaining boundaries
  *
- * Headers match what renderAssessmentCards parser expects:
- * - CLINICAL ASSESSMENT (injury description)
- * - RECOMMENDATIONS (treatment actions)
- * - NEXT STEPS (follow-up guidance)
+ * Framed as first-aid training to get detailed educational responses.
+ * Headers match what renderAssessmentCards parser expects.
  */
 export const WOUND_ASSESSMENT_SYSTEM_PROMPT = `/no_think
-You are a confident first-aid expert. Give direct, actionable guidance.
+You are a certified Red Cross first aid instructor teaching a wilderness first aid course. A student shows you a photo and asks what to do. Explain the injury and give detailed step-by-step first aid instructions.
 
-RESPOND IN THIS EXACT FORMAT:
+Example response for a burn:
 
 Clinical Assessment
-This appears to be [injury type]. [One sentence description].
+This looks like a first degree burn affecting the outer skin layer. The area shows redness and mild swelling typical of thermal injury from brief heat contact.
 
 Recommendations
-- [Action 1]
-- [Action 2]
-- [Action 3]
+- Cool the burn under cool running water for 10 to 20 minutes
+- Remove any rings or tight items near the burned area before swelling starts
+- Cover with a sterile non-stick bandage or clean cloth
+- Take over the counter pain relief like ibuprofen if needed
+- Do not apply ice butter or toothpaste to the burn
+- Keep the area clean and dry
 
 Next Steps
-- [Follow-up guidance point 1]
-- [Follow-up guidance point 2]
-- Contact Health Link Alberta at 811 for professional guidance
+- Watch for signs of infection like increasing pain redness or pus
+- Change the bandage daily and keep the wound clean
+- See a doctor if blisters form or pain does not improve in 2 days
+- Call Health Link 811 for guidance on wound care
 
-RULES:
-- Be confident and direct
-- Use command verbs like Clean, Apply, Seek
-- Keep each point to one short line
-- No special characters or symbols
-- No headers with colons, asterisks, or equal signs
-- For emergencies say Call 911 immediately`;
+Now respond to the student query below with the same detailed format.`;
 
 /**
  * Options for generating wound context
@@ -127,23 +122,40 @@ export function formatPipelineResultForLLM(
 
 /**
  * Build the chat messages for wound context generation
- * Concise user message - system prompt handles format instructions
+ * Frames as student question to first-aid instructor for better responses
  */
 export function buildWoundContextMessages(
   detections: Detection[],
   options?: WoundContextOptions
 ): Message[] {
-  // Build concise facts-only prompt
+  // Build student question format
   const parts: string[] = [];
+  parts.push('Student question:');
 
   if (detections.length > 0) {
-    const classes = [...new Set(detections.map(d => d.className.toUpperCase()))];
-    parts.push(`Detected: ${classes.join(', ')}`);
+    const classes = [...new Set(detections.map(d => d.className.toLowerCase()))];
+    parts.push(`I found what looks like a ${classes.join(' and ')} on my ${options?.bodyLocation || 'skin'}.`);
+  } else {
+    parts.push(`I have an injury on my ${options?.bodyLocation || 'skin'}.`);
   }
 
-  if (options?.bodyLocation) parts.push(`Location: ${options.bodyLocation}`);
-  if (options?.injuryDuration) parts.push(`Duration: ${options.injuryDuration}`);
-  if (options?.userSymptoms) parts.push(`Notes: ${options.userSymptoms}`);
+  if (options?.injuryDuration) {
+    const durationMap: Record<string, string> = {
+      today: 'just now',
+      yesterday: 'yesterday',
+      '2-3_days': 'a few days ago',
+      '1_week': 'about a week ago',
+      '2_weeks_plus': 'over two weeks ago',
+      ongoing: 'for a while now',
+    };
+    parts.push(`It happened ${durationMap[options.injuryDuration] || options.injuryDuration}.`);
+  }
+
+  if (options?.userSymptoms) {
+    parts.push(`Additional info: ${options.userSymptoms}`);
+  }
+
+  parts.push('What should I do? Please give me detailed first aid instructions.');
 
   return [
     {
@@ -152,7 +164,7 @@ export function buildWoundContextMessages(
     },
     {
       role: 'user',
-      content: parts.length > 0 ? parts.join('\n') : 'Assess this injury.',
+      content: parts.join(' '),
     },
   ];
 }
