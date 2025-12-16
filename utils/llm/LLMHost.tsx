@@ -37,18 +37,15 @@ const LOG_PREFIX = '[LLM:Host]';
  */
 function LLMHostAndroid(): null {
   const singleton = getLLMSingleton();
-  const hasInitialized = useRef(false);
 
   // useLLMHook is guaranteed to exist on Android (checked in parent)
   const llm = useLLMHook!({ model: QWEN3_0_6B_QUANTIZED_MODEL! });
 
-  // Initialize singleton with hook instance (once)
+  // Keep singleton's llmInstance reference updated
+  // The llm object from useLLM changes when model loads - we must track the latest
   useEffect(() => {
-    if (!hasInitialized.current) {
-      console.log(`${LOG_PREFIX} Initializing singleton with hook`);
-      singleton.initializeWithHook(llm);
-      hasInitialized.current = true;
-    }
+    console.log(`${LOG_PREFIX} Updating singleton with hook instance (isReady: ${llm.isReady})`);
+    singleton.initializeWithHook(llm);
   }, [llm, singleton]);
 
   // Sync hook state to singleton on every update
