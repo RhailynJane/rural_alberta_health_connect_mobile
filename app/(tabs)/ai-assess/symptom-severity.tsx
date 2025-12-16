@@ -163,19 +163,6 @@ export default function SymptomSeverity() {
                   })}
                 </View>
 
-                {/* Severity descriptor - shows level and label */}
-                <View style={styles.descriptorContainer}>
-                  {isSelected && severityLevel && (
-                    <Text
-                      style={[
-                        styles.severityDescriptor,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      {severityLevel} — {getSeverityLabel(severityLevel)}
-                    </Text>
-                  )}
-                </View>
               </Animated.View>
 
               {/* Action buttons */}
