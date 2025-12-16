@@ -177,6 +177,7 @@ export default function SignUp() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <CurvedBackground>
         {/* Fixed Header */}
         <CurvedHeader
           title="Alberta Health Connect"
