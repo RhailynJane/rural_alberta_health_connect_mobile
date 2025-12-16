@@ -14,6 +14,16 @@ import { FONTS } from "../app/constants/constants";
 
 const { width } = Dimensions.get('window');
 
+const isColorLight = (hex: string) => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  // Perceived luminance
+  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  return luminance > 186;
+};
+
 const onboardingData = [
   {
     image: require("../assets/images/onboarding-1.gif"),
@@ -23,10 +33,10 @@ const onboardingData = [
     iconColor: "#2A7DE1",
   },
   {
-    icon: "location-outline",
+    image: require("../assets/images/onboarding-2.jpg"),
     title: "Care for Rural Alberta",
     description: "Find clinics, emergency contacts, and support built for remote communities.",
-    color: "#FFE8F0",
+    color: "#ffffff",
     iconColor: "#E91E63",
   },
   {
@@ -55,6 +65,21 @@ export default function Onboarding() {
   };
 
   const current = onboardingData[currentIndex];
+  const isLightBg = isColorLight(current.color);
+  const textColors = {
+    title: isLightBg ? "#0F1B2E" : "#E8EDFF",
+    description: isLightBg ? "#2F3D50" : "#D7E3FF",
+    disclaimer: isLightBg ? "#5A6B7E" : "#AFC2E6",
+    skip: isLightBg ? "#4A5565" : "#DDE6FF",
+    activeDot: isLightBg ? "#2A7DE1" : "#9CC5FF",
+    inactiveDot: isLightBg ? "#BFC9D6" : "#4B5470",
+    iconCircle: isLightBg ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.08)",
+  };
+  const buttonColors = {
+    background: isLightBg ? "#0A0A0A" : "#FFFFFF",
+    arrowColor: isLightBg ? "#FFFFFF" : "#0A0A0A",
+    arcColor: isLightBg ? "#0A0A0A" : "#FFFFFF",
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: current.color }]}>
@@ -64,7 +89,7 @@ export default function Onboarding() {
           style={styles.skipButton}
           onPress={handleSkip}
         >
-          <Text style={[styles.skipText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text style={[styles.skipText, { fontFamily: FONTS.BarlowSemiCondensed, color: textColors.skip }]}>
             Skip
           </Text>
         </TouchableOpacity>
@@ -72,7 +97,7 @@ export default function Onboarding() {
         {/* Main Content */}
         <View style={styles.contentContainer}>
           {/* Icon Circle */}
-          <View style={styles.iconCircle}>
+          <View style={[styles.iconCircle, { backgroundColor: textColors.iconCircle }]}>
             {current.image ? (
               <Image 
                 source={current.image} 
@@ -85,12 +110,12 @@ export default function Onboarding() {
           </View>
 
           {/* Title */}
-          <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed, color: textColors.title }]}>
             {current.title}
           </Text>
 
           {/* Description */}
-          <Text style={[styles.description, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+          <Text style={[styles.description, { fontFamily: FONTS.BarlowSemiCondensed, color: textColors.description }]}>
             {current.description}
           </Text>
         </View>
@@ -102,7 +127,9 @@ export default function Onboarding() {
               key={index}
               style={[
                 styles.dot,
-                index === currentIndex ? styles.activeDot : styles.inactiveDot,
+                index === currentIndex
+                  ? [styles.activeDot, { backgroundColor: textColors.activeDot, width: 24 }]
+                  : [styles.inactiveDot, { backgroundColor: textColors.inactiveDot }],
               ]}
             />
           ))}
@@ -110,15 +137,15 @@ export default function Onboarding() {
 
         {/* Minimal Arrow CTA with arc accent */}
         <View style={[styles.arrowWrapper, { backgroundColor: current.color }]}>
-          <View style={styles.outerArc} />
+          <View style={[styles.outerArc, { borderColor: buttonColors.arcColor }]} />
           <View style={[styles.arcMask, { backgroundColor: current.color }]} />
-          <TouchableOpacity style={styles.arrowButton} onPress={handleNext}>
-            <Ionicons name="arrow-forward" size={18} color="#0A0A0A" />
+          <TouchableOpacity style={[styles.arrowButton, { backgroundColor: buttonColors.background }]} onPress={handleNext}>
+            <Ionicons name="arrow-forward" size={18} color={buttonColors.arrowColor} />
           </TouchableOpacity>
         </View>
 
         {/* Disclaimer */}
-        <Text style={[styles.disclaimer, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+        <Text style={[styles.disclaimer, { fontFamily: FONTS.BarlowSemiCondensed, color: textColors.disclaimer }]}>
           This app provides health information only and does not replace professional medical advice
         </Text>
       </View>
@@ -166,6 +193,7 @@ const styles = StyleSheet.create({
   onboardingImage: {
     width: 350,
     height: 350,
+    marginBottom: 80,
   },
   title: {
     fontSize: 28,
