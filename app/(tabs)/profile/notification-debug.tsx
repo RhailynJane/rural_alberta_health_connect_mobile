@@ -4,11 +4,11 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import {
-    getAllScheduledNotifications,
-    getNotificationDiagnostics,
-    initializeNotificationsOnce,
-    requestNotificationPermissions,
-    scheduleAllReminderItems
+  getAllScheduledNotifications,
+  getNotificationDiagnostics,
+  initializeNotificationsOnce,
+  requestNotificationPermissions,
+  scheduleAllReminderItems
 } from '../../_utils/notifications';
 import CurvedBackground from '../../components/curvedBackground';
 import CurvedHeader from '../../components/curvedHeader';

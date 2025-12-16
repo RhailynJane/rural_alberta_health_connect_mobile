@@ -232,14 +232,15 @@ export async function initializeNotificationsOnce() {
           }
         }
         
-        // Show ALL notifications on device (both reminders and push notifications)
+        // Show ALL notifications as heads-up notifications (push-style)
+        // Android will display these as system notifications with the correct channel priority
+        // Use shouldShowBanner/shouldShowList instead of deprecated shouldShowAlert
         const result = {
-          // Android relies on shouldShowAlert; iOS 17+ uses shouldShowBanner/shouldShowList
-          shouldShowAlert: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
+          shouldShowAlert: true,     // DEPRECATED but still works on older Expo versions
+          shouldShowBanner: true,    // iOS 17+: Show banner at top
+          shouldShowList: true,      // iOS 17+: Add to notification list
+          shouldPlaySound: true,     // Play notification sound
+          shouldSetBadge: true,      // Update badge count
         };
         
         console.log('🔔 [handleNotification] Returning:', result);
@@ -1145,7 +1146,6 @@ export async function scheduleReminderItem(item: ReminderItem) {
         sound: true,
         priority: (Notifications as any).AndroidNotificationPriority.HIGH,
         categoryIdentifier: 'reminder',
-        channelId: REMINDER_CHANNEL_ID,
         data: {
           type: item.frequency === 'daily' ? 'daily_reminder' : 'weekly_reminder',
           timestamp: Date.now(),
@@ -1155,7 +1155,10 @@ export async function scheduleReminderItem(item: ReminderItem) {
           reminderTime: item.time,
         },
       },
-      trigger: { date: nextTriggerDate },
+      trigger: {
+        date: nextTriggerDate,
+        channelId: REMINDER_CHANNEL_ID,  // Android requires channelId in trigger for push notifications
+      },
     });
     console.log('🗓️ Scheduled notification id:', schedId);
     
@@ -1337,25 +1340,31 @@ export async function checkAndFireDueReminders(): Promise<void> {
         console.log(`⏰ [checkAndFireDueReminders] Reminder is due: ${reminder.frequency} at ${hour}:${String(minute).padStart(2, '0')}`);
         
         try {
-          // Fire the notification immediately
-          if (typeof (Notifications as any).presentNotificationAsync === 'function') {
-            await (Notifications as any).presentNotificationAsync({
-              title: "Symptom Assessment Reminder",
-              body: "It's time to complete your symptoms check.",
-              sound: true,
-              priority: (Notifications as any).AndroidNotificationPriority?.HIGH || 'high',
-              categoryIdentifier: 'reminder',
-              channelId: REMINDER_CHANNEL_ID,
-              data: {
-                type: reminder.frequency === 'weekly' ? 'weekly_reminder' : 'daily_reminder',
-                reminderFrequency: reminder.frequency,
-                reminderTime: reminder.time,
-                dayOfWeek: reminder.dayOfWeek,
-                reminderId: reminder.id,
-                timestamp: Date.now(),
+          // Fire the notification immediately as a push notification
+          // Use scheduleNotificationAsync with immediate trigger (1 second) for proper push notification display
+          if (typeof (Notifications as any).scheduleNotificationAsync === 'function') {
+            await (Notifications as any).scheduleNotificationAsync({
+              content: {
+                title: "Symptom Assessment Reminder",
+                body: "It's time to complete your symptoms check.",
+                sound: true,
+                priority: (Notifications as any).AndroidNotificationPriority?.HIGH,
+                categoryIdentifier: 'reminder',
+                data: {
+                  type: reminder.frequency === 'weekly' ? 'weekly_reminder' : 'daily_reminder',
+                  reminderFrequency: reminder.frequency,
+                  reminderTime: reminder.time,
+                  dayOfWeek: reminder.dayOfWeek,
+                  reminderId: reminder.id,
+                  timestamp: Date.now(),
+                },
+              },
+              trigger: {
+                seconds: 1,  // Fire in 1 second for immediate display as push notification
+                channelId: REMINDER_CHANNEL_ID,  // Use high-priority channel for heads-up display
               },
             });
-            console.log(`✅ [checkAndFireDueReminders] Fired due reminder: ${reminder.frequency} reminder at ${reminder.time}`);
+            console.log(`✅ [checkAndFireDueReminders] Scheduled immediate notification for ${reminder.frequency} reminder at ${reminder.time}`);
           }
         } catch (err) {
           console.error(`❌ [checkAndFireDueReminders] Failed to fire reminder:`, err);
