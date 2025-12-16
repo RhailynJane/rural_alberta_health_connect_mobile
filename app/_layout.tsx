@@ -255,9 +255,16 @@ export default function RootLayout() {
       }
     });
 
+    // Set up periodic check for due reminders (every minute while app is active)
+    const reminderCheckInterval = setInterval(() => {
+      console.log('⏰ Periodic check for due reminders');
+      checkAndFireDueReminders().catch(err => console.error('Error in periodic reminder check:', err));
+    }, 60000); // Check every 60 seconds
+
     return () => {
       cleanup?.();
       appStateSubscription?.remove?.();
+      clearInterval(reminderCheckInterval);
     };
   }, []);
 

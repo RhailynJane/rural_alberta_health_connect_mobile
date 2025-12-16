@@ -633,7 +633,7 @@ export default function Dashboard() {
                         <Text style={[styles.dayTabLabel, idx === selectedDayIndex && styles.dayTabLabelActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                           {day.label}
                         </Text>
-                        <Text style={[styles.dayTabDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day.dateLabel}</Text>
+                        <Text style={[styles.dayTabDate, idx === selectedDayIndex && styles.dayTabDateActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day.dateLabel}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -957,6 +957,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+    minWidth: 60,
+    paddingHorizontal: 4,
   },
   healthScoreContent: {
     alignItems: "center",
@@ -1110,6 +1112,9 @@ const styles = StyleSheet.create({
     color: "#5b6478",
     fontSize: 11,
     marginTop: 2,
+  },
+  dayTabDateActive: {
+    color: "#ffffff",
   },
   chartSurface: {
     height: 170,
