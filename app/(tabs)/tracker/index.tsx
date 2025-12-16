@@ -16,6 +16,21 @@ export default function Tracker() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
+
+  // Auto-download TTS model in background when visiting this tab
+  useEffect(() => {
+    (async () => {
+      const downloaded = await isModelDownloaded(DEFAULT_MODEL_ID);
+      if (!downloaded) {
+        console.log('[TTS] Auto-downloading model in background...');
+        downloadModel(DEFAULT_MODEL_ID, (progress) => {
+          if (progress === 1) {
+            console.log('[TTS] Background download complete');
+          }
+        });
+      }
+    })();
+  }, []);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [anchorDate, setAnchorDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
