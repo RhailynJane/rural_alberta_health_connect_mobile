@@ -106,65 +106,68 @@ export function buildOfflineMessages(input: OfflineAssessmentInput): {
 /**
  * Get severity-based urgency recommendation
  *
- * Used when LLM generation fails completely
+ * Used when LLM generation fails completely.
+ * Uses headers matching renderAssessmentCards parser.
+ * No special characters for TTS compatibility.
  */
 export function getSeverityBasedGuidance(severity: number): string {
   if (severity >= 9) {
-    return `⚠️ CRITICAL SEVERITY (${severity}/10)
+    return `Clinical Assessment
+Critical severity level ${severity} out of 10. This may be a medical emergency.
 
-Your reported severity level indicates this may be a medical emergency.
+Recommendations
+- Call 911 immediately if experiencing difficulty breathing, chest pain, severe bleeding, or loss of consciousness
+- If stable, call Health Link Alberta at 811 for urgent nursing guidance
+- Do not wait to seek emergency care
 
-IMMEDIATE ACTION REQUIRED:
-• Call 911 immediately if experiencing:
-  - Difficulty breathing
-  - Chest pain
-  - Severe bleeding
-  - Loss of consciousness
-  - Signs of shock
-
-• If stable, call Health Link Alberta at 811 for urgent nursing guidance
-
-Do NOT wait - seek emergency care immediately.`;
+Next Steps
+- Get emergency medical attention now
+- Have someone stay with you until help arrives
+- Contact Health Link Alberta at 811 for professional guidance`;
   }
 
   if (severity >= 7) {
-    return `⚠️ HIGH SEVERITY (${severity}/10)
+    return `Clinical Assessment
+High severity level ${severity} out of 10. Prompt medical attention is needed.
 
-Your reported severity level suggests prompt medical attention is needed.
+Recommendations
+- Contact Health Link Alberta at 811 for nursing guidance
+- Consider visiting an urgent care clinic or emergency department
+- Do not delay if symptoms are worsening
 
-RECOMMENDED ACTIONS:
-• Contact Health Link Alberta at 811 for nursing guidance
-• Consider visiting an urgent care clinic or emergency department
-• Do not delay if symptoms are worsening
-
-For emergencies (difficulty breathing, severe bleeding, chest pain), call 911.`;
+Next Steps
+- Seek medical care today
+- Monitor for worsening symptoms
+- For emergencies call 911`;
   }
 
   if (severity >= 4) {
-    return `MODERATE SEVERITY (${severity}/10)
+    return `Clinical Assessment
+Moderate severity level ${severity} out of 10. Your symptoms warrant attention.
 
-Your symptoms warrant attention but may not require immediate emergency care.
+Recommendations
+- Monitor your symptoms closely
+- Apply appropriate first aid if applicable
+- Contact Health Link Alberta at 811 for professional guidance
 
-RECOMMENDED ACTIONS:
-• Monitor your symptoms closely
-• Contact Health Link Alberta at 811 for professional guidance
-• Consider scheduling a same-day or next-day medical appointment
-• Apply appropriate first aid if applicable
-
-Seek emergency care immediately if symptoms worsen significantly.`;
+Next Steps
+- Consider scheduling a same day or next day medical appointment
+- Seek emergency care if symptoms worsen significantly
+- Keep track of any changes in your condition`;
   }
 
-  return `MILD SEVERITY (${severity}/10)
+  return `Clinical Assessment
+Mild severity level ${severity} out of 10. Monitoring is still important.
 
-Your symptoms appear to be mild, but monitoring is still important.
+Recommendations
+- Rest and monitor your symptoms
+- Apply basic first aid if applicable
+- Contact Health Link Alberta at 811 if you have concerns
 
-RECOMMENDED ACTIONS:
-• Rest and monitor your symptoms
-• Apply basic first aid if applicable
-• Contact Health Link Alberta at 811 if you have concerns
-• Schedule a regular medical appointment if symptoms persist
-
-Note: If symptoms worsen or new concerning symptoms develop, seek medical attention promptly.`;
+Next Steps
+- Schedule a regular medical appointment if symptoms persist
+- Watch for worsening or new symptoms
+- Seek medical attention promptly if condition changes`;
 }
 
 /**
@@ -205,39 +208,29 @@ function stripThinkingTags(response: string): string {
 /**
  * Format offline assessment result for display
  *
- * Structures the LLM response into sections matching the online format
+ * Returns clean text suitable for:
+ * 1. Card parsing by renderAssessmentCards
+ * 2. TTS readability (no special characters)
  */
 export function formatOfflineResult(
   llmResponse: string,
   input: OfflineAssessmentInput
 ): string {
-  const lines: string[] = [];
-
   // Strip thinking/reasoning tags from model output
-  const cleanedResponse = stripThinkingTags(llmResponse);
+  let cleaned = stripThinkingTags(llmResponse);
 
-  // Add offline indicator
-  lines.push('📱 OFFLINE FIRST-AID ASSESSMENT');
-  lines.push('================================');
-  lines.push('(Generated on-device for privacy)');
-  lines.push('');
+  // Remove any markdown headers (## or ###) - convert to plain text headers
+  cleaned = cleaned.replace(/^#{1,3}\s*/gm, '');
 
-  // Add LLM response (cleaned)
-  lines.push(cleanedResponse);
-  lines.push('');
+  // Remove any leftover decorative characters that hurt TTS
+  cleaned = cleaned.replace(/[=]{3,}/g, '');
+  cleaned = cleaned.replace(/[-]{3,}/g, '');
+  cleaned = cleaned.replace(/[*]{2,}/g, '');
 
-  // Add standard disclaimers
-  lines.push('---');
-  lines.push('');
-  lines.push('⚠️ IMPORTANT DISCLAIMER');
-  lines.push('This is general first-aid information only.');
-  lines.push('This is NOT a medical diagnosis.');
-  lines.push('Always consult a healthcare professional for proper medical advice.');
-  lines.push('');
-  lines.push('📞 Health Link Alberta: 811 (24/7 nursing advice)');
-  lines.push('🚨 Emergency: Call 911');
+  // Clean up excessive whitespace
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
 
-  return lines.join('\n');
+  return cleaned;
 }
 
 console.log(`${LOG_PREFIX} Offline fallback utilities loaded`);

@@ -13,33 +13,37 @@ const LOG_PREFIX = '[LLM:WoundContext]';
 /**
  * System prompt for wound assessment
  * Assertive, confident language for showcase while maintaining boundaries
+ *
+ * Headers match what renderAssessmentCards parser expects:
+ * - CLINICAL ASSESSMENT (injury description)
+ * - RECOMMENDATIONS (treatment actions)
+ * - NEXT STEPS (follow-up guidance)
  */
 export const WOUND_ASSESSMENT_SYSTEM_PROMPT = `/no_think
 You are a confident first-aid expert. Give direct, actionable guidance.
 
 RESPOND IN THIS EXACT FORMAT:
 
-## INJURY TYPE
-[State what the injury is - be direct]
+Clinical Assessment
+This appears to be [injury type]. [One sentence description].
 
-## IMMEDIATE ACTIONS
+Recommendations
 - [Action 1]
 - [Action 2]
 - [Action 3]
 
-## WARNING SIGNS
-- [Sign requiring medical attention]
-- [Sign requiring medical attention]
-
-## NEXT STEPS
-[Clear guidance on medical care]
+Next Steps
+- [Follow-up guidance point 1]
+- [Follow-up guidance point 2]
+- Contact Health Link Alberta at 811 for professional guidance
 
 RULES:
-- Be confident and direct. No hedging words like "might", "possibly", "consider".
-- Use command verbs: "Clean the wound", "Apply pressure", "Seek care".
-- Keep each point to one line.
-- For emergencies: "Call 911 immediately."
-- End with: "Contact Health Link Alberta (811) for professional guidance."`;
+- Be confident and direct
+- Use command verbs like Clean, Apply, Seek
+- Keep each point to one short line
+- No special characters or symbols
+- No headers with colons, asterisks, or equal signs
+- For emergencies say Call 911 immediately`;
 
 /**
  * Options for generating wound context

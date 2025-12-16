@@ -892,6 +892,15 @@ function ImageCarousel({ photos, yoloResult, activeIndex, onIndexChange }: Image
             style={[carouselStyles.imageSlide, { width: IMAGE_WIDTH }]}
             onLayout={handleContainerLayout}
           >
+            {/* Blurred background fill for portrait/narrow images */}
+            <Image
+              source={getImageSource(index)}
+              style={carouselStyles.blurredBackground}
+              resizeMode="cover"
+              blurRadius={20}
+            />
+            <View style={carouselStyles.blurOverlay} />
+            {/* Main image with contain */}
             <Image
               source={getImageSource(index)}
               style={carouselStyles.image}
@@ -932,10 +941,20 @@ const carouselStyles = StyleSheet.create({
   },
   imageSlide: {
     position: "relative",
+    height: 280,
+  },
+  blurredBackground: {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ scale: 1.1 }], // Slight scale to prevent blur edges
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.15)", // Subtle darkening
   },
   image: {
     width: "100%",
     height: 280,
+    zIndex: 1,
   },
   detectionLabel: {
     position: "absolute",
@@ -958,27 +977,25 @@ const carouselStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // Frosted glass pill - calm blue tint
+  // Dark frosted pill for visibility on any background
   indicatorsPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 14,
-    backgroundColor: "rgba(90, 140, 190, 0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(90, 140, 190, 0.18)",
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
   },
   indicator: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "rgba(90, 140, 190, 0.35)",
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
   },
   indicatorActive: {
-    backgroundColor: "#6B9AC8",
-    width: 16,
+    backgroundColor: "#FFFFFF",
+    width: 18,
     borderRadius: 3,
   },
 });
@@ -1318,16 +1335,8 @@ export default function AssessmentResults() {
         console.log("⚠️ Offline and LLM not available");
         setAssessmentError(true);
 
-        const fallbackContext = `OFFLINE - AI NOT AVAILABLE
-==================================
-${llmAvailable ? "The on-device AI model has not been downloaded yet." : "On-device AI is not available on this platform."}
-
-${getSeverityBasedGuidance(severity)}
-
-To enable offline assessments:
-1. Connect to the internet
-2. Return to the AI Assessment screen
-3. ${llmAvailable ? "The model will download automatically (~400MB)" : "Use Cloud AI for assessment"}`;
+        // Use severity-based guidance which already has proper headers for card parsing
+        const fallbackContext = getSeverityBasedGuidance(severity);
 
         setSymptomContext(fallbackContext);
         await saveToLocalDB(fallbackContext, "Offline-Pending");

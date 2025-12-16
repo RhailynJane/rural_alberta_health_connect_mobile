@@ -2,14 +2,16 @@
 import { usePathname, useRouter } from 'expo-router';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { FONTS } from '../constants/constants';
 
 interface Tab {
   name: string;
   label: string;
   route: string;
-  iconSource: any;
-  iconSourceFocused: any;
+  iconSource?: any;
+  iconSourceFocused?: any;
+  iconName?: string; // For vector icons
 }
 
 const tabs: Tab[] = [
@@ -35,11 +37,10 @@ const tabs: Tab[] = [
     iconSourceFocused: require('../../assets/images/assess-icon.png'),
   },
   {
-    name: 'Emergency',
-    label: 'Emergency',
-    route: '/emergency',
-    iconSource: require('../../assets/images/emergency-icon.png'),
-    iconSourceFocused: require('../../assets/images/emergency-icon.png'),
+    name: 'Map',
+    label: 'Map',
+    route: '/find-care/clinics',
+    iconName: 'map-outline',
   },
   {
     name: 'Profile',
@@ -94,12 +95,20 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ floating = true }) 
                 onPress={onPress}
                 style={styles.tab}
               >
-                <Image 
-                  source={isFocused ? tab.iconSourceFocused : tab.iconSource} 
-                  style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
-                  resizeMode='contain'
-                />
-                <Text 
+                {tab.iconName ? (
+                  <Icon
+                    name={tab.iconName}
+                    size={22}
+                    color={isFocused ? '#2A7DE1' : '#6F7682'}
+                  />
+                ) : (
+                  <Image
+                    source={isFocused ? tab.iconSourceFocused : tab.iconSource}
+                    style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
+                    resizeMode='contain'
+                  />
+                )}
+                <Text
                   style={[styles.tabText, isFocused && styles.tabTextFocused]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
@@ -128,12 +137,20 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ floating = true }) 
                 onPress={onPress}
                 style={styles.tab}
               >
-                <Image 
-                  source={isFocused ? tab.iconSourceFocused : tab.iconSource} 
-                  style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
-                  resizeMode='contain'
-                />
-                <Text 
+                {tab.iconName ? (
+                  <Icon
+                    name={tab.iconName}
+                    size={22}
+                    color={isFocused ? '#2A7DE1' : '#6F7682'}
+                  />
+                ) : (
+                  <Image
+                    source={isFocused ? tab.iconSourceFocused : tab.iconSource}
+                    style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
+                    resizeMode='contain'
+                  />
+                )}
+                <Text
                   style={[styles.tabText, isFocused && styles.tabTextFocused]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
@@ -147,7 +164,8 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ floating = true }) 
         </View>
       </View>
 
-      {floating && centerTab && (
+      {/* Hide center button when already on AI Assessment tab */}
+      {floating && centerTab && !pathname.startsWith('/ai-assess') && (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityState={pathname === centerTab.route ? { selected: true } : {}}
@@ -197,13 +215,8 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#1E2A3B',
-    shadowOffset: { width: 0, height: -1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.015)',
     zIndex: 1,
   },
   sideGroupLeft: {

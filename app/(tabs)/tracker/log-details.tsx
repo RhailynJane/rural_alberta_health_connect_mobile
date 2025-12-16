@@ -3,7 +3,7 @@ import { Q } from "@nozbe/watermelondb";
 import { useFocusEffect } from "@react-navigation/native";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
@@ -29,6 +29,395 @@ import {
   useTTS,
 } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+
+// ═══════════════════════════════════════════════════════════
+// MEMOIZED CARD COMPONENTS - Stable references to prevent TTS unmount
+// ═══════════════════════════════════════════════════════════
+
+// Helper: Prepare section items for TTS
+const prepareSectionForTTS = (title: string, items: string[]): string => {
+  if (!items.length) return '';
+  const cleanedItems = items.map(item => prepareTextForTTS(item)).filter(Boolean);
+  return `${title}. ${cleanedItems.join('. ')}`;
+};
+
+// PrimaryCard - Memoized to prevent unmount on parent re-render
+interface PrimaryCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+  sectionKey: string;
+}
+
+const MemoizedPrimaryCard = memo(function MemoizedPrimaryCard({
+  title,
+  items,
+  icon,
+  sectionKey
+}: PrimaryCardProps) {
+  // Prepare text for TTS
+  const ttsText = items.map((item, idx) => {
+    if (sectionKey === "NEXT STEPS") {
+      return `Step ${idx + 1}: ${prepareTextForTTS(item)}`;
+    }
+    return prepareTextForTTS(item);
+  }).join('. ');
+
+  // Get TTS state for highlighting
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop]);
+
+  return (
+    <View style={cardStyles.primaryAssessmentCard}>
+      <View style={cardStyles.primaryCardHeaderWithTTS}>
+        <View style={cardStyles.primaryCardHeaderLeft}>
+          {icon}
+          <Text style={[cardStyles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        </View>
+        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+          <>
+            {ttsStatus === 'generating' && (
+              <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <ActivityIndicator size="small" color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'speaking' && (
+              <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                <Ionicons name="pause" size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            )}
+            {ttsStatus === 'ready' && (
+              <TouchableOpacity
+                style={[cardStyles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                onPress={handleTTSPress}
+                activeOpacity={isDisabled ? 1 : 0.7}
+                disabled={isDisabled}
+              >
+                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                  {ttsHasPlayed ? 'Replay' : 'Listen'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+      </View>
+
+      {/* Show TTS highlighted text when active */}
+      {isTTSActive && ttsChunks.length > 0 ? (
+        <TTSHighlightedText
+          chunks={ttsChunks}
+          chunkStates={ttsChunkStates}
+          isActive={isTTSActive}
+          asBulletList={sectionKey !== "NEXT STEPS"}
+          containerStyle={{ marginTop: 4 }}
+          parentPadding={16}
+        />
+      ) : (
+        sectionKey === "NEXT STEPS"
+          ? items.slice(0, 4).map((it, idx) => (
+              <View key={idx} style={cardStyles.stepRow}>
+                <View style={cardStyles.stepNumberContainer}>
+                  <Text style={[cardStyles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+                </View>
+                <View style={cardStyles.stepContent}>
+                  <Text style={[cardStyles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                    {it.split(':')[0] || `Step ${idx + 1}`}
+                  </Text>
+                  <Text style={[cardStyles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                    {it.replace(/^.*?:\s*/, '') || it}
+                  </Text>
+                </View>
+              </View>
+            ))
+          : items.slice(0, 4).map((it, idx) => (
+              <View key={idx} style={cardStyles.cardItem}>
+                <Text style={cardStyles.bulletPoint}>•</Text>
+                <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                  {it}
+                </Text>
+              </View>
+            ))
+      )}
+    </View>
+  );
+});
+
+// AccordionCard - Memoized to prevent unmount on parent re-render
+interface AccordionCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+  sectionKey: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+const MemoizedAccordionCard = memo(function MemoizedAccordionCard({
+  title,
+  items,
+  icon,
+  sectionKey,
+  isExpanded,
+  onToggle,
+}: AccordionCardProps) {
+  const previewCount = 2;
+  const previewItems = items.slice(0, previewCount);
+
+  // Prepare text for TTS
+  const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
+
+  // Get TTS state for highlighting
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop]);
+
+  return (
+    <View style={cardStyles.accordionCard}>
+      <TouchableOpacity
+        style={cardStyles.accordionHeader}
+        onPress={onToggle}
+        activeOpacity={0.7}
+      >
+        <View style={cardStyles.accordionHeaderLeft}>
+          {icon}
+          <Text style={[cardStyles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
+            <>
+              {ttsStatus === 'generating' && (
+                <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <ActivityIndicator size="small" color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'speaking' && (
+                <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+                  <Ionicons name="pause" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+              {ttsStatus === 'ready' && (
+                <TouchableOpacity
+                  style={[cardStyles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+                  onPress={handleTTSPress}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
+                >
+                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+                  <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+                    {ttsHasPlayed ? 'Replay' : 'Listen'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6B7280"
+          />
+        </View>
+      </TouchableOpacity>
+      {isExpanded && (
+        <View style={cardStyles.accordionContent}>
+          {/* Show TTS highlighted text when active */}
+          {isTTSActive && ttsChunks.length > 0 ? (
+            <TTSHighlightedText
+              chunks={ttsChunks}
+              chunkStates={ttsChunkStates}
+              isActive={isTTSActive}
+              asBulletList={true}
+              containerStyle={{ marginTop: 4 }}
+              parentPadding={14}
+            />
+          ) : (
+            (items.length > 0 ? items : previewItems).map((it, idx) => (
+              <View key={idx} style={cardStyles.cardItem}>
+                <Text style={cardStyles.bulletPoint}>•</Text>
+                <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
+// Card-specific styles used by memoized components
+const cardStyles = StyleSheet.create({
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryCardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  primaryCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  primaryCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  accordionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  stepRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  stepNumberContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
+  },
+  cardItem: {
+    flexDirection: "row",
+    marginBottom: 8,
+    paddingLeft: 4,
+  },
+  bulletPoint: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    marginRight: 8,
+    marginTop: 2,
+  },
+  cardItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1A1A1A",
+    lineHeight: 22,
+  },
+  inlineTtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inlineIconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
+  },
+});
+
+// ═══════════════════════════════════════════════════════════
+// END MEMOIZED CARD COMPONENTS
+// ═══════════════════════════════════════════════════════════
 
 // Renders AI assessment text matching assessment-results UI (priority + accordions)
 function renderAssessmentCards(
@@ -109,231 +498,7 @@ function renderAssessmentCards(
     if (content) sections[current].push(content);
   }
 
-  const PrimaryCard = ({ title, items, icon, sectionKey }: {
-    title: string;
-    items: string[];
-    icon: React.ReactNode;
-    sectionKey: string;
-  }) => {
-    // Prepare text for TTS
-    const ttsText = items.map((item, idx) => {
-      if (sectionKey === "NEXT STEPS") {
-        return `Step ${idx + 1}: ${prepareTextForTTS(item)}`;
-      }
-      return prepareTextForTTS(item);
-    }).join('. ');
-
-    // Get TTS state for highlighting
-    const {
-      status: ttsStatus,
-      speak,
-      stop,
-      chunks: ttsChunks,
-      chunkStates: ttsChunkStates,
-      isAvailable: ttsAvailable,
-      hasPlayed: ttsHasPlayed,
-      isOtherPlaying,
-    } = useTTS();
-
-    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
-    const isDisabled = isOtherPlaying;
-    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
-
-    const handleTTSPress = async () => {
-      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
-        await stop();
-      } else if (ttsStatus === 'ready' && ttsText) {
-        await speak(ttsText);
-      }
-    };
-
-    return (
-      <View style={styles.primaryAssessmentCard}>
-        <View style={styles.primaryCardHeaderWithTTS}>
-          <View style={styles.primaryCardHeaderLeft}>
-            {icon}
-            <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-          </View>
-          {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-            <>
-              {ttsStatus === 'generating' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <ActivityIndicator size="small" color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'speaking' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <Ionicons name="pause" size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'ready' && (
-                <TouchableOpacity
-                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                  onPress={handleTTSPress}
-                  activeOpacity={isDisabled ? 1 : 0.7}
-                  disabled={isDisabled}
-                >
-                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                    {ttsHasPlayed ? 'Replay' : 'Listen'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* Show TTS highlighted text when active */}
-        {isTTSActive && ttsChunks.length > 0 ? (
-          <TTSHighlightedText
-            chunks={ttsChunks}
-            chunkStates={ttsChunkStates}
-            isActive={isTTSActive}
-            asBulletList={sectionKey !== "NEXT STEPS"}
-            containerStyle={{ marginTop: 4 }}
-            parentPadding={16}
-          />
-        ) : (
-          sectionKey === "NEXT STEPS"
-            ? items.slice(0, 4).map((it, idx) => (
-                <View key={idx} style={styles.stepRow}>
-                  <View style={styles.stepNumberContainer}>
-                    <Text style={[styles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
-                  </View>
-                  <View style={styles.stepContent}>
-                    <Text style={[styles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
-                      {it.split(':')[0] || `Step ${idx + 1}`}
-                    </Text>
-                    <Text style={[styles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
-                      {it.replace(/^.*?:\s*/, '') || it}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            : items.slice(0, 4).map((it, idx) => (
-                <View key={idx} style={styles.cardItem}>
-                  <Text style={styles.bulletPoint}>•</Text>
-                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-                    {it}
-                  </Text>
-                </View>
-              ))
-        )}
-      </View>
-    );
-  };
-
-  const AccordionCard = ({ title, items, icon, sectionKey }: {
-    title: string;
-    items: string[];
-    icon: React.ReactNode;
-    sectionKey: string;
-  }) => {
-    const isExpanded = expandedSections[sectionKey] || false;
-    const previewCount = 2;
-    const previewItems = items.slice(0, previewCount);
-
-    // Prepare text for TTS
-    const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
-
-    // Get TTS state for highlighting
-    const {
-      status: ttsStatus,
-      speak,
-      stop,
-      chunks: ttsChunks,
-      chunkStates: ttsChunkStates,
-      isAvailable: ttsAvailable,
-      hasPlayed: ttsHasPlayed,
-      isOtherPlaying,
-    } = useTTS();
-
-    const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
-    const isDisabled = isOtherPlaying;
-    const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
-
-    const handleTTSPress = async () => {
-      if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
-        await stop();
-      } else if (ttsStatus === 'ready' && ttsText) {
-        await speak(ttsText);
-      }
-    };
-
-    return (
-      <View style={styles.accordionCard}>
-        <TouchableOpacity
-          style={styles.accordionHeader}
-          onPress={() => toggleSection(sectionKey)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.accordionHeaderLeft}>
-            {icon}
-            <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-              <>
-                {ttsStatus === 'generating' && (
-                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                    <ActivityIndicator size="small" color="#94A3B8" />
-                  </TouchableOpacity>
-                )}
-                {ttsStatus === 'speaking' && (
-                  <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                    <Ionicons name="pause" size={18} color="#94A3B8" />
-                  </TouchableOpacity>
-                )}
-                {ttsStatus === 'ready' && (
-                  <TouchableOpacity
-                    style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                    onPress={handleTTSPress}
-                    activeOpacity={isDisabled ? 1 : 0.7}
-                    disabled={isDisabled}
-                  >
-                    <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                    <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                      {ttsHasPlayed ? 'Replay' : 'Listen'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </>
-            )}
-            <Ionicons
-              name={isExpanded ? "chevron-up" : "chevron-down"}
-              size={20}
-              color="#6B7280"
-            />
-          </View>
-        </TouchableOpacity>
-        {isExpanded && (
-          <View style={styles.accordionContent}>
-            {/* Show TTS highlighted text when active */}
-            {isTTSActive && ttsChunks.length > 0 ? (
-              <TTSHighlightedText
-                chunks={ttsChunks}
-                chunkStates={ttsChunkStates}
-                isActive={isTTSActive}
-                asBulletList={true}
-                containerStyle={{ marginTop: 4 }}
-                parentPadding={14}
-              />
-            ) : (
-              (items.length > 0 ? items : previewItems).map((it, idx) => (
-                <View key={idx} style={styles.cardItem}>
-                  <Text style={styles.bulletPoint}>•</Text>
-                  <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {it}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-      </View>
-    );
-  };
-
+  // Use memoized components with stable references to prevent TTS unmount
   const icons: Record<SectionKey, { icon: React.ReactNode }> = {
     "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" /> },
     "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" /> },
@@ -350,26 +515,30 @@ function renderAssessmentCards(
     <View>
       {prioritySections.map((key) =>
         sections[key] && sections[key].length > 0 ? (
-          <PrimaryCard key={key} title={key} items={sections[key]} icon={icons[key].icon} sectionKey={key} />
+          <MemoizedPrimaryCard key={key} title={key} items={sections[key]} icon={icons[key].icon} sectionKey={key} />
         ) : null
       )}
       {accordionSections.map((key) =>
         sections[key] && sections[key].length > 0 ? (
-          <AccordionCard
+          <MemoizedAccordionCard
             key={key}
             title={key}
             items={sections[key]}
             icon={icons[key].icon}
             sectionKey={key}
+            isExpanded={expandedSections[key] || false}
+            onToggle={() => toggleSection(key)}
           />
         ) : null
       )}
       {sections["OTHER"] && sections["OTHER"].length > 0 && (
-        <AccordionCard
+        <MemoizedAccordionCard
           title="OTHER"
           items={sections["OTHER"]}
           icon={icons["OTHER"].icon}
           sectionKey="OTHER"
+          isExpanded={expandedSections["OTHER"] || false}
+          onToggle={() => toggleSection("OTHER")}
         />
       )}
     </View>
@@ -908,36 +1077,47 @@ export default function LogDetails() {
                 <Text style={styles.backLinkText}>Back to log</Text>
               </TouchableOpacity>
 
-              {/* Hero photo carousel */}
+              {/* Hero photo carousel - matches AI Assessment style exactly */}
               {heroPhotos.length > 0 && (
-                <View>
-                  <View style={styles.heroImageCard}>
-                    <ScrollView
-                      horizontal
-                      pagingEnabled
-                      showsHorizontalScrollIndicator={false}
-                      onMomentumScrollEnd={handleHeroScroll}
-                    >
-                      {heroPhotos.map((uri, idx) => (
+                <View style={styles.heroImageCard}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={handleHeroScroll}
+                  >
+                    {heroPhotos.map((uri, idx) => (
+                      <View key={`slide-${idx}`} style={[styles.heroImageSlide, { width: heroWidth }]}>
+                        {/* Blurred background fill for portrait/narrow images */}
                         <Image
-                          key={`${uri}-${idx}`}
                           source={{ uri }}
-                          style={[styles.heroImage, { width: heroWidth }]}
+                          style={styles.blurredBackground}
+                          resizeMode="cover"
+                          blurRadius={20}
                         />
-                      ))}
-                    </ScrollView>
-                    <View style={styles.heroOverlay}>
-                      <Text style={styles.heroOverlayText}>{`Photo ${photoIndex + 1} of ${heroPhotos.length}`}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.heroDots}>
-                    {heroPhotos.map((_, idx) => (
-                      <View
-                        key={`dot-${idx}`}
-                        style={[styles.heroDot, idx === photoIndex && styles.heroDotActive]}
-                      />
+                        <View style={styles.blurOverlay} />
+                        {/* Main image with contain */}
+                        <Image
+                          source={{ uri }}
+                          style={styles.heroImage}
+                          resizeMode="contain"
+                        />
+                      </View>
                     ))}
-                  </View>
+                  </ScrollView>
+                  {/* Floating Page Indicators - Dark Frosted Glass Pill */}
+                  {heroPhotos.length > 1 && (
+                    <View style={styles.indicatorsOverlay}>
+                      <View style={styles.indicatorsPill}>
+                        {heroPhotos.map((_, idx) => (
+                          <View
+                            key={`dot-${idx}`}
+                            style={[styles.indicator, idx === photoIndex && styles.indicatorActive]}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -1171,57 +1351,60 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
+  // Hero image carousel - matches AI Assessment style exactly
   heroImageCard: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: "hidden",
     marginBottom: 16,
-    backgroundColor: "#F3F4F6",
+    position: "relative",
+  },
+  heroImageSlide: {
+    position: "relative",
+    height: 280,
+  },
+  blurredBackground: {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ scale: 1.1 }], // Slight scale to prevent blur edges
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.15)", // Subtle darkening
   },
   heroImage: {
     width: "100%",
-    height: 220,
+    height: 280,
+    zIndex: 1,
   },
-  heroOverlay: {
+  // Floating indicators overlay
+  indicatorsOverlay: {
     position: "absolute",
-    bottom: 0,
+    bottom: 24,
     left: 0,
     right: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  heroOverlayText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-    fontFamily: FONTS.BarlowSemiCondensed,
-  },
-  heroOverlaySubtext: {
-    color: "#E5E7EB",
-    fontSize: 12,
-    fontFamily: FONTS.BarlowSemiCondensed,
-  },
-  heroDots: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 10,
-    marginBottom: 6,
+  },
+  // Dark frosted glass pill for visibility on any background
+  indicatorsPill: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
   },
-  heroDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#D1D5DB",
+  indicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
   },
-  heroDotActive: {
-    width: 14,
-    borderRadius: 7,
-    backgroundColor: "#2A7DE1",
+  indicatorActive: {
+    backgroundColor: "#FFFFFF",
+    width: 18,
+    borderRadius: 3,
   },
   headerCard: {
     backgroundColor: "white",
