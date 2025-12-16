@@ -520,6 +520,7 @@ const styles = StyleSheet.create({
   },
   detectionsContainer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
   detectionBox: {
     borderWidth: 2,
@@ -540,6 +541,7 @@ const styles = StyleSheet.create({
   },
   riveContainer: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
   },
   riveAnimation: {
     width: '100%',
