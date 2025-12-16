@@ -10,8 +10,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { AppState, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { LLMHost } from '../utils/llm/LLMHost';
+import { DEFAULT_MODEL_ID, isModelDownloaded, preWarmTTS } from '../utils/tts';
 import { database } from '../watermelon/database';
-import { preWarmTTS, isModelDownloaded, DEFAULT_MODEL_ID } from '../utils/tts';
 import { checkAndFireDueReminders, initializeNotificationsOnce, requestNotificationPermissions } from "./_utils/notifications";
 import { SignUpFormProvider } from "./auth/_context/SignUpFormContext";
 
@@ -242,10 +242,16 @@ export default function RootLayout() {
 
     // Listen for app foreground/background state changes
     // When app comes to foreground, check if any reminders are due and fire them
+    let lastActiveCheck = 0;
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        console.log('📱 App came to foreground - checking for due reminders');
-        checkAndFireDueReminders().catch(err => console.error('Error checking due reminders:', err));
+        const now = Date.now();
+        // Debounce: only check once per 5 seconds to avoid rapid re-triggers from re-renders
+        if (now - lastActiveCheck > 5000) {
+          lastActiveCheck = now;
+          console.log('📱 App came to foreground - checking for due reminders');
+          checkAndFireDueReminders().catch(err => console.error('Error checking due reminders:', err));
+        }
       }
     });
 
