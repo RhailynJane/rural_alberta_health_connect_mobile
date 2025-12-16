@@ -40,10 +40,10 @@ const onboardingData = [
     iconColor: "#E91E63",
   },
   {
-    icon: "shield-checkmark-outline",
+    image: require("../assets/images/onboarding-3.gif"),
     title: "Privacy as Standard",
     description: "Your health data stays encrypted and in your control—always.",
-    color: "#E8F5E9",
+    color: "#ffffff",
     iconColor: "#4CAF50",
   },
 ];
