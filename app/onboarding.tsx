@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  Dimensions,
   Image,
   StyleSheet,
   Text,
@@ -11,8 +10,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { FONTS } from "../app/constants/constants";
-
-const { width } = Dimensions.get('window');
 
 const isColorLight = (hex: string) => {
   const h = hex.replace('#', '');
@@ -98,15 +95,11 @@ export default function Onboarding() {
         <View style={styles.contentContainer}>
           {/* Icon Circle */}
           <View style={[styles.iconCircle, { backgroundColor: textColors.iconCircle }]}>
-            {current.image ? (
-              <Image 
-                source={current.image} 
-                style={styles.onboardingImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <Ionicons name={current.icon as any} size={80} color={current.iconColor} />
-            )}
+            <Image 
+              source={current.image} 
+              style={styles.onboardingImage}
+              resizeMode="contain"
+            />
           </View>
 
           {/* Title */}
