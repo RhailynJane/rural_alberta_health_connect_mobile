@@ -222,6 +222,7 @@ export default function EmergencyContact() {
               height={150}
               showLogo={true}
               screenType="signin"
+              showMenuButton={false}
             />
 
             {/* Progress Bar */}

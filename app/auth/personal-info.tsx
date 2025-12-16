@@ -391,6 +391,7 @@ export default function PersonalInfo() {
               title="Alberta Health Connect"
               height={150}
               showLogo={true}
+              showMenuButton={false}
             />
 
             {/* Inline offline banner for onboarding screen */}

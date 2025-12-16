@@ -22,7 +22,7 @@ export default function PrivacyPolicy() {
     <SafeAreaView style={styles.safeArea}>
       <CurvedBackground>
         {/* Fixed Header */}
-          <CurvedHeader title="Privacy Policy" height={150} showLogo={false} bottomSpacing={0} />
+          <CurvedHeader title="Privacy Policy" height={150} showLogo={false} bottomSpacing={0} showMenuButton={false} />
         <ScrollView contentContainerStyle={styles.contentContainer}>
           <View style={styles.contentSection}>
             <Text

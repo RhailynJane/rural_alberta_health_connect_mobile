@@ -25,6 +25,7 @@ export default function Onboarding() {
           <CurvedHeader
             title="Your trusted healthcare companion for rural Alberta communities"
             height={150}
+            showMenuButton={false}
           />
 
           <View style={styles.contentSection}>

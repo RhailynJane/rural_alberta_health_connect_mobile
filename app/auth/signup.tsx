@@ -177,7 +177,6 @@ export default function SignUp() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
         {/* Fixed Header */}
         <CurvedHeader
           title="Alberta Health Connect"
@@ -185,6 +184,7 @@ export default function SignUp() {
           showLogo={true}
           screenType="signin"
           bottomSpacing={0}
+          showMenuButton={false}
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}

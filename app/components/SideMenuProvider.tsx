@@ -29,6 +29,11 @@ const SideMenuProvider: React.FC<Props> = ({ children }) => {
   // Hide menu during auth and onboarding flows
   const isAuthOrOnboarding = pathname?.startsWith('/auth') || pathname?.startsWith('/onboarding') || pathname === '/';
   const menuVisible = visible && !isAuthOrOnboarding;
+  
+  // Debug logging
+  if (isAuthOrOnboarding) {
+    console.log(`🚫 [SideMenu] Hidden on route: ${pathname}`);
+  }
 
   const value = useMemo(
     () => ({

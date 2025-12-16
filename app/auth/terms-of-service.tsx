@@ -22,6 +22,7 @@ export default function TermsOfService() {
           height={150}
           showLogo={false}
           bottomSpacing={0}
+          showMenuButton={false}
         />
         <ScrollView contentContainerStyle={styles.contentContainer}>
           <View style={styles.contentSection}>
