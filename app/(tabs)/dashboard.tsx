@@ -490,8 +490,8 @@ export default function Dashboard() {
     router.push("/tracker");
   };
 
-  const navigateToFindCare = (): void => {
-    router.push("/find-care");
+  const navigateToClinics = (): void => {
+    router.push("/find-care/clinics");
   };
 
   const handleSignOut = (): void => {
