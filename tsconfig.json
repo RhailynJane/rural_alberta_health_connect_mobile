@@ -1,5 +1,4 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": false,
     "jsx": "react-native",
@@ -26,5 +25,6 @@
     "node_modules/@rnmapbox/maps",
     "node_modules/@react-native-community",
     "node_modules/expo-modules-core"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -1,9 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, AppStateStatus, Platform } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import KokoroOnnx, { ChunkedStreamStatus } from './kokoroOnnx';
-import { downloadModel, isModelDownloaded, DEFAULT_MODEL_ID, MODELS, ModelId } from './models';
+import { DEFAULT_MODEL_ID, MODELS, ModelId, downloadModel, isModelDownloaded } from './models';
 import { DEFAULT_VOICE_ID, VoiceId } from './voices';
 
 // Storage keys
@@ -201,8 +201,17 @@ export function useTTS(options: UseTTSOptions = {}): UseTTSReturn {
             safeSetStatus('ready');
           } else {
             console.error('[TTS] Failed to load model');
-            safeSetError('Failed to load TTS model');
-            safeSetStatus('error');
+            // Check if model file still exists (not deleted due to corruption)
+            const stillDownloaded = await isModelDownloaded(modelId);
+            if (!stillDownloaded) {
+              // Model was deleted (likely due to corruption), clear downloaded flag
+              await AsyncStorage.removeItem(TTS_MODEL_DOWNLOADED_KEY);
+              safeSetError('Model file corrupted. Please re-download.');
+              safeSetStatus('not_downloaded');
+            } else {
+              safeSetError('Failed to load TTS model');
+              safeSetStatus('error');
+            }
           }
         } else {
           safeSetStatus('not_downloaded');

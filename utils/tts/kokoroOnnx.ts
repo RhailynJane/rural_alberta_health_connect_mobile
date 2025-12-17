@@ -1,9 +1,8 @@
+import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { InferenceSession, Tensor } from 'onnxruntime-react-native';
-import { Audio } from 'expo-av';
-import { VOICES, getVoiceData } from './voices';
 import { Platform } from 'react-native';
-import { MODELS } from './models';
+import { getVoiceData } from './voices';
 
 // CMU Pronouncing Dictionary (124,926 words with IPA phonemes)
 import CMU_DICTIONARY from './cmuDictionary.min.json';
@@ -457,6 +456,22 @@ class KokoroOnnx {
       return true;
     } catch (error) {
       console.error('[TTS] Error loading model:', error);
+
+      // Check if this is a corrupted model file error
+      if (error instanceof Error && (
+        error.message.includes('Protobuf parsing failed') ||
+        error.message.includes('ORT_INVALID_PROTOBUF') ||
+        error.message.includes('Invalid model')
+      )) {
+        console.error('[TTS] Corrupted model detected. Deleting cache file...');
+        try {
+          const modelPath = FileSystem.cacheDirectory + modelId;
+          await FileSystem.deleteAsync(modelPath, { idempotent: true });
+          console.log('[TTS] Corrupted model file deleted. Please re-download the model.');
+        } catch (deleteError) {
+          console.error('[TTS] Failed to delete corrupted model:', deleteError);
+        }
+      }
 
       if (error instanceof Error && error.message.includes('binding')) {
         console.error('[TTS] ONNX Runtime binding error. This may be due to incompatibility with the current platform.');
