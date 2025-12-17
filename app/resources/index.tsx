@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { api } from "../../convex/_generated/api";
@@ -33,6 +33,7 @@ export default function Resources() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
   const [selectedResource, setSelectedResource] = useState<ResourceItem | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
   const { open } = useSideMenu();
   
   // Fetch resources from Convex
@@ -1313,11 +1314,21 @@ When going out in cold or sun:
   // Use Convex data or fallback to empty array  
   const resources = resourcesData || [];
 
+  // Apply search filter first
+  const searchFilteredResources = searchQuery.trim()
+    ? resources.filter(r => 
+        r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.content.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : resources;
+
+  // Then apply category filter
   const filteredResources = selectedCategory === 'all' 
-    ? resources 
+    ? searchFilteredResources 
     : selectedCategory === 'favorites'
-    ? resources.filter(r => favorites.has(r._id))
-    : resources.filter(r => r.category === selectedCategory);
+    ? searchFilteredResources.filter(r => favorites.has(r._id))
+    : searchFilteredResources.filter(r => r.category === selectedCategory);
 
   // Show loading state while fetching data
   if (resourcesData === undefined) {
@@ -1471,9 +1482,13 @@ When going out in cold or sun:
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <Icon name="search" size={20} color="#9CA3AF" />
-            <Text style={[styles.searchPlaceholder, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Search health topics...
-            </Text>
+            <TextInput
+              style={[styles.searchInput, { fontFamily: FONTS.BarlowSemiCondensed }]}
+              placeholder="Search health topics..."
+              placeholderTextColor="#9CA3AF"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
           </View>
 
           {/* Categories Section */}
@@ -1680,6 +1695,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+  },
+  searchInput: {
+    marginLeft: 12,
+    fontSize: 15,
+    color: '#1F2937',
+    flex: 1,
+    padding: 0,
   },
   searchPlaceholder: {
     marginLeft: 12,
