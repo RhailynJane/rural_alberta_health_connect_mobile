@@ -1,22 +1,22 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Formik } from 'formik';
 import { useState } from 'react';
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Yup from 'yup';
-import CurvedBackground from '../components/curvedBackground';
-import CurvedHeader from '../components/curvedHeader';
 import StatusModal from '../components/StatusModal';
 import { FONTS } from '../constants/constants';
 
@@ -135,7 +135,12 @@ export default function ForgotPassword() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
+      <LinearGradient
+        colors={["#2A7DE1", "#1F64D1"]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.blueBackground}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.container}
@@ -144,14 +149,23 @@ export default function ForgotPassword() {
             contentContainerStyle={styles.contentContainer}
             keyboardShouldPersistTaps="handled"
           >
-            <CurvedHeader
-              title="Alberta Health Connect"
-              height={150}
-              showLogo={true}
-              showMenuButton={false}
-            />
+            {/* Logo Section */}
+            <View style={styles.logoSection}>
+              <Image 
+                source={require("../../assets/images/logo-icon.png")} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+              <Text style={[styles.appTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Rural Alberta Health Connect
+              </Text>
+              <Text style={[styles.appSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Assess your health now
+              </Text>
+            </View>
 
-            <View style={styles.contentSection}>
+            {/* Form Section */}
+            <View style={styles.whiteSection}>
               <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Forgot Password
               </Text>
@@ -305,7 +319,7 @@ export default function ForgotPassword() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </CurvedBackground>
+      </LinearGradient>
 
       {/* StatusModal for alerts and confirmations */}
       <StatusModal
@@ -323,7 +337,11 @@ export default function ForgotPassword() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: '#1F64D1',
+  },
+  blueBackground: {
+    flex: 1,
+    backgroundColor: '#2A7DE1',
   },
   container: {
     flex: 1,
@@ -331,22 +349,49 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
   },
-  contentSection: {
-    padding: 24,
+  logoSection: {
+    alignItems: 'center',
     paddingTop: 40,
+    paddingBottom: 40,
   },
-  title: {
-    fontSize: 28,
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+  },
+  appTitle: {
+    fontSize: 24,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 8,
   },
+  appSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+    textAlign: 'center',
+  },
+  whiteSection: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    padding: 24,
+    paddingTop: 32,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.2,
+  },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#4B5563',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 28,
   },
   formContainer: {
     width: '100%',
@@ -365,16 +410,10 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 15,
     marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
     color: '#1A1A1A',
   },
   passwordContainer: {
     position: 'relative',
-    width: '100%',
     marginBottom: 8,
   },
   passwordInput: {
@@ -385,17 +424,11 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingRight: 50,
     fontSize: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   eyeIcon: {
     position: 'absolute',
     right: 16,
     top: 16,
-    padding: 4,
   },
   inputError: {
     borderColor: '#ff3b30',
@@ -411,7 +444,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 30,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 40,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -435,6 +468,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2A7DE1',
     fontWeight: '600',
-    marginTop: 8,
   },
 });
