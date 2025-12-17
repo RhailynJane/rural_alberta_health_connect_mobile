@@ -8,6 +8,7 @@ import { useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -418,38 +419,47 @@ export default function SignUp() {
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
-      {/* Agreement Confirmation Modal */}
-      <StatusModal
-        visible={showAgreementModal}
-        type="confirm"
-        title="Agreement Required"
-        message="Do you agree to our Terms of Service and Privacy Policy? By agreeing, you acknowledge that you have read and understood both documents."
-        icon="description"
-        onClose={() => {
-          setShowAgreementModal(false);
-          setPendingSetFieldValue(null);
-        }}
-        buttons={[
-          {
-            label: "Cancel",
-            onPress: cancelAgreement,
-            variant: "secondary"
-          },
-          {
-            label: "I Agree",
-            onPress: confirmAgreement,
-            variant: "primary"
-          },
-          {
-            label: "I need to read the documents first",
-            onPress: () => {
-              setShowAgreementModal(false);
-              setPendingSetFieldValue(null);
-            },
-            variant: "secondary"
-          }
-        ]}
-      />
+      {/* Agreement Confirmation Modal - Minimalist custom UI */}
+      {showAgreementModal && (
+        <Modal
+          transparent
+          animationType="fade"
+          visible={showAgreementModal}
+          onRequestClose={() => {
+            setShowAgreementModal(false);
+            setPendingSetFieldValue(null);
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Ionicons name="information-circle-outline" size={40} color="#2A7DE1" />
+                <Text style={[styles.modalTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>Agreement Required</Text>
+              </View>
+              <Text style={[styles.modalMessage, { fontFamily: FONTS.BarlowSemiCondensed }]}>Do you agree to our Terms of Service and Privacy Policy?</Text>
+              <Text style={[styles.modalSubtext, { fontFamily: FONTS.BarlowSemiCondensed }]}>By agreeing, you acknowledge that you have read and understood both documents.</Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={cancelAgreement}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmButton} onPress={confirmAgreement}>
+                  <Text style={styles.confirmButtonText}>I Agree</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.readDocumentsButton}
+                onPress={() => {
+                  setShowAgreementModal(false);
+                  setPendingSetFieldValue(null);
+                  router.replace("/auth/terms-of-service");
+                }}
+              >
+                <Text style={[styles.readDocumentsText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Read Terms & Privacy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
       {/* Error Modal */}
       <StatusModal
         visible={showErrorModal}
@@ -731,8 +741,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#dee2e6",
   },
   cancelButtonText: {
     color: "#495057",
