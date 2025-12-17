@@ -1,81 +1,35 @@
-import { useQuery } from "convex/react";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import Icon from "react-native-vector-icons/MaterialIcons";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
-import BottomNavigation from "../components/bottomNavigation";
-import CurvedBackground from "../components/curvedBackground";
-import CurvedHeader from "../components/curvedHeader";
-import { useSideMenu } from "../components/SideMenuProvider";
-import { FONTS } from "../constants/constants";
+import { mutation } from "./_generated/server";
 
-type CategoryType = 'all' | 'burns-heat' | 'trauma-injuries' | 'infections' | 'skin-rash' | 'cold-frostbite' | 'emergency-prevention' | 'favorites';
+/**
+ * Seed Resources Data - Run this mutation once to populate the resources table
+ * 
+ * To execute:
+ * 1. Open Convex Dashboard
+ * 2. Go to Functions
+ * 3. Find "seedResourcesData" mutation
+ * 4. Click "Run" (no arguments needed)
+ */
 
-interface ResourceItem {
-  _id: Id<"resources">;
-  title: string;
-  subtitle: string;
-  icon: string;
-  iconColor: string;
-  bgGradient: string[];
-  category: string;
-  importance: string;
-  readTime: string;
-  content: string;
-  createdAt: number;
-  updatedAt: number;
-}
+export default mutation({
+  handler: async (ctx) => {
+    // Clear existing resources first
+    const existing = await ctx.db.query("resources").collect();
+    for (const resource of existing) {
+      await ctx.db.delete(resource._id);
+    }
 
-export default function Resources() {
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all');
-  const [selectedResource, setSelectedResource] = useState<ResourceItem | null>(null);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const { open } = useSideMenu();
-  
-  // Fetch resources from Convex
-  const resourcesData = useQuery(api.resources.getAllResources);
-
-  const categories = [
-    { id: 'all' as CategoryType, label: 'All', icon: 'library-books', color: '#6366F1' },
-    { id: 'burns-heat' as CategoryType, label: 'Burns & Heat', icon: 'local-fire-department', color: '#FF6B35' },
-    { id: 'trauma-injuries' as CategoryType, label: 'Trauma & Injuries', icon: 'healing', color: '#E63946' },
-    { id: 'infections' as CategoryType, label: 'Infections', icon: 'coronavirus', color: '#7C3AED' },
-    { id: 'skin-rash' as CategoryType, label: 'Skin & Rash', icon: 'spa', color: '#EC4899' },
-    { id: 'cold-frostbite' as CategoryType, label: 'Cold & Frostbite', icon: 'ac-unit', color: '#0EA5E9' },
-    { id: 'emergency-prevention' as CategoryType, label: 'Emergency & Prevention', icon: 'shield', color: '#10B981' },
-    { id: 'favorites' as CategoryType, label: 'Favorites', icon: 'favorite', color: '#EF4444' },
-  ];
-
-  const toggleFavorite = (resourceId: string) => {
-    setFavorites(prev => {
-      const newFavorites = new Set(prev);
-      if (newFavorites.has(resourceId)) {
-        newFavorites.delete(resourceId);
-      } else {
-        newFavorites.add(resourceId);
-      }
-      return newFavorites;
-    });
-  };
-
-  // Hardcoded resources moved to Convex database
-  // To seed data, use convex/seedResourcesData.ts
-  /*
-  const hardcodedResources: ResourceItem[] = [
-    {
-      _id: "burns" as Id<"resources">,
-      title: "Burns & Fire Safety",
-      subtitle: "Emergency • 5-8 mins",
-      icon: "local-fire-department",
-      iconColor: "#FF6B35",
-      bgGradient: ['#FF6B35', '#FF8F5C'] as const,
-      category: 'burns-heat',
-      importance: 'high',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**First-Degree Burns (Superficial)**
+    // Seed data with all 16 resources
+    const resources = [
+      {
+        title: "Burns & Fire Safety",
+        subtitle: "Emergency • 5-8 mins",
+        icon: "local-fire-department",
+        iconColor: "#FF6B35",
+        bgGradient: ['#FF6B35', '#FF8F5C'],
+        category: 'burns-heat',
+        importance: 'high',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**First-Degree Burns (Superficial)**
 • Affects only the outer layer of skin (epidermis)
 • Symptoms: Redness, pain, mild swelling
 • Treatment: Cool water for 10-15 minutes, aloe vera gel, pain relievers
@@ -100,18 +54,17 @@ export default function Resources() {
 ⚠️ Never apply ice, butter, or oils
 ⚠️ Seek immediate care for burns on face, hands, feet, or genitals
 ⚠️ Watch for signs of infection: increased pain, pus, fever`,
-    },
-    {
-      id: "trauma",
-      title: "Trauma & Injuries",
-      subtitle: "Emergency • 6-10 mins",
-      icon: "healing",
-      iconColor: "#E63946",
-      bgGradient: ['#E63946', '#EF5A6F'],
-      category: 'trauma-injuries',
-      importance: 'high',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Cuts & Lacerations**
+      },
+      {
+        title: "Trauma & Injuries",
+        subtitle: "Emergency • 6-10 mins",
+        icon: "healing",
+        iconColor: "#E63946",
+        bgGradient: ['#E63946', '#EF5A6F'],
+        category: 'trauma-injuries',
+        importance: 'high',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Cuts & Lacerations**
 • Stop bleeding: Apply direct pressure for 10 minutes
 • Clean wound with clean water
 • Apply antibiotic ointment
@@ -144,18 +97,17 @@ export default function Resources() {
 • Elevate injured area above heart
 • Apply pressure to pressure points if needed
 • Use tourniquet ONLY as last resort for life-threatening bleeding`,
-    },
-    {
-      id: "third-degree-burns",
-      title: "Third-Degree Burns",
-      subtitle: "Emergency • 5-7 mins",
-      icon: "local-fire-department",
-      iconColor: "#B91C1C",
-      bgGradient: ['#B91C1C', '#DC2626'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**What Are Third-Degree Burns?**
+      },
+      {
+        title: "Third-Degree Burns",
+        subtitle: "Emergency • 5-7 mins",
+        icon: "local-fire-department",
+        iconColor: "#B91C1C",
+        bgGradient: ['#B91C1C', '#DC2626'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**What Are Third-Degree Burns?**
 Third-degree burns, also called full-thickness burns, are the most serious type of burn injury. They injure all layers of the skin as well as the fatty tissue beneath them. These burns severely affect the skin's ability to grow back naturally.
 
 **Identifying Third-Degree Burns**
@@ -238,18 +190,17 @@ Third-degree burns ALWAYS require professional medical care:
 ⚠️ Burns that circle arms or legs
 ⚠️ Chemical or electrical burns
 ⚠️ Difficulty breathing or signs of shock`,
-    },
-    {
-      id: "infections",
-      title: "Infections & Wound Care",
-      subtitle: "Education • 4-6 mins",
-      icon: "coronavirus",
-      iconColor: "#F77F00",
-      bgGradient: ['#F77F00', '#FB9131'] as const,
-      category: 'infections',
-      importance: 'medium',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Signs of Infection**
+      },
+      {
+        title: "Infections & Wound Care",
+        subtitle: "Education • 4-6 mins",
+        icon: "coronavirus",
+        iconColor: "#F77F00",
+        bgGradient: ['#F77F00', '#FB9131'],
+        category: 'infections',
+        importance: 'medium',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Signs of Infection**
 • Increased redness, warmth, swelling
 • Pus or cloudy drainage
 • Red streaks from wound
@@ -289,18 +240,17 @@ Third-degree burns ALWAYS require professional medical care:
 • Complete full course of antibiotics if prescribed
 • Maintain good hygiene
 • Keep tetanus vaccination current`,
-    },
-    {
-      id: "skin-rash",
-      title: "Skin Conditions & Rashes",
-      subtitle: "Education • 4-6 mins",
-      icon: "spa",
-      iconColor: "#06A77D",
-      bgGradient: ['#06A77D', '#10B981'],
-      category: 'skin-rash',
-      importance: 'medium',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Common Rashes**
+      },
+      {
+        title: "Skin Conditions & Rashes",
+        subtitle: "Education • 4-6 mins",
+        icon: "spa",
+        iconColor: "#06A77D",
+        bgGradient: ['#06A77D', '#10B981'],
+        category: 'skin-rash',
+        importance: 'medium',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Common Rashes**
 
 **Contact Dermatitis**
 • Caused by allergens or irritants
@@ -339,18 +289,17 @@ Third-degree burns ALWAYS require professional medical care:
 ⚠️ Painful or blistering
 ⚠️ Signs of infection
 ⚠️ Doesn't improve with home treatment`,
-    },
-    {
-      id: "cold-frostbite",
-      title: "Cold Weather Injuries",
-      subtitle: "Prevention • 5-7 mins",
-      icon: "ac-unit",
-      iconColor: "#118AB2",
-      bgGradient: ['#118AB2', '#0EA5E9'] as const,
-      category: 'cold-frostbite',
-      importance: 'high',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Hypothermia**
+      },
+      {
+        title: "Cold Weather Injuries",
+        subtitle: "Prevention • 5-7 mins",
+        icon: "ac-unit",
+        iconColor: "#118AB2",
+        bgGradient: ['#118AB2', '#0EA5E9'],
+        category: 'cold-frostbite',
+        importance: 'high',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Hypothermia**
 • Body temperature drops below 95°F (35°C)
 • Symptoms:
   - Shivering (stops in severe cases)
@@ -402,18 +351,17 @@ Third-degree burns ALWAYS require professional medical care:
 • Avoid alcohol (causes heat loss)
 • Watch for warning signs
 • Limit time outdoors in extreme cold`,
-    },
-    {
-      id: "first-aid",
-      title: "Essential First Aid",
-      subtitle: "Emergency • 8-10 mins",
-      icon: "medical-services",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'emergency-prevention',
-      importance: 'critical',
-      readTime: 'By SafeSpace Mental Health Team',
-      content: `**Emergency Numbers**
+      },
+      {
+        title: "Essential First Aid",
+        subtitle: "Emergency • 8-10 mins",
+        icon: "medical-services",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'emergency-prevention',
+        importance: 'critical',
+        readTime: 'By SafeSpace Mental Health Team',
+        content: `**Emergency Numbers**
 • 911 - Emergency Services
 • 811 - Health Link Alberta (24/7 health advice)
 
@@ -468,18 +416,17 @@ Third-degree burns ALWAYS require professional medical care:
 ⚠️ Always call 911 for life-threatening emergencies
 ⚠️ When in doubt, seek professional medical help
 ⚠️ Take a certified first aid course for proper training`,
-    },
-    {
-      id: "first-degree-burn-home",
-      title: "First-Degree Burn Home Care",
-      subtitle: "Education • 3-5 mins",
-      icon: "spa",
-      iconColor: "#10B981",
-      bgGradient: ['#10B981', '#34D399'] as const,
-      category: 'burns-heat',
-      importance: 'medium',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Home Treatment for First-Degree Burns and Sunburns**
+      },
+      {
+        title: "First-Degree Burn Home Care",
+        subtitle: "Education • 3-5 mins",
+        icon: "spa",
+        iconColor: "#10B981",
+        bgGradient: ['#10B981', '#34D399'],
+        category: 'burns-heat',
+        importance: 'medium',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Home Treatment for First-Degree Burns and Sunburns**
 While there is no evidence-based research to support the safety and effectiveness of all home treatments, these measures may help relieve burn symptoms.
 
 **Cooling Methods**
@@ -517,18 +464,17 @@ While there is no evidence-based research to support the safety and effectivenes
 • Fever
 • Increased pain
 • Red streaks from the burn`,
-    },
-    {
-      id: "child-burn-safety",
-      title: "Child Safety: Preventing Burns",
-      subtitle: "Prevention • 8-10 mins",
-      icon: "child-care",
-      iconColor: "#F59E0B",
-      bgGradient: ['#F59E0B', '#FBBF24'] as const,
-      category: 'emergency-prevention',
-      importance: 'high',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Burns Can Happen in Any Home**
+      },
+      {
+        title: "Child Safety: Preventing Burns",
+        subtitle: "Prevention • 8-10 mins",
+        icon: "child-care",
+        iconColor: "#F59E0B",
+        bgGradient: ['#F59E0B', '#FBBF24'],
+        category: 'emergency-prevention',
+        importance: 'high',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Burns Can Happen in Any Home**
 Heat, electricity, friction, and chemicals can all cause burns. Protect your child by being aware of these hazards.
 
 **Heat Burns (Thermal Burns)**
@@ -591,18 +537,17 @@ Caused by contact with hard surfaces (pavement, carpets, gym floors).
 • Ensure batteries are in protective casings
 • Use casings that require adult assistance to open
 • Keep spare batteries locked away`,
-    },
-    {
-      id: "acid-burns",
-      title: "Acid Burns",
-      subtitle: "Emergency • 6-8 mins",
-      icon: "science",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**What Are Acid Burns?**
+      },
+      {
+        title: "Acid Burns",
+        subtitle: "Emergency • 6-8 mins",
+        icon: "science",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**What Are Acid Burns?**
 Acid products can cause serious injury. Damage depends on the type, strength, and length of contact.
 
 **Common Acid Products**
@@ -665,18 +610,17 @@ Acid products can cause serious injury. Damage depends on the type, strength, an
 • Take chemical container with you
 • Monitor for signs of infection
 • Follow up as directed`,
-    },
-    {
-      id: "alkali-burns",
-      title: "Alkali Burns",
-      subtitle: "Emergency • 6-8 mins",
-      icon: "science",
-      iconColor: "#7C3AED",
-      bgGradient: ['#7C3AED', '#8B5CF6'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**What Are Alkali Burns?**
+      },
+      {
+        title: "Alkali Burns",
+        subtitle: "Emergency • 6-8 mins",
+        icon: "science",
+        iconColor: "#7C3AED",
+        bgGradient: ['#7C3AED', '#8B5CF6'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**What Are Alkali Burns?**
 Alkaline chemicals can cause serious damage very quickly and penetrate deeper tissue layers.
 
 **Common Alkaline Products**
@@ -741,18 +685,17 @@ Alkaline chemicals can cause serious damage very quickly and penetrate deeper ti
 • Monitor for signs of infection
 • Follow up as directed
 • Watch for delayed symptoms`,
-    },
-    {
-      id: "chili-pepper-burns",
-      title: "Chili Pepper Burns",
-      subtitle: "Education • 2-3 mins",
-      icon: "local-dining",
-      iconColor: "#EF4444",
-      bgGradient: ['#EF4444', '#F87171'] as const,
-      category: 'burns-heat',
-      importance: 'medium',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**What Are Chili Pepper Burns?**
+      },
+      {
+        title: "Chili Pepper Burns",
+        subtitle: "Education • 2-3 mins",
+        icon: "local-dining",
+        iconColor: "#EF4444",
+        bgGradient: ['#EF4444', '#F87171'],
+        category: 'burns-heat',
+        importance: 'medium',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**What Are Chili Pepper Burns?**
 Caused by an irritating substance found in the skin of chili peppers.
 
 **Symptoms**
@@ -809,18 +752,17 @@ Caused by an irritating substance found in the skin of chili peppers.
 ⚠️ Don't rinse with water only (won't remove oil)
 ⚠️ Don't apply ice directly
 ⚠️ Don't rub or scratch the area`,
-    },
-    {
-      id: "chemical-burns-first-aid",
-      title: "First Aid for Chemical Burns",
-      subtitle: "Emergency • 5-7 mins",
-      icon: "medical-services",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**If Chemical Swallowed**
+      },
+      {
+        title: "First Aid for Chemical Burns",
+        subtitle: "Emergency • 5-7 mins",
+        icon: "medical-services",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**If Chemical Swallowed**
 ⚠️ Call Poison Control Centre immediately: 1-844-POISON-X (1-844-764-7669)
 • Have chemical container ready
 • Read content label to staff
@@ -891,18 +833,17 @@ Treat burns correctly to avoid further complications.
 • Read product labels
 • Keep Poison Control number accessible
 • Know location of emergency eyewash stations`,
-    },
-    {
-      id: "eye-burns",
-      title: "Burns to the Eye",
-      subtitle: "Emergency • 5-7 mins",
-      icon: "visibility",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Common Eye Irritants**
+      },
+      {
+        title: "Burns to the Eye",
+        subtitle: "Emergency • 5-7 mins",
+        icon: "visibility",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Common Eye Irritants**
 Most substances that make eyes burn won't cause serious problems if flushed immediately.
 
 **Mild Irritants:**
@@ -981,18 +922,17 @@ After any eye burn, watch for:
 • Wear dark glasses after flushing
 • Do NOT bandage the eye
 • Seek medical attention promptly`,
-    },
-    {
-      id: "second-degree-burn-home",
-      title: "Second-Degree Burn Home Care",
-      subtitle: "Education • 7-9 mins",
-      icon: "local-hospital",
-      iconColor: "#F59E0B",
-      bgGradient: ['#F59E0B', '#FBBF24'] as const,
-      category: 'burns-heat',
-      importance: 'high',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Home Treatment for Second-Degree Burns**
+      },
+      {
+        title: "Second-Degree Burn Home Care",
+        subtitle: "Education • 7-9 mins",
+        icon: "local-hospital",
+        iconColor: "#F59E0B",
+        bgGradient: ['#F59E0B', '#FBBF24'],
+        category: 'burns-heat',
+        importance: 'high',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Home Treatment for Second-Degree Burns**
 For many second-degree burns, home treatment is sufficient for healing and preventing complications.
 
 **Step 1: Rinse the Burn**
@@ -1080,18 +1020,17 @@ For many second-degree burns, home treatment is sufficient for healing and preve
 ⚠️ Burn doesn't improve with home treatment
 ⚠️ Blisters are very large
 ⚠️ Burn is on face, hands, feet, genitals, or major joint`,
-    },
-    {
-      id: "eye-chemical-burn-first-aid",
-      title: "Eye Injury: Chemical Burns",
-      subtitle: "Emergency • 4-6 mins",
-      icon: "remove-red-eye",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Chemical Burns to the Eye**
+      },
+      {
+        title: "Eye Injury: Chemical Burns",
+        subtitle: "Emergency • 4-6 mins",
+        icon: "remove-red-eye",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Chemical Burns to the Eye**
 Can be caused by alkaline, acid, metals, or hydrocarbons (such as gas).
 
 **Immediate Action**
@@ -1173,18 +1112,17 @@ Can be caused by alkaline, acid, metals, or hydrocarbons (such as gas).
 • Know location of emergency eyewash stations
 • Keep Poison Control number accessible
 • Store chemicals safely and properly`,
-    },
-    {
-      id: "major-burns-care",
-      title: "Major Burns: Care Instructions",
-      subtitle: "Education • 10-12 mins",
-      icon: "local-hospital",
-      iconColor: "#DC2626",
-      bgGradient: ['#DC2626', '#EF4444'] as const,
-      category: 'burns-heat',
-      importance: 'critical',
-      readTime: 'By Rural Alberta Health Connect Team',
-      content: `**Understanding Major Burns**
+      },
+      {
+        title: "Major Burns: Care Instructions",
+        subtitle: "Education • 10-12 mins",
+        icon: "local-hospital",
+        iconColor: "#DC2626",
+        bgGradient: ['#DC2626', '#EF4444'],
+        category: 'burns-heat',
+        importance: 'critical',
+        readTime: 'By Rural Alberta Health Connect Team',
+        content: `**Understanding Major Burns**
 Burns injure skin and can affect muscles, nerves, lungs, and eyes.
 
 **What to Expect**
@@ -1306,743 +1244,25 @@ When going out in cold or sun:
 • Health Link: 811 (24/7 nurse advice)
 • Emergency: 911
 • Have medical information ready when calling`,
-    },
-  ];
-  */
+      },
+    ];
 
-  // Use Convex data or fallback to empty array  
-  const resources = resourcesData || [];
+    // Insert all resources
+    const insertedIds = [];
+    for (const resource of resources) {
+      const id = await ctx.db.insert("resources", {
+        ...resource,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      insertedIds.push(id);
+    }
 
-  const filteredResources = selectedCategory === 'all' 
-    ? resources 
-    : selectedCategory === 'favorites'
-    ? resources.filter(r => favorites.has(r._id))
-    : resources.filter(r => r.category === selectedCategory);
-
-  // Show loading state while fetching data
-  if (resourcesData === undefined) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <CurvedBackground style={{ flex: 1 }}>
-          <CurvedHeader
-            title="Health Library"
-            onMenuPress={open}
-            backgroundColor="transparent"
-            textColor="#1A1A1A"
-            showLogo
-            showNotificationBell
-          />
-          <View style={[styles.contentArea, { justifyContent: 'center', alignItems: 'center' }]}>
-            <ActivityIndicator size="large" color="#6366F1" />
-            <Text style={[{ marginTop: 16, color: '#6B7280', fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Loading resources...
-            </Text>
-          </View>
-          <BottomNavigation />
-        </CurvedBackground>
-      </SafeAreaView>
-    );
-  }
-
-  if (selectedResource) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.detailContainer}>
-          {/* Hero Image Section */}
-          <View style={styles.heroSection}>
-            <LinearGradient
-              colors={[...selectedResource.bgGradient, selectedResource.bgGradient[1] + 'DD'] as any}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.heroGradient}
-            >
-              <View style={styles.heroTopBar}>
-                <TouchableOpacity 
-                  style={styles.heroButton}
-                  onPress={() => setSelectedResource(null)}
-                >
-                  <Icon name="arrow-back" size={24} color="#FFF" />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.heroButton}
-                  onPress={() => toggleFavorite(selectedResource._id)}
-                >
-                  <Icon 
-                    name={favorites.has(selectedResource._id) ? "favorite" : "favorite-border"} 
-                    size={24} 
-                    color="#FFF" 
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.heroContent}>
-                <View style={styles.heroCategoryBadge}>
-                  <Icon name={selectedResource.icon} size={20} color="#FFF" />
-                </View>
-                <Text style={[styles.heroTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                  {selectedResource.title}
-                </Text>
-                <View style={styles.heroMeta}>
-                  <Icon name="schedule" size={14} color="rgba(255,255,255,0.9)" />
-                  <Text style={[styles.heroMetaText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    {selectedResource.category.charAt(0).toUpperCase() + selectedResource.category.slice(1)} • {selectedResource.readTime}
-                  </Text>
-                </View>
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* Content Card */}
-          <View style={styles.detailContentWrapper}>
-            <ScrollView 
-              contentContainerStyle={styles.detailScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.contentSection}>
-                <Text style={[styles.imageCaption, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  {selectedResource.subtitle}
-                </Text>
-
-                {selectedResource.content.split('\n').map((line, index) => {
-                  if (line.startsWith('**') && line.endsWith('**')) {
-                    return (
-                      <Text key={index} style={[styles.contentSectionTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                        {line.replace(/\*\*/g, '')}
-                      </Text>
-                    );
-                  } else if (line.startsWith('⚠️')) {
-                    return (
-                      <View key={index} style={styles.warningBox}>
-                        <Text style={{ fontSize: 22 }}>⚠️</Text>
-                        <Text style={[styles.contentWarning, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {line.replace('⚠️', '').trim()}
-                        </Text>
-                      </View>
-                    );
-                  } else if (line.startsWith('•') || line.startsWith('□')) {
-                    return (
-                      <View key={index} style={styles.bulletRow}>
-                        <View style={styles.bulletDot} />
-                        <Text style={[styles.contentBullet, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                          {line.replace(/^[•□]\s*/, '')}
-                        </Text>
-                      </View>
-                    );
-                  } else if (line.trim() === '') {
-                    return <View key={index} style={{ height: 10 }} />;
-                  } else {
-                    return (
-                      <Text key={index} style={[styles.contentText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                        {line}
-                      </Text>
-                    );
-                  }
-                })}
-
-                <View style={styles.infoFooter}>
-                  <Icon name="info-outline" size={18} color="#9CA3AF" />
-                  <Text style={[styles.infoFooterText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                    Always consult healthcare professionals for proper diagnosis and treatment
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <CurvedBackground style={{ flex: 1 }}>
-        <CurvedHeader
-          title="Health Library"
-          onMenuPress={open}
-          backgroundColor="transparent"
-          textColor="#1A1A1A"
-          showLogo
-          showNotificationBell
-        />
-        <View style={styles.contentArea}>
-          <ScrollView 
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Icon name="search" size={20} color="#9CA3AF" />
-            <Text style={[styles.searchPlaceholder, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-              Search health topics...
-            </Text>
-          </View>
-
-          {/* Categories Section */}
-          <View style={styles.categoriesSection}>
-            <View style={styles.categoriesHeader}>
-              <Text style={[styles.categoriesTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>Categories</Text>
-              <TouchableOpacity onPress={() => setSelectedCategory('all')}>
-                <Text style={[styles.viewAllText, { fontFamily: FONTS.BarlowSemiCondensed }]}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoriesRow}
-            >
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryChip,
-                    selectedCategory === category.id && { backgroundColor: category.color }
-                  ]}
-                  onPress={() => setSelectedCategory(category.id)}
-                  activeOpacity={0.7}
-                >
-                  <Icon 
-                    name={category.icon}
-                    size={20}
-                    color={selectedCategory === category.id ? '#FFF' : '#6B7280'}
-                  />
-                  <Text style={[
-                    styles.categoryChipLabel, 
-                    { fontFamily: FONTS.BarlowSemiCondensedBold },
-                    selectedCategory === category.id && { color: '#FFF' }
-                  ]}>
-                    {category.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Featured Resources Section */}
-          <View style={styles.featuredSection}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                {selectedCategory === 'all' ? 'Featured' : categories.find(c => c.id === selectedCategory)?.label}
-              </Text>
-              <TouchableOpacity onPress={() => setSelectedCategory(selectedCategory === 'all' ? 'burns-heat' : selectedCategory)}>
-                <Text style={[styles.viewAllText, { fontFamily: FONTS.BarlowSemiCondensed }]}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.featuredScrollContainer}
-            >
-              {filteredResources.slice(0, 3).map((resource) => (
-                <TouchableOpacity
-                  key={resource._id}
-                  style={styles.featuredCard}
-                  onPress={() => setSelectedResource(resource)}
-                  activeOpacity={0.9}
-                >
-                  <LinearGradient
-                    colors={[...resource.bgGradient, resource.bgGradient[1] + 'DD'] as any}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.featuredCardGradient}
-                  >
-                    <TouchableOpacity 
-                      style={styles.favoriteButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(resource._id);
-                      }}
-                    >
-                      <Icon 
-                        name={favorites.has(resource._id) ? "favorite" : "favorite-border"} 
-                        size={24} 
-                        color="#FFF" 
-                      />
-                    </TouchableOpacity>
-                    
-                    <View style={styles.featuredIconLarge}>
-                      <Icon name={resource.icon} size={80} color="rgba(255,255,255,0.3)" />
-                    </View>
-                    
-                    <View style={styles.featuredCardContent}>
-                      <View style={styles.categoryBadge}>
-                        <Text style={[styles.categoryBadgeText, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                          {resource.category.toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={[styles.featuredCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-                        {resource.title}
-                      </Text>
-                      <Text style={[styles.featuredCardSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
-                        {resource.subtitle}
-                      </Text>
-                    </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* All Resources Grid */}
-          <View style={styles.gridSection}>
-            <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
-              All Resources
-            </Text>
-            <View style={styles.resourceGrid}>
-              {filteredResources.map((resource, index) => (
-                <TouchableOpacity
-                  key={resource._id}
-                  style={styles.gridCard}
-                  onPress={() => setSelectedResource(resource)}
-                  activeOpacity={0.9}
-                >
-                  <LinearGradient
-                    colors={[resource.bgGradient[0] + '15', resource.bgGradient[1] + '08']}
-                    style={styles.gridCardGradient}
-                  >
-                    <View style={[styles.gridCardIconContainer, { backgroundColor: resource.iconColor + '20' }]}>
-                      <Icon name={resource.icon} size={32} color={resource.iconColor} />
-                    </View>
-                    
-                    <View style={styles.gridCardContent}>
-                      <View style={[styles.importanceBadge, {
-                        backgroundColor: resource.importance === 'critical' ? '#FEE2E2' : 
-                                       resource.importance === 'high' ? '#FEF3C7' : '#E0F2FE'
-                      }]}>
-                        <Text style={[styles.importanceBadgeText, {
-                          fontFamily: FONTS.BarlowSemiCondensedBold,
-                          color: resource.importance === 'critical' ? '#991B1B' : 
-                                resource.importance === 'high' ? '#92400E' : '#075985'
-                        }]}>
-                          {resource.importance.toUpperCase()}
-                        </Text>
-                      </View>
-                      
-                      <Text style={[styles.gridCardTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]} numberOfLines={2}>
-                        {resource.title}
-                      </Text>
-                      
-                      <Text style={[styles.gridCardSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
-                        {resource.subtitle}
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity 
-                      style={styles.gridFavoriteButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(resource._id);
-                      }}
-                    >
-                      <Icon 
-                        name={favorites.has(resource._id) ? "favorite" : "favorite-border"} 
-                        size={18} 
-                        color={resource.iconColor} 
-                      />
-                    </TouchableOpacity>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-          </ScrollView>
-        </View>
-        <BottomNavigation />
-      </CurvedBackground>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  contentArea: {
-    flex: 1,
-    paddingBottom: 60,
-  },
-  contentContainer: {
-    flexGrow: 1,
-    paddingBottom: 100,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF',
-    marginHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  searchPlaceholder: {
-    marginLeft: 12,
-    fontSize: 15,
-    color: '#9CA3AF',
-  },
-  categoriesSection: {
-    marginBottom: 40,
-  },
-  categoriesHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  categoriesTitle: {
-    fontSize: 20,
-    color: '#111827',
-    letterSpacing: -0.5,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: '#10B981',
-    fontWeight: '600',
-  },
-  categoriesRow: {
-    paddingHorizontal: 20,
-    gap: 10,
-  },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#FFF',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  categoryChipIcon: {
-    width: 20,
-    height: 20,
-    tintColor: '#6B7280',
-  },
-  categoryChipLabel: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  featuredSection: {
-    marginBottom: 28,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    color: '#111827',
-    letterSpacing: -0.5,
-  },
-  featuredScrollContainer: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  featuredCard: {
-    width: 280,
-    height: 340,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  featuredCardGradient: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'space-between',
-  },
-  favoriteButton: {
-    alignSelf: 'flex-end',
-    padding: 8,
-  },
-  featuredIconLarge: {
-    position: 'absolute',
-    top: '30%',
-    right: 20,
-  },
-  featuredCardContent: {
-    gap: 10,
-  },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
-  categoryBadgeText: {
-    fontSize: 11,
-    color: '#FFF',
-    letterSpacing: 1,
-  },
-  featuredCardTitle: {
-    fontSize: 24,
-    color: '#FFF',
-    lineHeight: 30,
-    letterSpacing: -0.5,
-  },
-  featuredCardSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.95)',
-    lineHeight: 20,
-  },
-  gridSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  resourceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 16,
-    justifyContent: 'space-between',
-  },
-  gridCard: {
-    width: '48%',
-    marginBottom: 16,
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  gridCardGradient: {
-    padding: 16,
-    minHeight: 200,
-    backgroundColor: '#FFF',
-  },
-  gridCardIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  gridCardContent: {
-    flex: 1,
-    gap: 8,
-  },
-  importanceBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  importanceBadgeText: {
-    fontSize: 9,
-    letterSpacing: 0.5,
-  },
-  gridCardTitle: {
-    fontSize: 16,
-    color: '#111827',
-    lineHeight: 22,
-  },
-  gridCardSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    lineHeight: 16,
-  },
-  gridFavoriteButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-
-  detailContainer: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  heroSection: {
-    height: 320,
-  },
-  heroGradient: {
-    flex: 1,
-    padding: 20,
-    paddingBottom: 24,
-    justifyContent: 'space-between',
-  },
-  heroTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  heroButton: {
-    padding: 12,
-  },
-  heroContent: {
-    justifyContent: 'flex-end',
-  },
-  heroCategoryBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  heroTitle: {
-    fontSize: 28,
-    color: '#FFF',
-    lineHeight: 34,
-    letterSpacing: -0.5,
-    marginBottom: 12,
-  },
-  heroMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  heroMetaText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  detailContentWrapper: {
-    backgroundColor: '#F9FAFB',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginTop: -24,
-    paddingTop: 24,
-    paddingBottom: 32,
-    flex: 1,
-  },
-  detailScrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  contentSection: {
-    gap: 0,
-  },
-  imageCaption: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontStyle: 'italic',
-    lineHeight: 19,
-    marginBottom: 20,
-  },
-  contentSectionTitle: {
-    fontSize: 20,
-    color: '#1F2937',
-    marginTop: 24,
-    marginBottom: 12,
-    letterSpacing: -0.3,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-    flexWrap: 'wrap',
-  },
-  metaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  metaText: {
-    fontSize: 12,
-  },
-  metaSimple: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-
-  contentText: {
-    fontSize: 15,
-    color: '#4B5563',
-    lineHeight: 24,
-    marginBottom: 12,
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 12,
-  },
-
-  warningBox: {
-    flexDirection: 'row',
-    backgroundColor: '#FEF2F2',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    alignItems: 'flex-start',
-    marginVertical: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#EF4444',
-  },
-  contentWarning: {
-    flex: 1,
-    fontSize: 14,
-    color: '#7F1D1D',
-    lineHeight: 21,
-    fontWeight: '500',
-  },
-  bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginVertical: 3,
-    paddingLeft: 4,
-  },
-  bulletDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#9CA3AF',
-    marginTop: 9,
-    marginRight: 12,
-  },
-  contentBullet: {
-    flex: 1,
-    fontSize: 15,
-    color: '#374151',
-    lineHeight: 24,
-  },
-  infoFooter: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 12,
-    gap: 12,
-    alignItems: 'flex-start',
-    marginTop: 24,
-  },
-  infoFooterText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#6B7280',
-    lineHeight: 19,
+    return {
+      success: true,
+      message: `Successfully seeded ${insertedIds.length} resources`,
+      count: insertedIds.length,
+      resourceIds: insertedIds,
+    };
   },
 });

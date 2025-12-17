@@ -105,4 +105,21 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_token", ["token"]),
 
+  // Health resources/articles
+  resources: defineTable({
+    title: v.string(),
+    subtitle: v.string(),
+    icon: v.string(),
+    iconColor: v.string(),
+    bgGradient: v.array(v.string()),
+    category: v.string(),
+    importance: v.string(), // 'critical' | 'high' | 'medium'
+    readTime: v.string(),
+    content: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_importance", ["importance"]),
+
 });
