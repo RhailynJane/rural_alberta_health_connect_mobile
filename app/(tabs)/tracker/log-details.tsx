@@ -193,7 +193,7 @@ const MemoizedPrimaryCard = memo(function MemoizedPrimaryCard({
         />
       ) : (
         sectionKey === "NEXT STEPS"
-          ? items.slice(0, 4).map((it, idx) => (
+          ? items.map((it, idx) => (
               <View key={idx} style={cardStyles.stepRow}>
                 <View style={cardStyles.stepNumberContainer}>
                   <Text style={[cardStyles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
@@ -208,7 +208,7 @@ const MemoizedPrimaryCard = memo(function MemoizedPrimaryCard({
                 </View>
               </View>
             ))
-          : items.slice(0, 4).map((it, idx) => (
+          : items.map((it, idx) => (
               <View key={idx} style={cardStyles.cardItem}>
                 <Text style={cardStyles.bulletPoint}>•</Text>
                 <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
@@ -239,8 +239,6 @@ const MemoizedAccordionCard = memo(function MemoizedAccordionCard({
   isExpanded,
   onToggle,
 }: AccordionCardProps) {
-  const previewCount = 2;
-  const previewItems = items.slice(0, previewCount);
   const pendingSpeak = useRef<string | null>(null);
 
   // Prepare text for TTS
@@ -386,7 +384,7 @@ const MemoizedAccordionCard = memo(function MemoizedAccordionCard({
               parentPadding={14}
             />
           ) : (
-            (items.length > 0 ? items : previewItems).map((it, idx) => (
+            items.map((it, idx) => (
               <View key={idx} style={cardStyles.cardItem}>
                 <Text style={cardStyles.bulletPoint}>•</Text>
                 <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
