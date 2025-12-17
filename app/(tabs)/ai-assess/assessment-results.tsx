@@ -44,6 +44,8 @@ import ScanningOverlay from "../../components/ScanningOverlay";
 import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import type { PhotoMetadata } from "../../../utils/photoStorage";
+import { isPermanentLocalPath, isConvexUrl } from "../../../utils/photoStorage";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -126,6 +128,21 @@ const getDurationDisplay = (duration: string): string => {
 
 const cleanGeminiResponse = (text: string): string => {
   return text.replace(/\*\*/g, "");
+};
+
+/**
+ * Converts array of photo URIs to PhotoMetadata format for storage
+ * Handles both permanent local paths and Convex URLs
+ */
+const urisToPhotoMetadata = (uris: string[]): PhotoMetadata[] => {
+  return uris.map((uri, index) => ({
+    localPath: isConvexUrl(uri) ? '' : uri,
+    convexUrl: isConvexUrl(uri) ? uri : null,
+    uploadStatus: isConvexUrl(uri) ? 'uploaded' as const : 'pending' as const,
+    filename: uri.split('/').pop() || `photo_${index}.jpg`,
+    size: 0, // Size unknown at this point
+    createdAt: Date.now(),
+  }));
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1344,7 +1361,7 @@ export default function AssessmentResults() {
               entry.type = "ai_assessment";
               entry.createdBy = `AI Assessment (${source})`;
               entry.aiContext = context;
-              entry.photos = JSON.stringify(displayPhotos || []);
+              entry.photos = urisToPhotoMetadata(displayPhotos || []);
               entry.isSynced = source === "Cloud";
             });
             wmEntryId = newEntry.id;
@@ -1486,7 +1503,7 @@ export default function AssessmentResults() {
                     entry.type = "ai_assessment";
                     entry.createdBy = "AI Assessment (On-Device)";
                     entry.aiContext = formattedContext;
-                    entry.photos = JSON.stringify(displayPhotos || []);
+                    entry.photos = urisToPhotoMetadata(displayPhotos || []);
                     entry.isSynced = true;
                     entry.convexId = newId;
                   });
@@ -1644,8 +1661,8 @@ export default function AssessmentResults() {
                 entry.type = "ai_assessment";
                 entry.createdBy = "AI Assessment";
                 entry.aiContext = cleanedContext;
-                // photos is a @json field; store as JSON string for safety
-                entry.photos = JSON.stringify(displayPhotos || []);
+                // @json decorator handles serialization - pass array directly
+                entry.photos = urisToPhotoMetadata(displayPhotos || []);
                 entry.isSynced = true; // Already synced online
                 entry.convexId = newId;
               });

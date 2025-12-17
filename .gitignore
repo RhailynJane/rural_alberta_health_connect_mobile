@@ -65,7 +65,5 @@ app-example
 /android/app/rahc-push-firebase-adminsdk-*.json
 
 # temp
-temp*rhaila.md
 temp*
-rhaila.md
 .temp*

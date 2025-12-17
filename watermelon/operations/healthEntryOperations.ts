@@ -2,6 +2,7 @@ import { Q } from "@nozbe/watermelondb";
 import { database } from "../database";
 import HealthEntry from "../models/HealthEntry";
 import { safeWrite } from "../utils/safeWrite";
+import type { PhotoMetadata } from "../../utils/photoStorage";
 
 /**
  * Local operations for health entries
@@ -78,7 +79,7 @@ interface UpdateHealthEntryParams {
     symptoms?: string;
     severity?: number;
     notes?: string;
-    photos?: string[];
+    photos?: PhotoMetadata[] | string[];
   };
 }
 
@@ -118,9 +119,25 @@ export async function updateHealthEntryLocal({
         record.notes = updates.notes;
       }
       if (updates.photos !== undefined) {
-        // Store photos as JSON string (WatermelonDB limitation)
-        // already a json field
-        record.photos = updates.photos;
+        // Convert string[] to PhotoMetadata[] if needed
+        const photosAsMetadata: PhotoMetadata[] = updates.photos.map((photo) => {
+          // If already PhotoMetadata format
+          if (typeof photo === 'object' && photo !== null && 'localPath' in photo) {
+            return photo as PhotoMetadata;
+          }
+          // Convert string URI to PhotoMetadata
+          const uri = photo as string;
+          const isConvexUrl = uri.includes('convex.cloud') || uri.includes('convex.site');
+          return {
+            localPath: isConvexUrl ? '' : uri,
+            convexUrl: isConvexUrl ? uri : null,
+            uploadStatus: isConvexUrl ? 'uploaded' as const : 'pending' as const,
+            filename: uri.split('/').pop() || 'unknown',
+            size: 0,
+            createdAt: Date.now(),
+          };
+        });
+        record.photos = photosAsMetadata;
       }
 
       // Clear AI context since manual edit invalidates it

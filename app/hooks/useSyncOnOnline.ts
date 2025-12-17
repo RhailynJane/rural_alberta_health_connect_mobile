@@ -279,6 +279,19 @@ export function useSyncOnOnline() {
             }
           }
 
+          // Normalize photos to string[] for Convex
+          // Handles both PhotoMetadata[] (new format) and string[] (legacy format)
+          photos = (photos as any[]).map((photo: any) => {
+            if (typeof photo === 'string') {
+              return photo; // Legacy string format
+            }
+            if (typeof photo === 'object' && photo !== null) {
+              // PhotoMetadata format - prefer convexUrl over localPath
+              return photo.convexUrl || photo.localPath || '';
+            }
+            return '';
+          }).filter(Boolean) as string[];
+
           // Safely parse symptoms if stored as JSON string
           let symptomsData = entryData.symptoms || '';
           if (typeof symptomsData === 'string' && symptomsData.startsWith('[')) {

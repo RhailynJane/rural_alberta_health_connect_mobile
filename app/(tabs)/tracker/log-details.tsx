@@ -29,6 +29,29 @@ import {
   useTTS,
 } from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import type { PhotoMetadata } from "../../../utils/photoStorage";
+
+/**
+ * Extracts display URIs from PhotoMetadata array
+ * Prefers convexUrl (remote) over localPath (local file)
+ * Handles both new PhotoMetadata format and legacy string[] format
+ */
+const getDisplayUrisFromPhotos = (photos: PhotoMetadata[] | string[] | undefined): string[] => {
+  if (!photos || !Array.isArray(photos)) return [];
+
+  return photos.map((photo: PhotoMetadata | string) => {
+    // Handle new PhotoMetadata format
+    if (typeof photo === 'object' && photo !== null) {
+      // Prefer Convex URL if uploaded, otherwise use local path
+      return photo.convexUrl || photo.localPath || '';
+    }
+    // Handle legacy string format (direct URI)
+    if (typeof photo === 'string') {
+      return photo;
+    }
+    return '';
+  }).filter(Boolean);
+};
 
 // ═══════════════════════════════════════════════════════════
 // MEMOIZED CARD COMPONENTS - Stable references to prevent TTS unmount
@@ -1160,7 +1183,7 @@ export default function LogDetails() {
   }
 
   const dateTime = formatDateTime(resolvedEntry.timestamp);
-  const heroPhotos: string[] = resolvedEntry.photos || [];
+  const heroPhotos: string[] = getDisplayUrisFromPhotos(resolvedEntry.photos);
   const heroWidth = Dimensions.get("window").width - 32;
 
   const handleHeroScroll = (event: any) => {

@@ -27,6 +27,7 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 import { isModelDownloaded, downloadModel, DEFAULT_MODEL_ID } from "../../../utils/tts";
+import { savePhotoToPermanentStorage, ensurePhotosDirectory } from "../../../utils/photoStorage";
 
 // AI Context Types
 type SymptomCategory =
@@ -395,18 +396,38 @@ export default function SymptomAssessment() {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newPhotos = result.assets.map((asset) => asset.uri);
         const remainingSlots = 3 - uploadedPhotos.length;
-        
-        if (newPhotos.length > remainingSlots) {
+        const assetsToProcess = result.assets.slice(0, remainingSlots);
+
+        if (result.assets.length > remainingSlots) {
           setErrorModalMessage(`You can only add ${remainingSlots} more photo${remainingSlots !== 1 ? 's' : ''}. Maximum is 3 photos.`);
           setErrorModalVisible(true);
-          // Only add what fits
-          setUploadedPhotos((prev) => [...prev, ...newPhotos.slice(0, remainingSlots)]);
-        } else {
-          setUploadedPhotos((prev) => [...prev, ...newPhotos]);
-          console.log(`Uploaded ${newPhotos.length} photos`);
         }
+
+        // Save each photo to permanent storage
+        const tempEntryId = `assess_${Date.now()}`; // Temporary ID for file naming
+        const savedPaths: string[] = [];
+
+        for (let i = 0; i < assetsToProcess.length; i++) {
+          const asset = assetsToProcess[i];
+          const saveResult = await savePhotoToPermanentStorage(
+            asset.uri,
+            tempEntryId,
+            uploadedPhotos.length + i
+          );
+
+          if (saveResult.success && saveResult.metadata) {
+            savedPaths.push(saveResult.metadata.localPath);
+            console.log(`📸 [AI-Assess] Photo saved to permanent storage: ${saveResult.metadata.filename}`);
+          } else {
+            console.error(`❌ [AI-Assess] Failed to save photo: ${saveResult.error}`);
+            // Fall back to temp URI if save fails (will expire but better than nothing)
+            savedPaths.push(asset.uri);
+          }
+        }
+
+        setUploadedPhotos((prev) => [...prev, ...savedPaths]);
+        console.log(`Saved ${savedPaths.length} photos to permanent storage`);
       }
     } catch (error) {
       console.error("Error uploading photos:", error);

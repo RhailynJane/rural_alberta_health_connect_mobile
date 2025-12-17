@@ -30,6 +30,24 @@ import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import { COLORS, FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
+import { savePhotoToPermanentStorage, type PhotoMetadata } from "../../../utils/photoStorage";
+
+/**
+ * Converts photo URIs to PhotoMetadata format for storage
+ */
+const urisToPhotoMetadata = (uris: string[]): PhotoMetadata[] => {
+  return uris.map((uri, index) => {
+    const isConvexUrl = uri.includes('convex.cloud') || uri.includes('convex.site');
+    return {
+      localPath: isConvexUrl ? '' : uri,
+      convexUrl: isConvexUrl ? uri : null,
+      uploadStatus: isConvexUrl ? 'uploaded' as const : 'pending' as const,
+      filename: uri.split('/').pop() || `photo_${index}.jpg`,
+      size: 0,
+      createdAt: Date.now(),
+    };
+  });
+};
 
 function logErrorDetails(context: string, error: any, extra: Record<string, any> = {}) {
   console.group(`❌ [${context}]`);
@@ -190,12 +208,24 @@ export default function AddHealthEntry() {
       setSeverity(entry.severity?.toString() || '');
       setNotes(entry.notes || '');
 
-      // Handle photos (parse JSON if string)
+      // Handle photos - extract display URIs from PhotoMetadata or legacy strings
       try {
         const photoArray = typeof entry.photos === 'string'
           ? JSON.parse(entry.photos)
           : (entry.photos || []);
-        setPhotos(photoArray);
+
+        // Extract display URIs - handle both PhotoMetadata[] and legacy string[]
+        const displayUris: string[] = photoArray.map((photo: unknown) => {
+          if (typeof photo === 'object' && photo !== null) {
+            // PhotoMetadata format - prefer convexUrl over localPath
+            const meta = photo as { convexUrl?: string; localPath?: string };
+            return meta.convexUrl || meta.localPath || '';
+          }
+          // Legacy string format
+          return typeof photo === 'string' ? photo : '';
+        }).filter(Boolean);
+
+        setPhotos(displayUris);
       } catch {
         setPhotos([]);
       }
@@ -333,10 +363,23 @@ export default function AddHealthEntry() {
 
         console.log("✅ Photo uploaded successfully:", photoUrl);
       } else {
-        // Offline: Just store the local URI directly (no upload needed)
-        // Photos will be uploaded when back online during sync
-        setLocalPhotoUris((prev) => [...prev, imageUri]);
-        console.log("📴 Photo saved for offline upload:", imageUri);
+        // Offline: Save to permanent local storage first
+        // This prevents the temp URI from expiring
+        const tempEntryId = `manual_${Date.now()}`;
+        const saveResult = await savePhotoToPermanentStorage(
+          imageUri,
+          tempEntryId,
+          localPhotoUris.length
+        );
+
+        if (saveResult.success && saveResult.metadata) {
+          setLocalPhotoUris((prev) => [...prev, saveResult.metadata!.localPath]);
+          console.log("📴 Photo saved to permanent storage for offline:", saveResult.metadata.filename);
+        } else {
+          // Fallback to temp URI if save fails (will expire but better than nothing)
+          setLocalPhotoUris((prev) => [...prev, imageUri]);
+          console.warn("⚠️ Failed to save to permanent storage, using temp URI:", saveResult.error);
+        }
       }
     } catch (error) {
       console.error("❌ Error uploading image:", error);
@@ -521,8 +564,8 @@ export default function AddHealthEntry() {
                       record.symptoms = symptoms;
                       record.severity = parseInt(severity);
                       record.notes = notes || '';
-                      // @json decorator handles serialization - pass array directly
-                      record.photos = [...photos, ...localPhotoUris];
+                      // Convert to PhotoMetadata format for persistence
+                      record.photos = urisToPhotoMetadata([...photos, ...localPhotoUris]);
                       record.timestamp = timestamp; // Update timestamp for date/time changes
                       record.date = dateString; // Update date field to match timestamp
                       if ('type' in schemaColumns && !record.type) {
@@ -552,7 +595,7 @@ export default function AddHealthEntry() {
                         record.severity = parseInt(severity);
                         record.notes = notes || '';
                         if ('photos' in schemaColumns) {
-                          (record as any).photos = JSON.stringify([...photos, ...localPhotoUris]);
+                          (record as any).photos = JSON.stringify(urisToPhotoMetadata([...photos, ...localPhotoUris]));
                         }
                       });
                       await database.batch(minimalEntry);
@@ -569,7 +612,7 @@ export default function AddHealthEntry() {
                           newRec.symptoms = symptoms;
                           newRec.severity = parseInt(severity);
                           newRec.notes = notes || '';
-                          newRec.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                          newRec.photos = JSON.stringify(urisToPhotoMetadata([...photos, ...localPhotoUris]));
                           newRec.type = (entry as any).type || 'manual_entry';
                           newRec.isSynced = (entry as any).isSynced; // preserve sync state
                           newRec.createdBy = (entry as any).createdBy;
@@ -643,8 +686,8 @@ export default function AddHealthEntry() {
                     e.symptoms = symptoms;
                     e.severity = parseInt(severity);
                     e.notes = notes || '';
-                    // @json decorator handles serialization - pass array directly
-                    e.photos = [...photos, ...localPhotoUris];
+                    // Convert to PhotoMetadata format for persistence
+                    e.photos = urisToPhotoMetadata([...photos, ...localPhotoUris]);
                     e.timestamp = timestamp; // Update timestamp for date/time changes
                     e.date = dateString; // Update date field to match timestamp
                     e.isSynced = false; // Mark for re-sync
@@ -669,7 +712,7 @@ export default function AddHealthEntry() {
                       record.severity = parseInt(severity);
                       record.notes = notes || '';
                       if ('photos' in schemaColumns) {
-                        (record as any).photos = JSON.stringify([...photos, ...localPhotoUris]);
+                        (record as any).photos = JSON.stringify(urisToPhotoMetadata([...photos, ...localPhotoUris]));
                       }
                       if ('isSynced' in schemaColumns) {
                         record.isSynced = false;
@@ -690,7 +733,7 @@ export default function AddHealthEntry() {
                         newRec.symptoms = symptoms;
                         newRec.severity = parseInt(severity);
                         newRec.notes = notes || '';
-                        newRec.photos = JSON.stringify([...photos, ...localPhotoUris]);
+                        newRec.photos = JSON.stringify(urisToPhotoMetadata([...photos, ...localPhotoUris]));
                         newRec.type = (entry as any).type || 'manual_entry';
                         newRec.isSynced = false; // Offline edit means not synced
                         newRec.createdBy = (entry as any).createdBy;
@@ -766,8 +809,8 @@ export default function AddHealthEntry() {
                 entry.severity = parseInt(severity);
                 entry.notes = notes || '';
                 entry.type = selectedCategory;
-                // @json decorator handles serialization - pass array directly
-                entry.photos = photos;
+                // Convert to PhotoMetadata format - these are Convex URLs (already uploaded)
+                entry.photos = urisToPhotoMetadata(photos);
                 entry.type = 'manual_entry';
                 entry.isSynced = true; // Already synced
                 entry.createdBy = currentUser?.firstName || 'User';
@@ -801,8 +844,8 @@ export default function AddHealthEntry() {
               entry.severity = parseInt(severity);
               entry.notes = notes || '';
               entry.type = selectedCategory;
-              // @json decorator handles serialization - pass array directly
-              entry.photos = [...photos, ...localPhotoUris];
+              // Convert to PhotoMetadata format for persistence
+              entry.photos = urisToPhotoMetadata([...photos, ...localPhotoUris]);
               entry.isSynced = false; // Mark for sync when online
               entry.createdBy = currentUser?.firstName || 'User';
             });
