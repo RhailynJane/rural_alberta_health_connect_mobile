@@ -660,3 +660,7 @@ dependencies {
 - Returns existing entry ID if duplicate detected
 
 ### No commit unless user said so
+
+### No checkpoint commits
+
+Never create automatic "checkpoint" commits. Only commit when the user explicitly requests a commit with meaningful changes.
