@@ -1,8 +1,7 @@
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import CurvedBackground from "../components/curvedBackground";
-import CurvedHeader from "../components/curvedHeader";
 import { FONTS } from "../constants/constants";
 
 export default function TermsOfService() {
@@ -15,17 +14,30 @@ export default function TermsOfService() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        {/* Fixed Header */}
-        <CurvedHeader
-          title="Terms of Service"
-          height={150}
-          showLogo={false}
-          bottomSpacing={0}
-          showMenuButton={false}
-        />
+      <LinearGradient
+        colors={["#2A7DE1", "#1F64D1"]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.blueBackground}
+      >
         <ScrollView contentContainerStyle={styles.contentContainer}>
-          <View style={styles.contentSection}>
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <Image
+              source={require("../../assets/images/logo-icon.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+            <Text style={[styles.appTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Rural Alberta Health Connect
+            </Text>
+            <Text style={[styles.appSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+              Assess your health now
+            </Text>
+          </View>
+
+          {/* Content Section */}
+          <View style={styles.whiteSection}>
             <Text style={[styles.title, { fontFamily: FONTS.BarlowSemiCondensed, marginTop: 0 }]}>
               Terms of Service for Rural Alberta Health Connect
             </Text>
@@ -130,7 +142,7 @@ export default function TermsOfService() {
             </View>
           </View>
         </ScrollView>
-      </CurvedBackground>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
@@ -138,15 +150,43 @@ export default function TermsOfService() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#1F64D1",
+  },
+  blueBackground: {
+    flex: 1,
+    backgroundColor: "#2A7DE1",
   },
   contentContainer: {
     flexGrow: 1,
   },
-  contentSection: {
+  logoSection: {
+    alignItems: "center",
+    paddingTop: 40,
+    paddingBottom: 40,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+  },
+  appTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  appSubtitle: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
+  },
+  whiteSection: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     padding: 24,
-    paddingTop: 10,
-    paddingBottom: 40, // Added padding at bottom
+    paddingTop: 32,
   },
   title: {
     fontSize: 24,
