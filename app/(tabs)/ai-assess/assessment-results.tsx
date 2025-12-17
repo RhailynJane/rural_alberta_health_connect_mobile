@@ -155,11 +155,14 @@ interface NextStepsCardProps {
 
 const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps) {
   const ttsText = prepareNextStepsForTTS(items);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -171,13 +174,95 @@ const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps)
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    // Ready or not_downloaded - show Listen/Replay button (always visible!)
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.nextStepsCard}>
@@ -185,33 +270,7 @@ const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps)
         <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
           Next Steps
         </Text>
-        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-          <>
-            {ttsStatus === 'generating' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <ActivityIndicator size="small" color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'speaking' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <Ionicons name="pause" size={18} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'ready' && (
-              <TouchableOpacity
-                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                onPress={handleTTSPress}
-                activeOpacity={isDisabled ? 1 : 0.7}
-                disabled={isDisabled}
-              >
-                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                  {ttsHasPlayed ? 'Replay' : 'Listen'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
+        {renderTTSButton()}
       </View>
 
       {isTTSActive && ttsChunks.length > 0 ? (
@@ -254,11 +313,14 @@ interface PrimaryCardProps {
 
 const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCardProps) {
   const ttsText = prepareRecommendationsForTTS(items, 4);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -270,13 +332,94 @@ const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCar
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.primaryAssessmentCard}>
@@ -285,33 +428,7 @@ const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCar
           {icon}
           <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
         </View>
-        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-          <>
-            {ttsStatus === 'generating' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <ActivityIndicator size="small" color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'speaking' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <Ionicons name="pause" size={18} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'ready' && (
-              <TouchableOpacity
-                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                onPress={handleTTSPress}
-                activeOpacity={isDisabled ? 1 : 0.7}
-                disabled={isDisabled}
-              >
-                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                  {ttsHasPlayed ? 'Replay' : 'Listen'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
+        {renderTTSButton()}
       </View>
 
       {isTTSActive && ttsChunks.length > 0 ? (
@@ -366,11 +483,14 @@ const AccordionCard = memo(function AccordionCard({
 
   const visibleItems = isPremium ? items : previewItems;
   const ttsText = prepareSectionForTTS(title, visibleItems);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -382,13 +502,94 @@ const AccordionCard = memo(function AccordionCard({
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!isExpanded || !ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={[styles.accordionCard, !isPremium && styles.accordionCardPremium]}>
@@ -405,33 +606,7 @@ const AccordionCard = memo(function AccordionCard({
           )}
         </View>
         <View style={styles.accordionHeaderRight}>
-          {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-            <>
-              {ttsStatus === 'generating' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <ActivityIndicator size="small" color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'speaking' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <Ionicons name="pause" size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'ready' && (
-                <TouchableOpacity
-                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                  onPress={handleTTSPress}
-                  activeOpacity={isDisabled ? 1 : 0.7}
-                  disabled={isDisabled}
-                >
-                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                    {ttsHasPlayed ? 'Replay' : 'Listen'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
+          {renderTTSButton()}
           <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
         </View>
       </TouchableOpacity>
