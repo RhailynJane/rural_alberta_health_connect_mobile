@@ -71,7 +71,7 @@ const SideMenu: React.FC<SideMenuProps> = ({
     { label: "AI Assessment", iconSource: require("../../assets/images/assess-icon.png"), route: "/(tabs)/ai-assess" },
     { label: "Tracker", iconSource: require("../../assets/images/tracker-icon.png"), route: "/(tabs)/tracker" },
     { label: "Emergency", iconSource: require("../../assets/images/emergency-icon.png"), route: "/(tabs)/emergency" },
-    { label: "Find Care", iconSource: require("../../assets/images/location-icon.png"), route: "/find-care" },
+    { label: "Find Care", iconSource: require("../../assets/images/location-icon.png"), route: "/find-care/clinics" },
     { label: "Health Library", iconSource: require("../../assets/images/resources-icon.png"), route: "/resources" },
     { label: "Profile", iconSource: require("../../assets/images/profile-icon.png"), route: "/(tabs)/profile" },
   ];
