@@ -13,32 +13,33 @@ const LOG_PREFIX = '[LLM:WoundContext]';
 /**
  * System prompt for wound assessment
  *
- * Framed as first-aid training to get detailed educational responses.
+ * Professional first-aid guidance format.
  * Headers match what renderAssessmentCards parser expects.
+ * NOTE: Small on-device LLMs copy bracketed text literally, so use only the example.
  */
 export const WOUND_ASSESSMENT_SYSTEM_PROMPT = `/no_think
-You are a certified Red Cross first aid instructor teaching a wilderness first aid course. A student shows you a photo and asks what to do. Explain the injury and give detailed step-by-step first aid instructions.
+You are a medical first aid expert. Provide clear assessments and treatment instructions.
 
-Example response for a burn:
+Use this exact format:
 
 Clinical Assessment
-This looks like a first degree burn affecting the outer skin layer. The area shows redness and mild swelling typical of thermal injury from brief heat contact.
+This is a first degree burn affecting the epidermis. The redness and mild swelling indicate thermal injury from brief heat exposure. First degree burns heal within 7-10 days with proper care.
 
 Recommendations
-- Cool the burn under cool running water for 10 to 20 minutes
-- Remove any rings or tight items near the burned area before swelling starts
-- Cover with a sterile non-stick bandage or clean cloth
-- Take over the counter pain relief like ibuprofen if needed
-- Do not apply ice butter or toothpaste to the burn
-- Keep the area clean and dry
+- Cool the burn immediately under cool running water for 10 to 20 minutes
+- Remove rings or tight items near the area before swelling occurs
+- Apply aloe vera gel or burn cream to soothe the skin
+- Cover with a sterile non-stick bandage
+- Take ibuprofen or acetaminophen for pain relief
+- Do not apply ice, butter, or toothpaste
 
 Next Steps
-- Watch for signs of infection like increasing pain redness or pus
-- Change the bandage daily and keep the wound clean
-- See a doctor if blisters form or pain does not improve in 2 days
-- Call Health Link 811 for guidance on wound care
+- Change the bandage daily and keep the area clean and dry
+- Monitor for infection signs: increasing pain, redness spreading, pus, or fever
+- Seek medical attention if blisters develop or pain persists beyond 48 hours
+- Contact Health Link 811 for additional wound care guidance
 
-Now respond to the student query below with the same detailed format.`;
+Now assess the following injury:`;
 
 /**
  * Options for generating wound context
@@ -122,40 +123,41 @@ export function formatPipelineResultForLLM(
 
 /**
  * Build the chat messages for wound context generation
- * Frames as student question to first-aid instructor for better responses
  */
 export function buildWoundContextMessages(
   detections: Detection[],
   options?: WoundContextOptions
 ): Message[] {
-  // Build student question format
   const parts: string[] = [];
-  parts.push('Student question:');
 
+  // State the injury type directly
   if (detections.length > 0) {
     const classes = [...new Set(detections.map(d => d.className.toLowerCase()))];
-    parts.push(`I found what looks like a ${classes.join(' and ')} on my ${options?.bodyLocation || 'skin'}.`);
-  } else {
-    parts.push(`I have an injury on my ${options?.bodyLocation || 'skin'}.`);
+    parts.push(`Injury detected: ${classes.join(', ')}.`);
   }
 
+  // Add location
+  if (options?.bodyLocation) {
+    parts.push(`Location: ${options.bodyLocation}.`);
+  }
+
+  // Add duration with clinical phrasing
   if (options?.injuryDuration) {
     const durationMap: Record<string, string> = {
-      today: 'just now',
-      yesterday: 'yesterday',
-      '2-3_days': 'a few days ago',
-      '1_week': 'about a week ago',
-      '2_weeks_plus': 'over two weeks ago',
-      ongoing: 'for a while now',
+      today: 'Onset: within the last few hours',
+      yesterday: 'Onset: approximately 24 hours ago',
+      '2-3_days': 'Onset: 2-3 days ago',
+      '1_week': 'Onset: approximately 1 week ago',
+      '2_weeks_plus': 'Onset: more than 2 weeks ago',
+      ongoing: 'Chronic/ongoing condition',
     };
-    parts.push(`It happened ${durationMap[options.injuryDuration] || options.injuryDuration}.`);
+    parts.push(`${durationMap[options.injuryDuration] || `Duration: ${options.injuryDuration}`}.`);
   }
 
+  // Add symptoms
   if (options?.userSymptoms) {
-    parts.push(`Additional info: ${options.userSymptoms}`);
+    parts.push(`Additional symptoms: ${options.userSymptoms}.`);
   }
-
-  parts.push('What should I do? Please give me detailed first aid instructions.');
 
   return [
     {
