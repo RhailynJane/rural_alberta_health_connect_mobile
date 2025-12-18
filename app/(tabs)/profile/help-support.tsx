@@ -1,3 +1,4 @@
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
@@ -6,6 +7,7 @@ import {
   Alert,
   Image,
   LayoutAnimation,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,10 +15,12 @@ import {
   TextInput,
   TouchableOpacity,
   UIManager,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
+
+import { api } from "../../../convex/_generated/api";
 import { getReminders, ReminderItem } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -120,6 +124,10 @@ const faqs: FAQ[] = [
 
 export default function HelpSupport() {
   const { isOnline } = useNetworkStatus();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated && !isLoading ? {} : "skip");
+  const reportIssueAction = useAction(api.feedbackActions.reportIssueEmail);
+  const sendFeedbackAction = useAction(api.feedbackActions.sendFeedbackEmail);
 
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -130,11 +138,8 @@ export default function HelpSupport() {
   // FAQ expandable
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
   
-  // Section visibility
-  const [showFAQ, setShowFAQ] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [showIssue, setShowIssue] = useState(false);
+  // Active modal section
+  const [activeModal, setActiveModal] = useState<'faq' | 'guide' | 'feedback' | 'issue' | null>(null);
   
   // Feedback form
   const [feedbackText, setFeedbackText] = useState("");
@@ -142,7 +147,7 @@ export default function HelpSupport() {
   // Issue report form
   const [issueTitle, setIssueTitle] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
-  const [issuePriority, setIssuePriority] = useState("Medium");
+  const [issuePriority, setIssuePriority] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
   const [issuePhotos, setIssuePhotos] = useState<PhotoData[]>([]);
 
   useEffect(() => {
@@ -186,7 +191,7 @@ export default function HelpSupport() {
     }
   };
 
-  const handleSendFeedback = () => {
+  const handleSendFeedback = async () => {
     if (!feedbackText.trim()) {
       setModalType('error');
       setModalTitle('Missing Feedback');
@@ -201,14 +206,24 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-    setFeedbackText("");
-    setModalType('success');
-    setModalTitle('Feedback Sent');
-    setModalMessage('Thank you for your feedback! It has been sent to our team.');
-    setModalVisible(true);
+    try {
+      const userEmail = (currentUser as any)?.email || "unknown";
+      await sendFeedbackAction({ userEmail, message: feedbackText });
+      setFeedbackText("");
+      setActiveModal(null);
+      setModalType('success');
+      setModalTitle('Feedback Sent');
+      setModalMessage('Thank you for your feedback! It has been sent to our team.');
+      setModalVisible(true);
+    } catch {
+      setModalType('error');
+      setModalTitle('Error');
+      setModalMessage('Could not send feedback. Please try again later.');
+      setModalVisible(true);
+    }
   };
 
-  const handleReportIssue = () => {
+  const handleReportIssue = async () => {
     if (!issueTitle.trim()) {
       setModalType('error');
       setModalTitle('Missing Title');
@@ -233,18 +248,36 @@ export default function HelpSupport() {
     if (!isOnline) {
       setModalType('warning');
       setModalTitle('Offline');
-      setModalMessage('You need an internet connection to report issues.');
+      setModalMessage('You need an internet connection to report issues. Your issue report has been saved and you can submit it when you\'re back online.');
       setModalVisible(true);
       return;
     }
-    setIssueTitle("");
-    setIssueDescription("");
-    setIssuePriority("Medium");
-    setIssuePhotos([]);
-    setModalType('success');
-    setModalTitle('Issue Reported');
-    setModalMessage('Thank you for reporting the issue! Our team will review it as soon as possible.');
-    setModalVisible(true);
+    try {
+      const userEmail = (currentUser as any)?.email || "unknown";
+      await reportIssueAction({
+        userEmail,
+        title: issueTitle,
+        description: issueDescription,
+        priority: issuePriority,
+        photos: issuePhotos.length
+          ? issuePhotos.map(p => ({ fileName: p.fileName, mimeType: p.mimeType, base64: p.base64 }))
+          : undefined,
+      });
+      setIssueTitle("");
+      setIssueDescription("");
+      setIssuePriority("Medium");
+      setIssuePhotos([]);
+      setActiveModal(null);
+      setModalType('success');
+      setModalTitle('Issue Reported');
+      setModalMessage('Thank you for reporting the issue! Our team will review it as soon as possible.');
+      setModalVisible(true);
+    } catch {
+      setModalType('error');
+      setModalTitle('Error');
+      setModalMessage('Could not send issue report. Please try again later.');
+      setModalVisible(true);
+    }
   };
 
   const pickIssuePhoto = async () => {
@@ -312,9 +345,8 @@ export default function HelpSupport() {
     }
   };
 
-  const removeIssuePhotoAt = (index: number) => {
+  const removeIssuePhotoAt = (index: number) =>
     setIssuePhotos(prev => prev.filter((_, i) => i !== index));
-  };
 
   const handleViewUserGuide = async () => {
     const url = "https://rahc-website.vercel.app/user-guide";
@@ -354,12 +386,14 @@ export default function HelpSupport() {
         />
         <DueReminderBanner topOffset={120} />
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+          <Text style={styles.heroTitle}>Find answers to common questions and get the help you need</Text>
+
           {/* Cards Grid */}
           <View style={styles.cardsGrid}>
             {/* FAQ Card */}
             <TouchableOpacity 
-              style={[styles.sectionCard, showFAQ && styles.sectionCardActive]}
-              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowFAQ(!showFAQ); }}
+              style={[styles.sectionCard, activeModal === 'faq' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('faq'); }}
               activeOpacity={0.7}
             >
               <View style={styles.sectionIcon}>
@@ -371,8 +405,8 @@ export default function HelpSupport() {
 
             {/* User Guide Card */}
             <TouchableOpacity 
-              style={[styles.sectionCard, showGuide && styles.sectionCardActive]}
-              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowGuide(!showGuide); }}
+              style={[styles.sectionCard, activeModal === 'guide' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('guide'); }}
               activeOpacity={0.7}
             >
               <View style={styles.sectionIcon}>
@@ -384,8 +418,8 @@ export default function HelpSupport() {
 
             {/* Send Feedback Card */}
             <TouchableOpacity 
-              style={[styles.sectionCard, showFeedback && styles.sectionCardActive]}
-              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowFeedback(!showFeedback); }}
+              style={[styles.sectionCard, activeModal === 'feedback' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('feedback'); }}
               activeOpacity={0.7}
             >
               <View style={styles.sectionIcon}>
@@ -397,8 +431,8 @@ export default function HelpSupport() {
 
             {/* Report Issue Card */}
             <TouchableOpacity 
-              style={[styles.sectionCard, showIssue && styles.sectionCardActive]}
-              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setShowIssue(!showIssue); }}
+              style={[styles.sectionCard, activeModal === 'issue' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('issue'); }}
               activeOpacity={0.7}
             >
               <View style={styles.sectionIcon}>
@@ -429,15 +463,40 @@ export default function HelpSupport() {
             </View>
           </View>
 
-          {/* FAQ Expanded Section */}
-          {showFAQ && (
-          <View style={styles.card}>
-            <View style={styles.cardHeaderStatic}>
-              <Icon name="question-answer" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-              <Text style={styles.cardTitle}>Frequently Asked Questions</Text>
+          <View style={{ height: 50 }} />
+        </ScrollView>
+      </CurvedBackground>
+
+      {/* Modal Sections */}
+      <Modal
+        visible={!!activeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveModal(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                {activeModal === 'faq' && <Icon name="question-answer" size={22} color={COLORS.primary} />}
+                {activeModal === 'guide' && <Icon name="menu-book" size={22} color={COLORS.primary} />}
+                {activeModal === 'feedback' && <Icon name="feedback" size={22} color={COLORS.primary} />}
+                {activeModal === 'issue' && <Icon name="bug-report" size={22} color={COLORS.primary} />}
+                <Text style={styles.modalTitle}>
+                  {activeModal === 'faq' && 'Frequently Asked Questions'}
+                  {activeModal === 'guide' && 'User Guide'}
+                  {activeModal === 'feedback' && 'Send Feedback'}
+                  {activeModal === 'issue' && 'Report an Issue'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setActiveModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="close" size={22} color={COLORS.darkText} />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.faqContainer}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {activeModal === 'faq' && (
+                <View style={styles.faqContainer}>
                   {faqs.map((faq) => (
                     <View key={faq.id} style={styles.faqItem}>
                       <TouchableOpacity
@@ -463,19 +522,10 @@ export default function HelpSupport() {
                     </View>
                   ))}
                 </View>
+              )}
 
-            </View>
-          )}
-
-          {/* User Guide Section */}
-          {showGuide && (
-          <View style={styles.card}>
-              <View style={styles.cardHeaderStatic}>
-                <Icon name="menu-book" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>User Guide</Text>
-              </View>
-
-              <View style={styles.guideContainer}>
+              {activeModal === 'guide' && (
+                <View style={styles.guideContainer}>
                   <Text style={styles.guideText}>
                     Access the comprehensive RAHC User Guide for detailed instructions on:
                   </Text>
@@ -497,18 +547,10 @@ export default function HelpSupport() {
                     <Text style={styles.actionButtonText}>View User Guide</Text>
                   </TouchableOpacity>
                 </View>
-            </View>
-          )}
+              )}
 
-            {/* Feedback Section */}
-            {showFeedback && (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderStatic}>
-                <Icon name="feedback" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Send Feedback</Text>
-              </View>
-
-              <View style={styles.formContainer}>
+              {activeModal === 'feedback' && (
+                <View style={styles.formContainer}>
                   <Text style={styles.formLabel}>
                     We&apos;d love to hear your thoughts! Share your feedback to help us improve RAHC.
                   </Text>
@@ -531,18 +573,10 @@ export default function HelpSupport() {
                     <Text style={styles.submitButtonText}>Send Feedback</Text>
                   </TouchableOpacity>
                 </View>
-            </View>
-          )}
+              )}
 
-            {/* Report Issue Section */}
-            {showIssue && (
-            <View style={styles.card}>
-              <View style={styles.cardHeaderStatic}>
-                <Icon name="bug-report" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Report an Issue</Text>
-              </View>
-
-              <View style={styles.formContainer}>
+              {activeModal === 'issue' && (
+                <View style={styles.formContainer}>
                   <Text style={styles.formLabel}>
                     Found a bug or issue? Let us know so we can fix it.
                   </Text>
@@ -607,12 +641,11 @@ export default function HelpSupport() {
                     <Text style={styles.submitButtonText}>Report Issue</Text>
                   </TouchableOpacity>
                 </View>
-            </View>
-          )}
-
-            <View style={{ height: 50 }} />
-          </ScrollView>
-        </CurvedBackground>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <StatusModal
         visible={modalVisible}
@@ -633,9 +666,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 16,
     backgroundColor: "transparent",
+  },
+  heroTitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: COLORS.darkText,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    lineHeight: 22,
   },
   cardsGrid: {
     flexDirection: 'row',
@@ -646,12 +688,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionCard: {
-    width: '45%',
-    aspectRatio: 1.1,
+    width: '47%',
+    aspectRatio: 1.05,
     backgroundColor: COLORS.white,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 18,
+    alignItems: 'flex-start',
     justifyContent: 'center',
+    padding: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -671,22 +714,65 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    marginBottom: 8,
+    backgroundColor: 'rgba(67,160,71,0.12)',
+    marginBottom: 10,
   },
   sectionCardTitle: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
     fontSize: 16,
     color: COLORS.darkText,
-    marginTop: 8,
-    textAlign: 'center',
+    marginTop: 2,
+    textAlign: 'left',
   },
   sectionCardSubtitle: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 12,
     color: COLORS.darkGray,
     marginTop: 4,
-    textAlign: 'center',
+    textAlign: 'left',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   contactCard: {
     backgroundColor: COLORS.white,
@@ -722,37 +808,8 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     textDecorationLine: "underline",
   },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: COLORS.lightGray,
-  },
-  cardHeaderStatic: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: COLORS.lightGray,
-  },
-  cardTitle: {
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
-    color: COLORS.darkText,
-  },
   faqContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingBottom: 16,
   },
   faqItem: {
@@ -940,70 +997,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.darkGray,
     flexWrap: 'wrap',
-  },
-  description: {
-    fontSize: 16,
-    color: COLORS.darkGray,
-    marginHorizontal: 16,
-    marginTop: 12,
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  categoryCard: {
-    width: "48%",
-    aspectRatio: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  categoryCardLeft: {
-    marginRight: 8,
-  },
-  categoryIcon: {
-    fontSize: 42,
-    marginBottom: 12,
-  },
-  categoryTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.darkText,
-    textAlign: "center",
-  },
-  categoryDetailText: {
-    fontSize: 16,
-    color: COLORS.darkGray,
-    marginTop: 20,
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  backButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 100,
-    marginTop: 32,
-  },
-  backButtonText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
   },
 });
