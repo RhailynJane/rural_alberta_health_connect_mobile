@@ -172,7 +172,7 @@ export default function HelpSupport() {
   const handleEmailSupport = async () => {
     try {
       await Linking.openURL("mailto:ruralalbertahealthconnect@gmail.com");
-    } catch (error) {
+    } catch {
       Alert.alert(
         "Email Support",
         "Could not open email app. Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
