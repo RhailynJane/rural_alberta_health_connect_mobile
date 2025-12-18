@@ -171,21 +171,11 @@ export default function HelpSupport() {
 
   const handleEmailSupport = async () => {
     try {
-      const mailtoUrl = "mailto:ruralalbertahealthconnect@gmail.com";
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-      } else {
-        Alert.alert(
-          "Email Support",
-          "Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
-          [{ text: "OK" }]
-        );
-      }
-    } catch {
+      await Linking.openURL("mailto:ruralalbertahealthconnect@gmail.com");
+    } catch (error) {
       Alert.alert(
         "Email Support",
-        "Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
+        "Could not open email app. Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
         [{ text: "OK" }]
       );
     }
