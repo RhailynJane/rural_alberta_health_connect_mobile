@@ -155,11 +155,14 @@ interface NextStepsCardProps {
 
 const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps) {
   const ttsText = prepareNextStepsForTTS(items);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -171,13 +174,95 @@ const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps)
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    // Ready or not_downloaded - show Listen/Replay button (always visible!)
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.nextStepsCard}>
@@ -185,33 +270,7 @@ const NextStepsCard = memo(function NextStepsCard({ items }: NextStepsCardProps)
         <Text style={[styles.nextStepsTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
           Next Steps
         </Text>
-        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-          <>
-            {ttsStatus === 'generating' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <ActivityIndicator size="small" color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'speaking' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <Ionicons name="pause" size={18} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'ready' && (
-              <TouchableOpacity
-                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                onPress={handleTTSPress}
-                activeOpacity={isDisabled ? 1 : 0.7}
-                disabled={isDisabled}
-              >
-                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                  {ttsHasPlayed ? 'Replay' : 'Listen'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
+        {renderTTSButton()}
       </View>
 
       {isTTSActive && ttsChunks.length > 0 ? (
@@ -254,11 +313,14 @@ interface PrimaryCardProps {
 
 const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCardProps) {
   const ttsText = prepareRecommendationsForTTS(items, 4);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -270,13 +332,94 @@ const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCar
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <View style={styles.primaryAssessmentCard}>
@@ -285,33 +428,7 @@ const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCar
           {icon}
           <Text style={[styles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
         </View>
-        {ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-          <>
-            {ttsStatus === 'generating' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <ActivityIndicator size="small" color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'speaking' && (
-              <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                <Ionicons name="pause" size={18} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
-            {ttsStatus === 'ready' && (
-              <TouchableOpacity
-                style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                onPress={handleTTSPress}
-                activeOpacity={isDisabled ? 1 : 0.7}
-                disabled={isDisabled}
-              >
-                <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                  {ttsHasPlayed ? 'Replay' : 'Listen'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
+        {renderTTSButton()}
       </View>
 
       {isTTSActive && ttsChunks.length > 0 ? (
@@ -324,7 +441,7 @@ const PrimaryCard = memo(function PrimaryCard({ title, items, icon }: PrimaryCar
           parentPadding={16}
         />
       ) : (
-        items.slice(0, 4).map((it, idx) => (
+        items.map((it, idx) => (
           <View key={idx} style={styles.cardItem}>
             <Text style={styles.bulletPoint}>•</Text>
             <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
@@ -359,18 +476,17 @@ const AccordionCard = memo(function AccordionCard({
   isPremium,
   onUpgradePress,
 }: AccordionCardProps) {
-  const previewCount = 2;
-  const hasMoreContent = items.length > previewCount;
-  const previewItems = items.slice(0, previewCount);
-  const showUpgrade = !isPremium && hasMoreContent && isExpanded;
-
-  const visibleItems = isPremium ? items : previewItems;
+  // Show all items - no premium gating
+  const visibleItems = items;
   const ttsText = prepareSectionForTTS(title, visibleItems);
+  const pendingSpeak = useRef<string | null>(null);
 
   const {
     status: ttsStatus,
     speak,
     stop,
+    download,
+    downloadProgress,
     chunks: ttsChunks,
     chunkStates: ttsChunkStates,
     isAvailable: ttsAvailable,
@@ -382,56 +498,104 @@ const AccordionCard = memo(function AccordionCard({
   const isDisabled = isOtherPlaying;
   const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
 
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
   const handleTTSPress = useCallback(async () => {
     if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
       await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
     } else if (ttsStatus === 'ready' && ttsText) {
       await speak(ttsText);
     }
-  }, [ttsStatus, ttsText, speak, stop]);
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!isExpanded || !ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={styles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
-    <View style={[styles.accordionCard, !isPremium && styles.accordionCardPremium]}>
+    <View style={styles.accordionCard}>
       <TouchableOpacity style={styles.accordionHeader} onPress={onToggle} activeOpacity={0.7}>
         <View style={styles.accordionHeaderLeft}>
           {icon}
           <Text style={[styles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-          {!isPremium && hasMoreContent && (
-            <View style={styles.premiumBadge}>
-              <Text style={[styles.premiumBadgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Advanced
-              </Text>
-            </View>
-          )}
         </View>
         <View style={styles.accordionHeaderRight}>
-          {isExpanded && ttsText && ttsAvailable && ttsStatus !== 'not_downloaded' && ttsStatus !== 'checking' && (
-            <>
-              {ttsStatus === 'generating' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <ActivityIndicator size="small" color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'speaking' && (
-                <TouchableOpacity style={styles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
-                  <Ionicons name="pause" size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-              {ttsStatus === 'ready' && (
-                <TouchableOpacity
-                  style={[styles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
-                  onPress={handleTTSPress}
-                  activeOpacity={isDisabled ? 1 : 0.7}
-                  disabled={isDisabled}
-                >
-                  <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
-                  <Text style={[styles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
-                    {ttsHasPlayed ? 'Replay' : 'Listen'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
+          {renderTTSButton()}
           <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
         </View>
       </TouchableOpacity>
@@ -457,18 +621,6 @@ const AccordionCard = memo(function AccordionCard({
             ))
           )}
 
-          {showUpgrade && !isTTSActive && (
-            <View style={styles.premiumUpgradeContainer}>
-              <Text style={[styles.premiumMoreText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                {items.length - previewCount} more insights available
-              </Text>
-              <TouchableOpacity style={styles.premiumUpgradeLink} onPress={onUpgradePress} activeOpacity={0.7}>
-                <Text style={[styles.premiumUpgradeLinkText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                  See upgrade options →
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       )}
     </View>
@@ -1049,11 +1201,57 @@ export default function AssessmentResults() {
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
+  const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+  const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
 
   // Get display photos from params (original URIs for display)
   const displayPhotos = params.photos
     ? JSON.parse(params.photos as string)
     : [];
+
+  // Upload photos to Convex storage and return URLs
+  // Returns original URIs as fallback if upload fails
+  const uploadPhotosToStorage = async (localUris: string[]): Promise<string[]> => {
+    if (!localUris || localUris.length === 0) return [];
+
+    const uploadedUrls: string[] = [];
+
+    for (const uri of localUris) {
+      try {
+        // Skip if already a Convex URL (already uploaded)
+        if (uri.includes('convex.cloud') || uri.includes('convex.site')) {
+          uploadedUrls.push(uri);
+          continue;
+        }
+
+        const uploadUrl = await generateUploadUrl();
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        const result = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": blob.type || "image/jpeg" },
+          body: blob,
+        });
+
+        if (!result.ok) {
+          console.warn("⚠️ Photo upload failed, keeping local URI:", uri);
+          uploadedUrls.push(uri);
+          continue;
+        }
+
+        const { storageId } = await result.json();
+        const photoUrl = await storeUploadedPhoto({ storageId });
+        uploadedUrls.push(photoUrl);
+        console.log("✅ Photo uploaded to Convex storage:", photoUrl);
+      } catch (error) {
+        console.warn("⚠️ Error uploading photo, keeping local URI:", error);
+        uploadedUrls.push(uri); // Fallback to local URI
+      }
+    }
+
+    return uploadedUrls;
+  };
 
   const aiContext = params.aiContext
     ? JSON.parse(params.aiContext as string)
@@ -1263,6 +1461,11 @@ export default function AssessmentResults() {
                 const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
                 const timestamp = today.getTime();
 
+                // Upload photos to Convex storage before saving
+                console.log("📤 Uploading photos to Convex storage...");
+                const uploadedPhotoUrls = await uploadPhotosToStorage(displayPhotos);
+                console.log("📤 Photos uploaded:", uploadedPhotoUrls.length);
+
                 console.log("💾 [SAVE] Convex payload:", {
                   userId: currentUser._id,
                   date: dateString,
@@ -1271,7 +1474,7 @@ export default function AssessmentResults() {
                   severity,
                   category,
                   duration,
-                  photosCount: displayPhotos?.length || 0,
+                  photosCount: uploadedPhotoUrls?.length || 0,
                   aiContextLength: formattedContext.length,
                 });
 
@@ -1285,7 +1488,7 @@ export default function AssessmentResults() {
                   category: category,
                   duration: duration,
                   aiContext: formattedContext,
-                  photos: displayPhotos,
+                  photos: uploadedPhotoUrls,
                   notes: `AI Assessment (On-Device) - ${category}`,
                 });
                 console.log("✅ On-device assessment saved to Convex:", newId);
@@ -1305,7 +1508,7 @@ export default function AssessmentResults() {
                     entry.type = "ai_assessment";
                     entry.createdBy = "AI Assessment (On-Device)";
                     entry.aiContext = formattedContext;
-                    entry.photos = JSON.stringify(displayPhotos || []);
+                    entry.photos = JSON.stringify(uploadedPhotoUrls || []);
                     entry.isSynced = true;
                     entry.convexId = newId;
                   });
@@ -1416,6 +1619,11 @@ export default function AssessmentResults() {
           const dateString = `${year}-${month}-${day}`;
           const timestamp = today.getTime();
 
+          // Upload photos to Convex storage before saving
+          console.log("📤 Uploading photos to Convex storage...");
+          const uploadedPhotoUrls = await uploadPhotosToStorage(displayPhotos);
+          console.log("📤 Photos uploaded:", uploadedPhotoUrls.length);
+
           console.log("🔍 AI Assessment Date Debug:", {
             rawDate: today.toString(),
             year,
@@ -1438,7 +1646,7 @@ export default function AssessmentResults() {
             category: category,
             duration: duration,
             aiContext: cleanedContext,
-            photos: displayPhotos,
+            photos: uploadedPhotoUrls,
             notes: `AI Assessment - ${category}`,
           });
 
@@ -1464,7 +1672,7 @@ export default function AssessmentResults() {
                 entry.createdBy = "AI Assessment";
                 entry.aiContext = cleanedContext;
                 // photos is a @json field; store as JSON string for safety
-                entry.photos = JSON.stringify(displayPhotos || []);
+                entry.photos = JSON.stringify(uploadedPhotoUrls || []);
                 entry.isSynced = true; // Already synced online
                 entry.convexId = newId;
               });
