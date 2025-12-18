@@ -1201,11 +1201,57 @@ export default function AssessmentResults() {
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated ? {} : "skip");
   const logAIAssessment = useMutation(api.healthEntries.logAIAssessment);
   const generateContext = useAction(api.aiAssessment.generateContextWithGemini);
+  const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+  const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
 
   // Get display photos from params (original URIs for display)
   const displayPhotos = params.photos
     ? JSON.parse(params.photos as string)
     : [];
+
+  // Upload photos to Convex storage and return URLs
+  // Returns original URIs as fallback if upload fails
+  const uploadPhotosToStorage = async (localUris: string[]): Promise<string[]> => {
+    if (!localUris || localUris.length === 0) return [];
+
+    const uploadedUrls: string[] = [];
+
+    for (const uri of localUris) {
+      try {
+        // Skip if already a Convex URL (already uploaded)
+        if (uri.includes('convex.cloud') || uri.includes('convex.site')) {
+          uploadedUrls.push(uri);
+          continue;
+        }
+
+        const uploadUrl = await generateUploadUrl();
+        const response = await fetch(uri);
+        const blob = await response.blob();
+
+        const result = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": blob.type || "image/jpeg" },
+          body: blob,
+        });
+
+        if (!result.ok) {
+          console.warn("⚠️ Photo upload failed, keeping local URI:", uri);
+          uploadedUrls.push(uri);
+          continue;
+        }
+
+        const { storageId } = await result.json();
+        const photoUrl = await storeUploadedPhoto({ storageId });
+        uploadedUrls.push(photoUrl);
+        console.log("✅ Photo uploaded to Convex storage:", photoUrl);
+      } catch (error) {
+        console.warn("⚠️ Error uploading photo, keeping local URI:", error);
+        uploadedUrls.push(uri); // Fallback to local URI
+      }
+    }
+
+    return uploadedUrls;
+  };
 
   const aiContext = params.aiContext
     ? JSON.parse(params.aiContext as string)
@@ -1415,6 +1461,11 @@ export default function AssessmentResults() {
                 const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
                 const timestamp = today.getTime();
 
+                // Upload photos to Convex storage before saving
+                console.log("📤 Uploading photos to Convex storage...");
+                const uploadedPhotoUrls = await uploadPhotosToStorage(displayPhotos);
+                console.log("📤 Photos uploaded:", uploadedPhotoUrls.length);
+
                 console.log("💾 [SAVE] Convex payload:", {
                   userId: currentUser._id,
                   date: dateString,
@@ -1423,7 +1474,7 @@ export default function AssessmentResults() {
                   severity,
                   category,
                   duration,
-                  photosCount: displayPhotos?.length || 0,
+                  photosCount: uploadedPhotoUrls?.length || 0,
                   aiContextLength: formattedContext.length,
                 });
 
@@ -1437,7 +1488,7 @@ export default function AssessmentResults() {
                   category: category,
                   duration: duration,
                   aiContext: formattedContext,
-                  photos: displayPhotos,
+                  photos: uploadedPhotoUrls,
                   notes: `AI Assessment (On-Device) - ${category}`,
                 });
                 console.log("✅ On-device assessment saved to Convex:", newId);
@@ -1457,7 +1508,7 @@ export default function AssessmentResults() {
                     entry.type = "ai_assessment";
                     entry.createdBy = "AI Assessment (On-Device)";
                     entry.aiContext = formattedContext;
-                    entry.photos = JSON.stringify(displayPhotos || []);
+                    entry.photos = JSON.stringify(uploadedPhotoUrls || []);
                     entry.isSynced = true;
                     entry.convexId = newId;
                   });
@@ -1568,6 +1619,11 @@ export default function AssessmentResults() {
           const dateString = `${year}-${month}-${day}`;
           const timestamp = today.getTime();
 
+          // Upload photos to Convex storage before saving
+          console.log("📤 Uploading photos to Convex storage...");
+          const uploadedPhotoUrls = await uploadPhotosToStorage(displayPhotos);
+          console.log("📤 Photos uploaded:", uploadedPhotoUrls.length);
+
           console.log("🔍 AI Assessment Date Debug:", {
             rawDate: today.toString(),
             year,
@@ -1590,7 +1646,7 @@ export default function AssessmentResults() {
             category: category,
             duration: duration,
             aiContext: cleanedContext,
-            photos: displayPhotos,
+            photos: uploadedPhotoUrls,
             notes: `AI Assessment - ${category}`,
           });
 
@@ -1616,7 +1672,7 @@ export default function AssessmentResults() {
                 entry.createdBy = "AI Assessment";
                 entry.aiContext = cleanedContext;
                 // photos is a @json field; store as JSON string for safety
-                entry.photos = JSON.stringify(displayPhotos || []);
+                entry.photos = JSON.stringify(uploadedPhotoUrls || []);
                 entry.isSynced = true; // Already synced online
                 entry.convexId = newId;
               });
