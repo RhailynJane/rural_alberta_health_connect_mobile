@@ -1,9 +1,12 @@
+import { Q } from "@nozbe/watermelondb";
 import { useConvexAuth, useQuery } from "convex/react";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
+import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import { listTombstones } from "../../../watermelon/utils/tombstones";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
@@ -14,6 +17,7 @@ import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 export default function Tracker() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
+  const database = useWatermelonDatabase();
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [anchorDate, setAnchorDate] = useState<Date>(new Date());
@@ -24,6 +28,7 @@ export default function Tracker() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [clickedDate, setClickedDate] = useState<string | null>(null);
+  const [offlineEntries, setOfflineEntries] = useState<any[]>([]);
 
   // Get reminder settings
   const reminderSettings = useQuery(
@@ -46,12 +51,99 @@ export default function Tracker() {
                 return `${y}-${m}-${d}`;
               };
 
-              // Fetch entries online
+              // Fetch entries online (skip when offline to avoid errors)
               const allEntriesOnline = useQuery(
                 api.healthEntries.getAllUserEntries,
-                currentUser? { userId: (currentUser as any)._id } : "skip"
+                currentUser && isOnline ? { userId: (currentUser as any)._id } : "skip"
               );
-              const allEntries = useMemo(() => Array.isArray(allEntriesOnline) ? allEntriesOnline : [], [allEntriesOnline]);
+
+              // Load offline entries from WatermelonDB
+              const loadOfflineEntries = useCallback(async () => {
+                if (!database) return;
+                try {
+                  const healthCollection = database.get('health_entries');
+                  const tombstoneIds = await listTombstones(); // Returns Set<string>
+
+                  // Query all entries, sorted by timestamp descending
+                  const localEntries = await healthCollection
+                    .query(Q.sortBy('timestamp', Q.desc))
+                    .fetch();
+
+                  // Map to Convex-like shape and filter out deleted/tombstoned
+                  const mapped = localEntries
+                    .filter((entry: any) => {
+                      if (entry.isDeleted) return false;
+                      if (tombstoneIds.has(entry.convexId) || tombstoneIds.has(entry.id)) return false;
+                      return true;
+                    })
+                    .map((entry: any) => {
+                      let photos: string[] = [];
+                      try {
+                        if (entry.photos) {
+                          photos = Array.isArray(entry.photos) ? entry.photos : JSON.parse(entry.photos);
+                        }
+                      } catch { photos = []; }
+
+                      return {
+                        _id: entry.id,
+                        convexId: entry.convexId || null,
+                        userId: entry.userId,
+                        timestamp: entry.timestamp,
+                        severity: entry.severity,
+                        type: entry.type,
+                        symptoms: entry.symptoms || '',
+                        category: entry.category || '',
+                        notes: entry.notes || '',
+                        photos,
+                        aiContext: entry.aiContext || null,
+                        createdBy: entry.createdBy || 'User',
+                        date: entry.date || '',
+                        lastEditedAt: entry.lastEditedAt || 0,
+                        editCount: entry.editCount || 0,
+                      };
+                    });
+
+                  setOfflineEntries(mapped);
+                } catch (error) {
+                  console.error('[Tracker] Failed to load offline entries:', error);
+                }
+              }, [database]);
+
+              // Load offline entries on mount and when database changes
+              useEffect(() => {
+                loadOfflineEntries();
+              }, [loadOfflineEntries]);
+
+              // Merge online and offline entries, deduplicating by convexId
+              const allEntries = useMemo(() => {
+                const online = Array.isArray(allEntriesOnline) ? allEntriesOnline : [];
+
+                // When offline, use only offline entries
+                if (!isOnline) {
+                  return offlineEntries;
+                }
+
+                // When online, merge and dedupe (prefer online version)
+                const seenConvexIds = new Set<string>();
+                const merged: any[] = [];
+
+                // Add online entries first (they're authoritative)
+                for (const entry of online) {
+                  merged.push(entry);
+                  if (entry._id) seenConvexIds.add(entry._id);
+                }
+
+                // Add offline entries that don't exist online (local-only entries)
+                for (const entry of offlineEntries) {
+                  const convexId = entry.convexId;
+                  if (convexId && seenConvexIds.has(convexId)) continue;
+                  if (!convexId && entry._id && seenConvexIds.has(entry._id)) continue;
+                  merged.push(entry);
+                }
+
+                // Sort by timestamp descending
+                return merged.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+              }, [allEntriesOnline, offlineEntries, isOnline]);
 
               // Group by local date
               useEffect(() => {
