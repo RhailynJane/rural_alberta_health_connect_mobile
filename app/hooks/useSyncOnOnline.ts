@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { api } from '../../convex/_generated/api';
+import { uploadOfflinePhotos, hasLocalPhotos } from '../../utils/photos';
 import { useWatermelonDatabase } from '../../watermelon/hooks/useDatabase';
 import { getPreferredEntryId, listTombstones, removeTombstones } from '../../watermelon/utils/tombstones';
 import { getPhoneSecurely } from '../utils/securePhone';
@@ -29,6 +30,9 @@ export function useSyncOnOnline() {
   const updateExistingEntry = useMutation(api.healthEntries.updateHealthEntry);
   // New: process offline deletion tombstones when back online
   const deleteHealthEntry = useMutation(api.healthEntries.deleteHealthEntry);
+  // Photo upload mutations for syncing offline photos to Convex Storage
+  const generateUploadUrl = useMutation(api.healthEntries.generateUploadUrl);
+  const storeUploadedPhoto = useMutation(api.healthEntries.storeUploadedPhoto);
   const updatePhone = useMutation(api.users.updatePhone);
   const toggleLocationServices = useMutation(api.locationServices.toggleLocationServices);
   // Use the correct Convex mutation path for updating personal info
@@ -266,6 +270,11 @@ export function useSyncOnOnline() {
           
           // Safely parse photos if stored as JSON string
           let photos: string[] = [];
+          console.log(`📷 [Sync] Raw photos data:`, {
+            rawPhotos: rawPhotos ? (typeof rawPhotos === 'string' ? rawPhotos.substring(0, 100) : 'array') : 'none',
+            type: typeof rawPhotos,
+          });
+
           if (rawPhotos) {
             try {
               if (typeof rawPhotos === 'string') {
@@ -279,6 +288,62 @@ export function useSyncOnOnline() {
             }
           }
 
+          console.log(`📷 [Sync] Parsed photos:`, {
+            count: photos.length,
+            sample: photos[0]?.substring(0, 60),
+            isArray: Array.isArray(photos),
+          });
+
+          // Upload local photos to Convex Storage before syncing
+          // This converts local file:// URIs to permanent Convex Storage URLs
+          let uploadedPhotos = photos;
+          if (hasLocalPhotos(photos)) {
+            console.log(`📸 [PhotoSync] Entry has ${photos.length} photo(s) with local URIs, uploading...`);
+            try {
+              const uploadResult = await uploadOfflinePhotos(
+                photos,
+                generateUploadUrl,
+                storeUploadedPhoto
+              );
+              uploadedPhotos = uploadResult.uploadedUrls;
+
+              console.log(`📸 [PhotoSync] Upload result:`, {
+                uploaded: uploadResult.uploadedUrls.length,
+                failed: uploadResult.failedCount,
+                urls: uploadResult.uploadedUrls.map(u => u?.substring(0, 50)),
+              });
+
+              if (uploadResult.failedCount > 0) {
+                console.warn(`⚠️ [PhotoSync] ${uploadResult.failedCount} photo(s) failed to upload:`, uploadResult.failedUris);
+              }
+
+              // Update local entry with new Convex URLs so we don't re-upload next time
+              if (uploadedPhotos.length > 0) {
+                const entryId = entry.id; // Capture ID before write block
+                try {
+                  await database.write(async () => {
+                    // Re-fetch entry inside write block to ensure valid reference
+                    const freshEntry = await database.get('health_entries').find(entryId);
+                    if (freshEntry) {
+                      await freshEntry.update((e: any) => {
+                        e.photos = uploadedPhotos;
+                      });
+                      console.log(`📝 [PhotoSync] Updated local entry with ${uploadedPhotos.length} Convex URL(s)`);
+                    }
+                  });
+                } catch (updateErr) {
+                  console.warn('⚠️ [PhotoSync] Could not update local entry photos:', updateErr);
+                }
+              }
+            } catch (uploadError) {
+              console.error('❌ [PhotoSync] Failed to upload photos:', uploadError);
+              // Continue with original photos - sync will store local URIs which won't display
+              // but at least the entry data will be synced
+            }
+          } else {
+            console.log(`📸 [PhotoSync] No local photos to upload (already Convex URLs or empty)`);
+          }
+
           // Safely parse symptoms if stored as JSON string
           let symptomsData = entryData.symptoms || '';
           if (typeof symptomsData === 'string' && symptomsData.startsWith('[')) {
@@ -290,9 +355,10 @@ export function useSyncOnOnline() {
           }
 
           console.log(`📤 Syncing health entry:`, {
-            symptoms: typeof symptomsData === 'string' ? symptomsData : JSON.stringify(symptomsData),
+            symptoms: typeof symptomsData === 'string' ? symptomsData.substring(0, 50) : JSON.stringify(symptomsData).substring(0, 50),
             userId: entryUserId,
-            photoCount: photos.length,
+            photoCount: uploadedPhotos.length,
+            photoUrls: uploadedPhotos.map(u => u?.substring(0, 50)),
             type: entryData.type || raw.type || 'manual_entry',
           });
 
@@ -310,7 +376,7 @@ export function useSyncOnOnline() {
                 symptoms: typeof symptomsData === 'string' ? symptomsData : JSON.stringify(symptomsData),
                 severity: entryData.severity,
                 notes: entryData.notes || '',
-                photos: photos,
+                photos: uploadedPhotos,
                 type: entryType,
               });
               console.log(`♻️ Updated existing server entry (convexId=${serverId}) after offline edit`);
@@ -330,7 +396,7 @@ export function useSyncOnOnline() {
                 category: entryData.category || raw.category || 'General Symptoms',
                 duration: entryData.duration || raw.duration || '',
                 aiContext: entryData.aiContext || raw.aiContext || raw.ai_context || '',
-                photos: photos,
+                photos: uploadedPhotos,
                 notes: entryData.notes || '',
               });
               console.log(`✅ Synced new AI assessment entry (server id=${newId})`);
@@ -342,7 +408,7 @@ export function useSyncOnOnline() {
                 symptoms: typeof symptomsData === 'string' ? symptomsData : JSON.stringify(symptomsData),
                 severity: entryData.severity,
                 notes: entryData.notes || '',
-                photos: photos,
+                photos: uploadedPhotos,
                 createdBy: entryData.createdBy || entryData.created_by || 'User',
                 type: entryType,
               });

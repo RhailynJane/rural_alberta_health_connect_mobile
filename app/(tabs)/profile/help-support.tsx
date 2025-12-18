@@ -1,30 +1,33 @@
-import { api } from "@/convex/_generated/api";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
-
-// Removed Picker in favor of StatusModal-based selector for priority
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  LayoutAnimation,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
-  Text, TextInput, TouchableOpacity,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getReminders, ReminderItem } from "../../_utils/notifications";
-import { COLORS, FONTS } from "../../constants/constants";
-import { useNetworkStatus } from "../../hooks/useNetworkStatus";
-
 import Icon from "react-native-vector-icons/MaterialIcons";
+
+import { api } from "../../../convex/_generated/api";
+import { getReminders, ReminderItem } from "../../_utils/notifications";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
 import StatusModal from "../../components/StatusModal";
+import { COLORS, FONTS } from "../../constants/constants";
+import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
 interface FAQ {
   id: number;
@@ -33,158 +36,151 @@ interface FAQ {
   category: string;
 }
 
+interface PhotoData {
+  uri: string;
+  base64: string;
+  mimeType: string;
+  fileName: string;
+}
+
+const DESCRIPTION_MAX = 500;
+const MAX_PHOTO_DIM = 1024;
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+
+const faqs: FAQ[] = [
+  {
+    id: 1,
+    question: "How do I create an account?",
+    answer: "Open the app and tap 'Sign Up'. Fill in your personal information, accept the terms and privacy policy, then complete your medical history and emergency contact information.",
+    category: "Getting Started"
+  },
+  {
+    id: 2,
+    question: "What do I do if I forgot my password?",
+    answer: "On the sign-in screen, tap 'Forgot Password?'. Enter your registered email address, check your email for an OTP (One-Time Password), enter it in the app, and create a new password.",
+    category: "Account"
+  },
+  {
+    id: 3,
+    question: "How do I use the AI Health Assessment?",
+    answer: "Tap 'AI Assessment' from the Dashboard or bottom navigation. Start a new assessment, describe your symptoms in detail, select duration and severity, then review the AI-generated health insights and recommendations. Remember, this is NOT a medical diagnosis.",
+    category: "Features"
+  },
+  {
+    id: 4,
+    question: "How do I set up health reminders?",
+    answer: "Go to Profile → App Settings → Symptom Assessment Reminder. Toggle 'Enable Reminder', then tap 'Add Reminder' to set your preferred times. You can add daily or custom weekly reminders.",
+    category: "Reminders"
+  },
+  {
+    id: 5,
+    question: "What works offline?",
+    answer: "You can view existing health entries, add new health logs (syncs later), access downloaded offline maps, view emergency contacts, see previous assessment results, and navigate the app. New AI assessments and downloading maps require internet.",
+    category: "Offline"
+  },
+  {
+    id: 6,
+    question: "How do I download offline maps?",
+    answer: "Go to the Emergency tab and tap 'Download Maps'. Choose a region and tap Download. Use Wi‑Fi — regions are typically 10–50 MB.",
+    category: "Emergency"
+  },
+  {
+    id: 7,
+    question: "Is my health data secure?",
+    answer: "Yes! Your personal information is encrypted and stored locally on your device. No data is shared without your explicit consent. We follow Canadian privacy laws and best practices for health data security.",
+    category: "Privacy"
+  },
+  {
+    id: 8,
+    question: "Can I use this app for emergencies?",
+    answer: "RAHC provides quick access to emergency services and your location, but for serious medical emergencies, always call 911 immediately. The app is designed to assist, not replace, emergency services.",
+    category: "Emergency"
+  },
+  {
+    id: 9,
+    question: "Why are my notifications not working?",
+    answer: "Check device notification settings, verify notifications are enabled in Profile → App Settings, disable 'Do Not Disturb' mode, and restart the app. Make sure you granted notification permissions when first setting up reminders.",
+    category: "Troubleshooting"
+  },
+  {
+    id: 10,
+    question: "How do I update my profile information?",
+    answer: "Go to Profile → Profile Information. Tap 'Edit' next to the section you want to update (Personal Info, Emergency Contact, or Medical Info), make your changes, and tap 'Done' to save.",
+    category: "Profile"
+  },
+  {
+    id: 11,
+    question: "Where do I access offline maps after downloading?",
+    answer: "Open the Emergency tab — the map automatically uses your downloaded map tiles when you're offline. 'Tiles' are the small pieces of the map saved for the regions you downloaded, so the background map still shows without internet. Clinic markers come from your last saved results (from your last online search). Directions may still need internet unless your maps app cached a route.",
+    category: "Emergency"
+  },
+  {
+    id: 12,
+    question: "How do I add or generate notifications?",
+    answer: "Notifications are created by your reminders and important app updates — you don't add them directly on the Notifications tab. To create them, set up reminders: Go to Profile → App Settings → Symptom Assessment Reminder. Toggle 'Enable Reminder', then tap 'Add Reminder' to choose the time (and day if weekly).",
+    category: "Notifications"
+  },
+];
+
 export default function HelpSupport() {
-  const router = useRouter();
-  const { isAuthenticated } = useConvexAuth();
   const { isOnline } = useNetworkStatus();
-  const currentUser = useQuery(
-    api.users.getCurrentUser,
-    isAuthenticated ? {} : "skip"
-  );
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated && !isLoading ? {} : "skip");
+  const reportIssueAction = useAction(api.feedbackActions.reportIssueEmail);
+  const sendFeedbackAction = useAction(api.feedbackActions.sendFeedbackEmail);
 
-  // State for reminders (for notification bell)
   const [reminders, setReminders] = useState<ReminderItem[]>([]);
-
-  // Load reminders for notification bell
-  useEffect(() => {
-    if (!currentUser?._id) return;
-    (async () => {
-      const stored = await getReminders();
-      setReminders(stored);
-    })();
-  }, [currentUser?._id]);
-
-  // Expandable sections
-  const [expandedSections, setExpandedSections] = useState({
-    faq: false,
-    userGuide: false,
-    feedback: false,
-    reportIssue: false,
-  });
-
-  // Expanded FAQ items
-  const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
-
-  // Feedback and Report Issue forms
-  const [feedbackText, setFeedbackText] = useState("");
-  const [issueTitle, setIssueTitle] = useState("");
-  const [issueDescription, setIssueDescription] = useState("");
-  const [issuePriority, setIssuePriority] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
-  const [issuePhotos, setIssuePhotos] = useState<{ uri: string; base64: string; mimeType: string; fileName: string }[]>([]);
-  const DESCRIPTION_MAX = 1000;
-  const MAX_PHOTO_BYTES = 2 * 1024 * 1024; // 2 MB
-  const MAX_PHOTO_DIM = 1280; // px
-  const [priorityModalVisible, setPriorityModalVisible] = useState(false);
-
-  // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalType, setModalType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  
+  // FAQ expandable
+  const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
+  
+  // Active modal section
+  const [activeModal, setActiveModal] = useState<'faq' | 'guide' | 'feedback' | 'issue' | null>(null);
+  
+  // Feedback form
+  const [feedbackText, setFeedbackText] = useState("");
+  
+  // Issue report form
+  const [issueTitle, setIssueTitle] = useState("");
+  const [issueDescription, setIssueDescription] = useState("");
+  const [issuePriority, setIssuePriority] = useState<"Low" | "Medium" | "High" | "Critical">("Medium");
+  const [issuePhotos, setIssuePhotos] = useState<PhotoData[]>([]);
 
-  // FAQ data
-  const faqs: FAQ[] = [
-    {
-      id: 1,
-      question: "How do I create an account?",
-      answer: "Open the app and tap 'Sign Up'. Fill in your personal information, accept the terms and privacy policy, then complete your medical history and emergency contact information.",
-      category: "Getting Started"
-    },
-    {
-      id: 2,
-      question: "What do I do if I forgot my password?",
-      answer: "On the sign-in screen, tap 'Forgot Password?'. Enter your registered email address, check your email for an OTP (One-Time Password), enter it in the app, and create a new password.",
-      category: "Account"
-    },
-    {
-      id: 3,
-      question: "How do I use the AI Health Assessment?",
-      answer: "Tap 'AI Assessment' from the Dashboard or bottom navigation. Start a new assessment, describe your symptoms in detail, select duration and severity, then review the AI-generated health insights and recommendations. Remember, this is NOT a medical diagnosis.",
-      category: "Features"
-    },
-    {
-      id: 4,
-      question: "How do I set up health reminders?",
-      answer: "Go to Profile → App Settings → Symptom Assessment Reminder. Toggle 'Enable Reminder', then tap 'Add Reminder' to set your preferred times. You can add daily or custom weekly reminders.",
-      category: "Reminders"
-    },
-    {
-      id: 5,
-      question: "What works offline?",
-      answer: "You can view existing health entries, add new health logs (syncs later), access downloaded offline maps, view emergency contacts, see previous assessment results, and navigate the app. New AI assessments and downloading maps require internet.",
-      category: "Offline"
-    },
-    {
-      id: 6,
-      question: "How do I download offline maps?",
-      answer: "Go to the Emergency tab and tap ‘Download Maps’. Choose a region and tap Download. Use Wi‑Fi — regions are typically 10–50 MB.",
-      category: "Emergency"
-    },
-    {
-      id: 11,
-      question: "Where do I access offline maps after downloading?",
-      answer: "Open the Emergency tab — the map automatically uses your downloaded map tiles when you’re offline. ‘Tiles’ are the small pieces of the map saved for the regions you downloaded, so the background map still shows without internet. Clinic markers come from your last saved results (from your last online search). Directions may still need internet unless your maps app cached a route.\n\nExample: Before a trip, go to Emergency → Download Maps and download ‘Calgary & Area’ and ‘Highway 2 Corridor’. While driving with no signal, open the Emergency tab — the map loads from your downloaded tiles and you can still see clinics from your last refresh. Opening turn‑by‑turn directions may require connectivity.",
-      category: "Emergency"
-    },
-    {
-      id: 12,
-      question: "How do I add or generate notifications?",
-      answer: "Notifications are created by your reminders and important app updates — you don’t add them directly on the Notifications tab. To create them, set up reminders: Go to Profile → App Settings → Symptom Assessment Reminder. Toggle ‘Enable Reminder’, then tap ‘Add Reminder’ to choose the time (and day if weekly). You’ll receive a notification at those times, and it will appear in the Notifications bell.\n\nTips: Make sure notification permissions are allowed for RAHC in your device settings, and that Do Not Disturb is off during your reminder time. If you still don’t see notifications, see ‘Why are my notifications not working?’ below.",
-      category: "Notifications"
-    },
-    {
-      id: 7,
-      question: "Is my health data secure?",
-      answer: "Yes! Your personal information is encrypted and stored locally on your device. No data is shared without your explicit consent. We follow Canadian privacy laws and best practices for health data security.",
-      category: "Privacy"
-    },
-    {
-      id: 8,
-      question: "Can I use this app for emergencies?",
-      answer: "RAHC provides quick access to emergency services and your location, but for serious medical emergencies, always call 911 immediately. The app is designed to assist, not replace, emergency services.",
-      category: "Emergency"
-    },
-    {
-      id: 9,
-      question: "Why are my notifications not working?",
-      answer: "Check device notification settings, verify notifications are enabled in Profile → App Settings, disable 'Do Not Disturb' mode, and restart the app. Make sure you granted notification permissions when first setting up reminders.",
-      category: "Troubleshooting"
-    },
-    {
-      id: 10,
-      question: "How do I update my profile information?",
-      answer: "Go to Profile → Profile Information. Tap 'Edit' next to the section you want to update (Personal Info, Emergency Contact, or Medical Info), make your changes, and tap 'Done' to save.",
-      category: "Profile"
-    },
-  ];
+  useEffect(() => {
+    (async () => {
+      const stored = await getReminders();
+      setReminders(stored);
+    })();
+  }, []);
 
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
-  };
+  // Enable smooth layout animations (Android requires experimental flag)
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
 
   const toggleFAQ = (id: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedFAQ(expandedFAQ === id ? null : id);
   };
 
-  const handleViewUserGuide = async () => {
-    const url = "https://rahc-website.vercel.app/user-guide";
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
-      await Linking.openURL(url);
-    } else {
+  const handleEmailSupport = async () => {
+    try {
+      await Linking.openURL("mailto:ruralalbertahealthconnect@gmail.com");
+    } catch (error) {
       Alert.alert(
-        "User Guide",
-        "Unable to open the user guide. Please visit: https://rahc-website.vercel.app/user-guide",
+        "Email Support",
+        "Could not open email app. Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
         [{ text: "OK" }]
       );
     }
   };
 
-  // Use Convex actions for feedback and issue reporting
-  const sendFeedbackAction = useAction(api.feedbackActions.sendFeedbackEmail);
   const handleSendFeedback = async () => {
     if (!feedbackText.trim()) {
       setModalType('error');
@@ -196,14 +192,15 @@ export default function HelpSupport() {
     if (!isOnline) {
       setModalType('warning');
       setModalTitle('Offline');
-      setModalMessage('You need an internet connection to send feedback. Your feedback has been saved and you can submit it when you\'re back online.');
+      setModalMessage('You need an internet connection to send feedback.');
       setModalVisible(true);
       return;
     }
     try {
-      const userEmail = currentUser?.email || "unknown";
+      const userEmail = (currentUser as any)?.email || "unknown";
       await sendFeedbackAction({ userEmail, message: feedbackText });
       setFeedbackText("");
+      setActiveModal(null);
       setModalType('success');
       setModalTitle('Feedback Sent');
       setModalMessage('Thank you for your feedback! It has been sent to our team.');
@@ -216,7 +213,6 @@ export default function HelpSupport() {
     }
   };
 
-  const reportIssueAction = useAction(api.feedbackActions.reportIssueEmail);
   const handleReportIssue = async () => {
     if (!issueTitle.trim()) {
       setModalType('error');
@@ -247,7 +243,7 @@ export default function HelpSupport() {
       return;
     }
     try {
-      const userEmail = currentUser?.email || "unknown";
+      const userEmail = (currentUser as any)?.email || "unknown";
       await reportIssueAction({
         userEmail,
         title: issueTitle,
@@ -261,6 +257,7 @@ export default function HelpSupport() {
       setIssueDescription("");
       setIssuePriority("Medium");
       setIssuePhotos([]);
+      setActiveModal(null);
       setModalType('success');
       setModalTitle('Issue Reported');
       setModalMessage('Thank you for reporting the issue! Our team will review it as soon as possible.');
@@ -281,7 +278,6 @@ export default function HelpSupport() {
       setModalVisible(true);
       return;
     }
-    // Request media library permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       setModalType('warning');
@@ -303,7 +299,6 @@ export default function HelpSupport() {
       const mimeType = asset.mimeType ?? 'image/jpeg';
       const fileName = asset.fileName ?? `issue_${Date.now()}.jpg`;
 
-      // Resize and compress to keep under size limits
       const needsResize = (asset.width ?? 0) > MAX_PHOTO_DIM || (asset.height ?? 0) > MAX_PHOTO_DIM;
       const resizeAction = needsResize
         ? (asset.width ?? 0) >= (asset.height ?? 0)
@@ -339,27 +334,19 @@ export default function HelpSupport() {
       setIssuePhotos(prev => [...prev, { uri: finalUri, base64: finalBase64, mimeType, fileName }]);
     }
   };
-  
+
   const removeIssuePhotoAt = (index: number) =>
     setIssuePhotos(prev => prev.filter((_, i) => i !== index));
 
-  const handleEmailSupport = async () => {
-    try {
-      const mailtoUrl = "mailto:ruralalbertahealthconnect@gmail.com";
-      const canOpen = await Linking.canOpenURL(mailtoUrl);
-      if (canOpen) {
-        await Linking.openURL(mailtoUrl);
-      } else {
-        Alert.alert(
-          "Email Support",
-          "Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
-          [{ text: "OK" }]
-        );
-      }
-    } catch {
+  const handleViewUserGuide = async () => {
+    const url = "https://rahc-website.vercel.app/user-guide";
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
       Alert.alert(
-        "Email Support",
-        "Please send your inquiries to:\nruralalbertahealthconnect@gmail.com",
+        "User Guide",
+        "Unable to open the user guide. Please visit: https://rahc-website.vercel.app/user-guide",
         [{ text: "OK" }]
       );
     }
@@ -388,8 +375,65 @@ export default function HelpSupport() {
           }
         />
         <DueReminderBanner topOffset={120} />
-        <ScrollView style={styles.container}>
-          {/* Contact Support Card */}
+        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+          <Text style={styles.heroTitle}>Find answers to common questions and get the help you need</Text>
+
+          {/* Cards Grid */}
+          <View style={styles.cardsGrid}>
+            {/* FAQ Card */}
+            <TouchableOpacity 
+              style={[styles.sectionCard, activeModal === 'faq' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('faq'); }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionIcon}>
+                <Icon name="question-answer" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.sectionCardTitle}>FAQ</Text>
+              <Text style={styles.sectionCardSubtitle}>Common Questions</Text>
+            </TouchableOpacity>
+
+            {/* User Guide Card */}
+            <TouchableOpacity 
+              style={[styles.sectionCard, activeModal === 'guide' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('guide'); }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionIcon}>
+                <Icon name="menu-book" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.sectionCardTitle}>User Guide</Text>
+              <Text style={styles.sectionCardSubtitle}>Learn More</Text>
+            </TouchableOpacity>
+
+            {/* Send Feedback Card */}
+            <TouchableOpacity 
+              style={[styles.sectionCard, activeModal === 'feedback' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('feedback'); }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionIcon}>
+                <Icon name="feedback" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.sectionCardTitle}>Feedback</Text>
+              <Text style={styles.sectionCardSubtitle}>Share Thoughts</Text>
+            </TouchableOpacity>
+
+            {/* Report Issue Card */}
+            <TouchableOpacity 
+              style={[styles.sectionCard, activeModal === 'issue' && styles.sectionCardActive]}
+              onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setActiveModal('issue'); }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.sectionIcon}>
+                <Icon name="bug-report" size={24} color={COLORS.primary} />
+              </View>
+              <Text style={styles.sectionCardTitle}>Report</Text>
+              <Text style={styles.sectionCardSubtitle}>Report Issue</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Contact Card */}
           <View style={styles.contactCard}>
             <View style={styles.contactHeader}>
               <Icon name="email" size={24} color={COLORS.primary} />
@@ -401,277 +445,208 @@ export default function HelpSupport() {
             <TouchableOpacity onPress={handleEmailSupport}>
               <Text style={styles.emailLink}>ruralalbertahealthconnect@gmail.com</Text>
             </TouchableOpacity>
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleEmailSupport} activeOpacity={0.7}>
+                <Icon name="email" size={20} color={COLORS.white} />
+                <Text style={styles.actionButtonText}>Email Support</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Frequently Asked Questions */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("faq")}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="question-answer" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Frequently Asked Questions</Text>
-              </View>
-              <Icon
-                name={expandedSections.faq ? "expand-less" : "expand-more"}
-                size={24}
-                color={COLORS.darkGray}
-              />
-            </TouchableOpacity>
-
-            {expandedSections.faq && (
-              <View style={styles.faqContainer}>
-                {faqs.map((faq) => (
-                  <View key={faq.id} style={styles.faqItem}>
-                    <TouchableOpacity
-                      style={styles.faqQuestion}
-                      onPress={() => toggleFAQ(faq.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.faqCategory}>{faq.category}</Text>
-                        <Text style={styles.faqQuestionText}>{faq.question}</Text>
-                      </View>
-                      <Icon
-                        name={expandedFAQ === faq.id ? "remove-circle-outline" : "add-circle-outline"}
-                        size={24}
-                        color={COLORS.primary}
-                      />
-                    </TouchableOpacity>
-                    {expandedFAQ === faq.id && (
-                      <View style={styles.faqAnswer}>
-                        <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* User Guide */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("userGuide")}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="menu-book" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>User Guide</Text>
-              </View>
-              <Icon
-                name={expandedSections.userGuide ? "expand-less" : "expand-more"}
-                size={24}
-                color={COLORS.darkGray}
-              />
-            </TouchableOpacity>
-
-            {expandedSections.userGuide && (
-              <View style={styles.guideContainer}>
-                <Text style={styles.guideText}>
-                  Access the comprehensive RAHC User Guide for detailed instructions on:
-                </Text>
-                <View style={styles.guideList}>
-                  <Text style={styles.guideItem}>• Getting started with RAHC</Text>
-                  <Text style={styles.guideItem}>• Using AI Health Assessment</Text>
-                  <Text style={styles.guideItem}>• Tracking your health</Text>
-                  <Text style={styles.guideItem}>• Emergency services features</Text>
-                  <Text style={styles.guideItem}>• Managing notifications & reminders</Text>
-                  <Text style={styles.guideItem}>• Using offline features</Text>
-                  <Text style={styles.guideItem}>• Troubleshooting common issues</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={handleViewUserGuide}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="description" size={20} color={COLORS.white} />
-                  <Text style={styles.actionButtonText}>View User Guide</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Feedback */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("feedback")}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="feedback" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Send Feedback</Text>
-              </View>
-              <Icon
-                name={expandedSections.feedback ? "expand-less" : "expand-more"}
-                size={24}
-                color={COLORS.darkGray}
-              />
-            </TouchableOpacity>
-
-            {expandedSections.feedback && (
-              <View style={styles.formContainer}>
-                <Text style={styles.formLabel}>
-                  We&apos;d love to hear your thoughts! Share your feedback to help us improve RAHC.
-                </Text>
-                <TextInput
-                  style={styles.textArea}
-                  value={feedbackText}
-                  onChangeText={setFeedbackText}
-                  placeholder="Share your feedback, suggestions, or what you love about RAHC..."
-                  placeholderTextColor={COLORS.lightGray}
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                />
-                <TouchableOpacity
-                  style={styles.submitButton}
-                  onPress={handleSendFeedback}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="send" size={20} color={COLORS.white} />
-                  <Text style={styles.submitButtonText}>Send Feedback</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Report Issue */}
-          <View style={styles.card}>
-            <TouchableOpacity
-              style={styles.cardHeader}
-              onPress={() => toggleSection("reportIssue")}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Icon name="bug-report" size={24} color={COLORS.primary} style={{ marginRight: 12 }} />
-                <Text style={styles.cardTitle}>Report an Issue</Text>
-              </View>
-              <Icon
-                name={expandedSections.reportIssue ? "expand-less" : "expand-more"}
-                size={24}
-                color={COLORS.darkGray}
-              />
-            </TouchableOpacity>
-
-            {expandedSections.reportIssue && (
-              <View style={styles.formContainer}>
-                <Text style={styles.formLabel}>
-                  Found a bug or issue? Let us know so we can fix it.
-                </Text>
-
-                <Text style={styles.inputLabel}>Issue Title</Text>
-                <TextInput
-                  style={styles.input}
-                  value={issueTitle}
-                  onChangeText={setIssueTitle}
-                  placeholder="Brief description of the issue"
-                  placeholderTextColor={COLORS.lightGray}
-                />
-
-                <Text style={styles.inputLabel}>Priority</Text>
-                <TouchableOpacity
-                  style={styles.selectRow}
-                  onPress={() => setPriorityModalVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.selectRowValue}>{issuePriority}</Text>
-                  <Icon name="keyboard-arrow-down" size={22} color={COLORS.darkGray} />
-                </TouchableOpacity>
-
-                <Text style={styles.inputLabel}>Issue Description</Text>
-                <TextInput
-                  style={styles.textArea}
-                  value={issueDescription}
-                  onChangeText={(t) => setIssueDescription(t.slice(0, DESCRIPTION_MAX))}
-                  placeholder={`Detailed description of the issue (max ${DESCRIPTION_MAX} characters)...`}
-                  placeholderTextColor={COLORS.lightGray}
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                />
-                <Text style={styles.charCount}>{issueDescription.length}/{DESCRIPTION_MAX}</Text>
-
-                <View style={styles.attachmentRow}>
-                  <TouchableOpacity style={styles.actionButton} onPress={pickIssuePhoto} activeOpacity={0.7}>
-                    <Icon name="attach-file" size={20} color={COLORS.white} />
-                    <Text style={styles.actionButtonText}>Add Photo</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.limitNote}>Up to 2 photos, each under 2 MB</Text>
-                </View>
-                {issuePhotos.length > 0 && (
-                  <View>
-                    {issuePhotos.map((p, idx) => (
-                      <View key={`${p.fileName}-${idx}`} style={styles.attachmentPreview}>
-                        <Image source={{ uri: p.uri }} style={styles.attachmentImage} />
-                        <View style={styles.attachmentActions}>
-                          <Text style={styles.attachmentName}>{p.fileName}</Text>
-                          <TouchableOpacity onPress={() => removeIssuePhotoAt(idx)}>
-                            <Text style={styles.removeAttachment}>Remove</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <TouchableOpacity
-                  style={styles.submitButton}
-                  onPress={handleReportIssue}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="report-problem" size={20} color={COLORS.white} />
-                  <Text style={styles.submitButtonText}>Report Issue</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <Icon name="arrow-back" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
-            <Text style={styles.backButtonText}>Back to Profile</Text>
-          </TouchableOpacity>
+          <View style={{ height: 50 }} />
         </ScrollView>
       </CurvedBackground>
 
-      {/* StatusModal for success/error messages */}
+      {/* Modal Sections */}
+      <Modal
+        visible={!!activeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActiveModal(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                {activeModal === 'faq' && <Icon name="question-answer" size={22} color={COLORS.primary} />}
+                {activeModal === 'guide' && <Icon name="menu-book" size={22} color={COLORS.primary} />}
+                {activeModal === 'feedback' && <Icon name="feedback" size={22} color={COLORS.primary} />}
+                {activeModal === 'issue' && <Icon name="bug-report" size={22} color={COLORS.primary} />}
+                <Text style={styles.modalTitle}>
+                  {activeModal === 'faq' && 'Frequently Asked Questions'}
+                  {activeModal === 'guide' && 'User Guide'}
+                  {activeModal === 'feedback' && 'Send Feedback'}
+                  {activeModal === 'issue' && 'Report an Issue'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setActiveModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="close" size={22} color={COLORS.darkText} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {activeModal === 'faq' && (
+                <View style={styles.faqContainer}>
+                  {faqs.map((faq) => (
+                    <View key={faq.id} style={styles.faqItem}>
+                      <TouchableOpacity
+                        style={styles.faqQuestion}
+                        onPress={() => toggleFAQ(faq.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.faqCategory}>{faq.category}</Text>
+                          <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                        </View>
+                        <Icon
+                          name={expandedFAQ === faq.id ? "remove-circle-outline" : "add-circle-outline"}
+                          size={24}
+                          color={COLORS.primary}
+                        />
+                      </TouchableOpacity>
+                      {expandedFAQ === faq.id && (
+                        <View style={styles.faqAnswer}>
+                          <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {activeModal === 'guide' && (
+                <View style={styles.guideContainer}>
+                  <Text style={styles.guideText}>
+                    Access the comprehensive RAHC User Guide for detailed instructions on:
+                  </Text>
+                  <View style={styles.guideList}>
+                    <Text style={styles.guideItem}>• Getting started with RAHC</Text>
+                    <Text style={styles.guideItem}>• Using AI Health Assessment</Text>
+                    <Text style={styles.guideItem}>• Tracking your health</Text>
+                    <Text style={styles.guideItem}>• Emergency services features</Text>
+                    <Text style={styles.guideItem}>• Managing notifications & reminders</Text>
+                    <Text style={styles.guideItem}>• Using offline features</Text>
+                    <Text style={styles.guideItem}>• Troubleshooting common issues</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={handleViewUserGuide}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="description" size={20} color={COLORS.white} />
+                    <Text style={styles.actionButtonText}>View User Guide</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {activeModal === 'feedback' && (
+                <View style={styles.formContainer}>
+                  <Text style={styles.formLabel}>
+                    We&apos;d love to hear your thoughts! Share your feedback to help us improve RAHC.
+                  </Text>
+                  <TextInput
+                    style={styles.textArea}
+                    value={feedbackText}
+                    onChangeText={setFeedbackText}
+                    placeholder="Share your feedback, suggestions, or what you love about RAHC..."
+                    placeholderTextColor={COLORS.lightGray}
+                    multiline
+                    numberOfLines={6}
+                    textAlignVertical="top"
+                  />
+                  <TouchableOpacity
+                    style={styles.submitButton}
+                    onPress={handleSendFeedback}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="send" size={20} color={COLORS.white} />
+                    <Text style={styles.submitButtonText}>Send Feedback</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {activeModal === 'issue' && (
+                <View style={styles.formContainer}>
+                  <Text style={styles.formLabel}>
+                    Found a bug or issue? Let us know so we can fix it.
+                  </Text>
+
+                  <Text style={styles.inputLabel}>Issue Title</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={issueTitle}
+                    onChangeText={setIssueTitle}
+                    placeholder="Brief description of the issue"
+                    placeholderTextColor={COLORS.lightGray}
+                  />
+
+                  <Text style={styles.inputLabel}>Priority</Text>
+                  <View style={styles.selectRow}>
+                    <Text style={styles.selectRowValue}>{issuePriority}</Text>
+                    <Icon name="keyboard-arrow-down" size={22} color={COLORS.darkGray} />
+                  </View>
+
+                  <Text style={styles.inputLabel}>Issue Description</Text>
+                  <TextInput
+                    style={styles.textArea}
+                    value={issueDescription}
+                    onChangeText={(t) => setIssueDescription(t.slice(0, DESCRIPTION_MAX))}
+                    placeholder={`Detailed description of the issue (max ${DESCRIPTION_MAX} characters)...`}
+                    placeholderTextColor={COLORS.lightGray}
+                    multiline
+                    numberOfLines={6}
+                    textAlignVertical="top"
+                  />
+                  <Text style={styles.charCount}>{issueDescription.length}/{DESCRIPTION_MAX}</Text>
+
+                  <View style={styles.attachmentRow}>
+                    <TouchableOpacity style={styles.actionButton} onPress={pickIssuePhoto} activeOpacity={0.7}>
+                      <Icon name="attach-file" size={20} color={COLORS.white} />
+                      <Text style={styles.actionButtonText}>Add Photo</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.limitNote}>Up to 2 photos, each under 2 MB</Text>
+                  </View>
+                  {issuePhotos.length > 0 && (
+                    <View>
+                      {issuePhotos.map((p, idx) => (
+                        <View key={`${p.fileName}-${idx}`} style={styles.attachmentPreview}>
+                          <Image source={{ uri: p.uri }} style={styles.attachmentImage} />
+                          <View style={styles.attachmentActions}>
+                            <Text style={styles.attachmentName}>{p.fileName}</Text>
+                            <TouchableOpacity onPress={() => removeIssuePhotoAt(idx)}>
+                              <Text style={styles.removeAttachment}>Remove</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.submitButton}
+                    onPress={handleReportIssue}
+                    activeOpacity={0.7}
+                  >
+                    <Icon name="report-problem" size={20} color={COLORS.white} />
+                    <Text style={styles.submitButtonText}>Report Issue</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <StatusModal
         visible={modalVisible}
+        message={modalMessage}
         type={modalType}
         title={modalTitle}
-        message={modalMessage}
         onClose={() => setModalVisible(false)}
-      />
-
-      {/* Priority selection modal */}
-      <StatusModal
-        visible={priorityModalVisible}
-        type="info"
-        title="Select Priority"
-        message="Choose an issue priority."
-        onClose={() => setPriorityModalVisible(false)}
-        buttons={[
-          { label: 'Low', onPress: () => { setIssuePriority('Low'); setPriorityModalVisible(false); } },
-          { label: 'Medium', onPress: () => { setIssuePriority('Medium'); setPriorityModalVisible(false); } },
-          { label: 'High', onPress: () => { setIssuePriority('High'); setPriorityModalVisible(false); } },
-          { label: 'Critical', onPress: () => { setIssuePriority('Critical'); setPriorityModalVisible(false); } },
-          { label: 'Cancel', onPress: () => setPriorityModalVisible(false), variant: 'secondary' },
-        ]}
       />
     </SafeAreaView>
   );
 }
-
-// Priority selection modal using StatusModal for consistency
-// Rendered after component to keep JSX readable
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -681,75 +656,162 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 0,
+    paddingTop: 12,
     paddingBottom: 16,
     backgroundColor: "transparent",
   },
+  heroTitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 16,
+    color: COLORS.darkText,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    paddingHorizontal: 0,
+    marginBottom: 20,
+    gap: 12,
+  },
+  sectionCard: {
+    width: '47%',
+    aspectRatio: 1.05,
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)'
+  },
+  sectionCardActive: {
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    elevation: 3,
+  },
+  sectionIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(67,160,71,0.12)',
+    marginBottom: 10,
+  },
+  sectionCardTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+    marginTop: 2,
+    textAlign: 'left',
+  },
+  sectionCardSubtitle: {
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontSize: 12,
+    color: COLORS.darkGray,
+    marginTop: 4,
+    textAlign: 'left',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalTitle: {
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+    color: COLORS.darkText,
+  },
+  modalBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   contactCard: {
-    backgroundColor: COLORS.primary + "15",
+    backgroundColor: COLORS.white,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: COLORS.primary + "30",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   contactHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   contactTitle: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 20,
+    fontSize: 18,
     color: COLORS.darkText,
     marginLeft: 12,
   },
   contactText: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
-    color: COLORS.darkText,
-    marginBottom: 4,
+    color: COLORS.darkGray,
+    marginBottom: 8,
   },
   emailLink: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
+    fontSize: 14,
     color: COLORS.primary,
     textDecorationLine: "underline",
   },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardTitle: {
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 18,
-    color: COLORS.darkText,
-  },
   faqContainer: {
-    marginTop: 16,
+    paddingHorizontal: 0,
+    paddingBottom: 16,
   },
   faqItem: {
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-    paddingBottom: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.lightGray,
+    paddingVertical: 12,
   },
   faqQuestion: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingVertical: 8,
   },
   faqCategory: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -759,14 +821,14 @@ const styles = StyleSheet.create({
   },
   faqQuestionText: {
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
+    fontSize: 14,
     color: COLORS.darkText,
+    flex: 1,
   },
   faqAnswer: {
     marginTop: 12,
-    paddingLeft: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.primary,
+    paddingLeft: 16,
+    paddingRight: 8,
   },
   faqAnswerText: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -775,39 +837,26 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   guideContainer: {
-    marginTop: 16,
+    padding: 16,
   },
   guideText: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
-    color: COLORS.darkText,
+    color: COLORS.darkGray,
     marginBottom: 12,
   },
   guideList: {
-    marginBottom: 16,
+    marginVertical: 12,
   },
   guideItem: {
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
-    color: COLORS.darkGray,
+    color: COLORS.darkText,
     marginBottom: 8,
-  },
-  actionButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  actionButtonText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
+    lineHeight: 20,
   },
   formContainer: {
-    marginTop: 16,
+    padding: 16,
   },
   formLabel: {
     fontFamily: FONTS.BarlowSemiCondensed,
@@ -842,42 +891,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.BarlowSemiCondensed,
     fontSize: 14,
     minHeight: 120,
-  },
-  submitButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
-    gap: 8,
-  },
-  submitButtonText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
-  },
-  backButton: {
-    backgroundColor: COLORS.primary,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 100,
-    marginTop: 8,
-  },
-  backButtonText: {
-    color: COLORS.white,
-    fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 16,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    borderRadius: 8,
-    backgroundColor: COLORS.white,
   },
   charCount: {
     alignSelf: "flex-end",
@@ -921,6 +934,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.primary,
     textDecorationLine: "underline",
+  },
+  submitButton: {
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  submitButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
+  },
+  actionButton: {
+    backgroundColor: COLORS.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 16,
   },
   selectRow: {
     borderWidth: 1,

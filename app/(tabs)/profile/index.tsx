@@ -1261,19 +1261,19 @@ export default function Profile() {
             />
           </View>
 
-          {/* Notification Debug Link */}
+          {/* Help & Support */}
           <View style={styles.listCard}>
             <TouchableOpacity 
               style={styles.listItem} 
-              onPress={() => router.push("/(tabs)/profile/notification-debug")} 
+              onPress={() => router.push("/(tabs)/profile/help-support")} 
               activeOpacity={0.85}
             >
               <View style={styles.listIconWrap}>
-                <Icon name="bug-report" size={20} color={COLORS.primary} />
+                <Icon name="help" size={20} color={COLORS.primary} />
               </View>
               <View style={styles.listTextWrap}>
-                <Text style={styles.listTitle}>Notification Debug</Text>
-                <Text style={styles.listSubtitle}>Test notification settings & permissions</Text>
+                <Text style={styles.listTitle}>Help & Support</Text>
+                <Text style={styles.listSubtitle}>FAQs, user guide, and contact support</Text>
               </View>
               <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
             </TouchableOpacity>

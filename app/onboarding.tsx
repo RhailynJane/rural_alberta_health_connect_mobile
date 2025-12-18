@@ -30,7 +30,7 @@ const onboardingData = [
     iconColor: "#2A7DE1",
   },
   {
-    image: require("../assets/images/onboarding-2.jpg"),
+    image: require("../assets/images/onboarding-2.gif"),
     title: "Care for Rural Alberta",
     description: "Find clinics, emergency contacts, and support built for remote communities.",
     color: "#ffffff",
@@ -40,7 +40,7 @@ const onboardingData = [
     image: require("../assets/images/onboarding-3.gif"),
     title: "Privacy as Standard",
     description: "Your health data stays encrypted and in your control—always.",
-    color: "#ffffff",
+    color: "#262159",
     iconColor: "#4CAF50",
   },
 ];
