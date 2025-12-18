@@ -55,4 +55,4 @@ We expect all contributors to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md
 ## Contact
 
 Rhailyn Jane Cona - rhailynjane.cona@edu.sait.ca
-Yue Zhou - Yue.Zhou@edu.sait.ca
+Yue Zhou - Yue.Zhou@edu.sait.catest

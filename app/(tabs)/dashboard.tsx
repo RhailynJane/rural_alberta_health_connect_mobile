@@ -3,10 +3,11 @@
 import { Q } from "@nozbe/watermelondb";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useConvexAuth, useQuery } from "convex/react";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,13 +15,20 @@ import {
   View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Defs, Polyline, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
+// PNG icons from assets
+// If filenames differ, update the require() paths below accordingly.
+
 import { api } from "../../convex/_generated/api";
 import { useWatermelonDatabase } from "../../watermelon/hooks/useDatabase";
+import { analyzeDuplicates, dedupeHealthEntries } from "../../watermelon/utils/dedupeHealthEntries";
+import { filterActiveHealthEntries } from "../../watermelon/utils/filterActiveHealthEntries";
+import { listTombstones } from "../../watermelon/utils/tombstones";
 import BottomNavigation from "../components/bottomNavigation";
 import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import DueReminderBanner from "../components/DueReminderBanner";
-import HealthStatusTag from "../components/HealthStatusTag";
+import { useSideMenu } from "../components/SideMenuProvider";
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
@@ -34,6 +42,10 @@ export default function Dashboard() {
   const [cachedUser, setCachedUser] = useState<any>(null);
   const [cachedWeeklyEntries, setCachedWeeklyEntries] = useState<any[]>([]);
   const [localWeeklyEntries, setLocalWeeklyEntries] = useState<any[]>([]);
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(6);
+  const [chartSize, setChartSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [pillTooltip, setPillTooltip] = useState<null | "Mild" | "Moderate" | "Severe" | "No data">(null);
+  const [healthTooltipOpen, setHealthTooltipOpen] = useState<boolean>(false);
   const queryArgs = isAuthenticated && !isLoading ? {} : "skip";
   
   // Modal state
@@ -41,6 +53,8 @@ export default function Dashboard() {
   const [modalTitle, setModalTitle] = useState<string>("");
   const [modalMessage, setModalMessage] = useState<string>("");
   const [modalButtons, setModalButtons] = useState<{ label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'destructive' }[]>([]);
+  
+  const sideMenu = useSideMenu();
 
   // Get current user data (allow offline access via cache)
   const user = useQuery(api.users.getCurrentUser, queryArgs);
@@ -159,13 +173,22 @@ export default function Dashboard() {
 
           const mapped = entries.map((entry: any) => ({
             _id: entry.id,
+            convexId: entry.convexId,
             symptoms: entry.symptoms || "",
             severity: entry.severity || 0,
             timestamp: entry.timestamp || Date.now(),
+            type: entry.type || "",
+            isDeleted: entry.isDeleted ?? false,
+            lastEditedAt: entry.lastEditedAt ?? entry.timestamp ?? Date.now(),
+            editCount: entry.editCount ?? 0,
           }));
-          console.log(`📊 [DASHBOARD OFFLINE] Loaded ${mapped.length} entries for last 7 days (local cache, user=${uid})`);
-          setCachedWeeklyEntries(mapped);
-          setLocalWeeklyEntries(mapped);
+          console.log(`📊 [DASHBOARD OFFLINE] Loaded ${mapped.length} raw local entries (including deleted) for last 7 days (user=${uid})`);
+          const filtered = mapped.filter(e => !e.isDeleted);
+          if (filtered.length !== mapped.length) {
+            console.log(`🗑️ [DASHBOARD OFFLINE FILTER] Removed ${mapped.length - filtered.length} deleted entries -> ${filtered.length} remaining`);
+          }
+          setCachedWeeklyEntries(filtered);
+          setLocalWeeklyEntries(filtered);
         } catch (error) {
           console.error("Error fetching offline entries from WatermelonDB:", error);
         }
@@ -200,16 +223,18 @@ export default function Dashboard() {
 
         const mapped = entries.map((entry: any) => ({
           _id: entry.id,
-          convexId: entry.convexId,
-          symptoms: entry.symptoms || "",
-          severity: entry.severity || 0,
-          timestamp: entry.timestamp || Date.now(),
-          type: entry.type || "",
+            convexId: entry.convexId,
+            symptoms: entry.symptoms || "",
+            severity: entry.severity || 0,
+            timestamp: entry.timestamp || Date.now(),
+            type: entry.type || "",
+            isDeleted: entry.isDeleted ?? false,
+            lastEditedAt: entry.lastEditedAt ?? entry.timestamp ?? Date.now(),
+            editCount: entry.editCount ?? 0,
         }));
-        
-        console.log(`📊 [DASHBOARD LOCAL RESULT] Found ${mapped.length} local entries for last 7 days`);
-        
-        setLocalWeeklyEntries(mapped);
+        const filtered = mapped.filter(e => !e.isDeleted);
+        console.log(`📊 [DASHBOARD LOCAL RESULT] Found ${mapped.length} local entries (raw) -> ${filtered.length} after filtering deleted`);
+        setLocalWeeklyEntries(filtered);
       } catch (error) {
         console.error("Error fetching local weekly entries:", error);
       }
@@ -226,35 +251,78 @@ export default function Dashboard() {
     [user, cachedUser]
   );
   // Merge local and online results to avoid temporary regressions when coming online
+  const [tombstones, setTombstones] = useState<Set<string>>(new Set());
+  useEffect(() => { (async () => { setTombstones(await listTombstones()); })(); }, [isOnline]);
   const displayedWeeklyEntries = useMemo(() => {
-    const onlineArr = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
-    const localArr = Array.isArray(localWeeklyEntries) && localWeeklyEntries.length > 0
+    const onlineRaw = Array.isArray(weeklyEntriesOnline) ? weeklyEntriesOnline : [];
+    // Ensure online entries carry deletion metadata (fallbacks if missing)
+    const onlineArr = onlineRaw.map((e: any) => ({
+      ...e,
+      isDeleted: e.isDeleted ?? false,
+      lastEditedAt: e.lastEditedAt ?? e.timestamp ?? Date.now(),
+      editCount: e.editCount ?? 0,
+    }));
+    const localSource = Array.isArray(localWeeklyEntries) && localWeeklyEntries.length > 0
       ? localWeeklyEntries
       : cachedWeeklyEntries;
-    
-    console.log(`📊 [DASHBOARD MERGE] Online: ${onlineArr.length}, Local: ${localArr.length}, Cached: ${cachedWeeklyEntries.length}`);
+    const localArr = localSource.map((e: any) => ({
+      ...e,
+      isDeleted: e.isDeleted ?? false,
+      lastEditedAt: e.lastEditedAt ?? e.timestamp ?? Date.now(),
+      editCount: e.editCount ?? 0,
+    }));
+
+    // Filter out deleted entries before dedupe/merge for consistent counts
+  const filteredOnline = filterActiveHealthEntries(onlineArr as any, tombstones);
+  const filteredLocal = filterActiveHealthEntries(localArr as any, tombstones);
+
+    console.log(`📊 [DASHBOARD MERGE] Online(raw): ${onlineArr.length} -> ${filteredOnline.length} active, Local(raw): ${localArr.length} -> ${filteredLocal.length} active, Cached(raw): ${cachedWeeklyEntries.length}`);
     
     // When online: prefer whichever has MORE entries (more up-to-date)
     // This handles the case where sync completes but Convex query hasn't refetched yet
-    if (isOnline && onlineArr.length > 0 && localArr.length > 0) {
-      if (localArr.length > onlineArr.length) {
-        console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer): ${localArr.length} > ${onlineArr.length}`);
-        return localArr;
+    if (isOnline && filteredOnline.length > 0 && filteredLocal.length > 0) {
+      if (filteredLocal.length > filteredOnline.length) {
+        console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries (newer, active): ${filteredLocal.length} > ${filteredOnline.length}`);
+        const deduped = dedupeHealthEntries(filteredLocal as any);
+        if (deduped.length !== filteredLocal.length) {
+          console.log(`🧹 [DASHBOARD DEDUPE] Local active entries reduced ${filteredLocal.length} -> ${deduped.length}`);
+          const dups = analyzeDuplicates(filteredLocal as any);
+          if (dups.length) {
+            console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+          }
+        }
+        return deduped;
       }
-      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online active entries: ${filteredOnline.length}`);
+      const dedupedOnline = dedupeHealthEntries(filteredOnline as any);
+      if (dedupedOnline.length !== filteredOnline.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online active entries reduced ${filteredOnline.length} -> ${dedupedOnline.length}`);
+        const dups = analyzeDuplicates(filteredOnline as any);
+        if (dups.length) {
+          console.log(`🧪 [DASHBOARD DUP GROUPS] ${dups.length} groups`, dups.map(g => ({ picked: g.pickedId, candidates: g.candidates.map(c => c._id) })));
+        }
+      }
+      return dedupedOnline;
     }
     
     // Fallback: prefer online if available, else local
-    if (onlineArr.length > 0) {
-      console.log(`📊 [DASHBOARD MERGE RESULT] Using online entries: ${onlineArr.length}`);
-      return onlineArr;
+    if (filteredOnline.length > 0) {
+      console.log(`📊 [DASHBOARD MERGE RESULT] Using online active entries (no local): ${filteredOnline.length}`);
+      const dedupedOnline = dedupeHealthEntries(filteredOnline as any);
+      if (dedupedOnline.length !== filteredOnline.length) {
+        console.log(`🧹 [DASHBOARD DEDUPE] Online active entries reduced ${filteredOnline.length} -> ${dedupedOnline.length}`);
+      }
+      return dedupedOnline;
     }
     
     // Offline mode: use local entries
-    console.log(`📊 [DASHBOARD MERGE RESULT] Using local entries: ${localArr.length}`);
-    return localArr;
-  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries]);
+    console.log(`📊 [DASHBOARD MERGE RESULT] Using local active entries (offline): ${filteredLocal.length}`);
+    const dedupedLocal = dedupeHealthEntries(filteredLocal as any);
+    if (dedupedLocal.length !== filteredLocal.length) {
+      console.log(`🧹 [DASHBOARD DEDUPE] Local active entries reduced ${filteredLocal.length} -> ${dedupedLocal.length}`);
+    }
+    return dedupedLocal;
+  }, [isOnline, weeklyEntriesOnline, localWeeklyEntries, cachedWeeklyEntries, tombstones]);
 
 
 
@@ -286,6 +354,84 @@ export default function Dashboard() {
       setHealthStatus("Poor");
     }
   }, [weeklyHealthScore, displayedWeeklyEntries]);
+
+  // Build 7-day chart data for health logs
+  const weeklyLog = useMemo(() => {
+    const today = new Date();
+    const days = Array.from({ length: 7 }).map((_, idx) => {
+      const date = new Date(today);
+      date.setHours(0, 0, 0, 0);
+      date.setDate(today.getDate() - (6 - idx));
+      const next = new Date(date);
+      next.setDate(date.getDate() + 1);
+      const dayEntries = (displayedWeeklyEntries || []).filter((entry: any) => {
+        const ts = new Date(entry.timestamp);
+        return ts >= date && ts < next && !entry.isDeleted;
+      });
+      const count = dayEntries.length;
+      const avgSeverity = count
+        ? dayEntries.reduce((sum: number, e: any) => sum + (e.severity ?? 0), 0) / count
+        : 0;
+      const status = count === 0
+        ? "No data"
+        : avgSeverity <= 3
+          ? "Mild"
+          : avgSeverity <= 6
+            ? "Moderate"
+            : "Severe";
+
+      return {
+        label: date.toLocaleDateString("en-US", { weekday: "short" }),
+        dateLabel: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        count,
+        avgSeverity,
+        status,
+      };
+    });
+
+    const maxCount = Math.max(1, ...days.map((d) => d.count));
+    const total = days.reduce((sum, d) => sum + d.count, 0);
+    const trend = days[6]?.count - days[5]?.count;
+
+    return { days, maxCount, total, trend };
+  }, [displayedWeeklyEntries]);
+
+  const statusBuckets = useMemo(() => {
+    return (displayedWeeklyEntries || []).reduce(
+      (acc, entry: any) => {
+        const severity = entry.severity ?? 0;
+        if (severity <= 3) acc.mild += 1;
+        else if (severity <= 6) acc.moderate += 1;
+        else acc.severe += 1;
+        return acc;
+      },
+      { mild: 0, moderate: 0, severe: 0 }
+    );
+  }, [displayedWeeklyEntries]);
+
+  const statusCopy: Record<string, string> = {
+    Mild: "Severity 0-3. Mild or no symptoms logged.",
+    Moderate: "Severity 4-6. Monitor symptoms and follow care plan.",
+    Severe: "Severity 7-10. Consider contacting care or 811/911 as needed.",
+    "No data": "No logs for this day. Add a health entry to stay on track.",
+  };
+
+  const statusPalette = useMemo((): { gradient: [string, string]; text: string } => {
+    switch (healthStatus) {
+      case "Excellent":
+        return { gradient: ["#38d39f", "#2fa87b"], text: "#ffffff" };
+      case "Good":
+        return { gradient: ["#4fa3ff", "#2f80ed"], text: "#ffffff" };
+      case "Fair":
+        return { gradient: ["#ffb347", "#ff8f39"], text: "#1a1a1a" };
+      case "Poor":
+        return { gradient: ["#ff6b6b", "#e63946"], text: "#ffffff" };
+      default:
+        return { gradient: ["#9baec8", "#7a8aa1"], text: "#ffffff" };
+    }
+  }, [healthStatus]);
+
+  const selectedDay = weeklyLog.days[selectedDayIndex] ?? weeklyLog.days[weeklyLog.days.length - 1];
 
   // Use displayUser and cached data for offline support
   const userName = displayUser?.firstName || user?.firstName || "User";
@@ -334,9 +480,23 @@ export default function Dashboard() {
     router.push("/(tabs)/ai-assess");
   };
 
-  const handleEmergencyCall = (): void => {
-    setModalTitle("Emergency Call");
-    setModalMessage("For life-threatening emergencies, call 911 immediately.");
+
+
+  const navigateToHistory = (): void => {
+    router.push("/tracker");
+  };
+
+  const navigateToDailyLog = (): void => {
+    router.push("/tracker");
+  };
+
+  const navigateToFindCare = (): void => {
+    router.push("/find-care");
+  };
+
+  const handleSignOut = (): void => {
+    setModalTitle("Sign Out");
+    setModalMessage("Are you sure you want to sign out?");
     setModalButtons([
       {
         label: "Cancel",
@@ -344,16 +504,10 @@ export default function Dashboard() {
         variant: 'secondary',
       },
       {
-        label: "Call 911",
+        label: "Sign Out",
         onPress: () => {
           setModalVisible(false);
-          Linking.openURL("tel:911").catch((err) => {
-            console.error("Error calling 911:", err);
-            setModalTitle("Error");
-            setModalMessage("Could not make the call. Please check your device.");
-            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
-            setModalVisible(true);
-          });
+          router.replace("/auth/signin");
         },
         variant: 'destructive',
       },
@@ -361,57 +515,20 @@ export default function Dashboard() {
     setModalVisible(true);
   };
 
-  const callHealthLink = (): void => {
-    setModalTitle("Health Link Alberta");
-    setModalMessage("Call 811 for non-emergency health advice?");
-    setModalButtons([
-      {
-        label: "Cancel",
-        onPress: () => setModalVisible(false),
-        variant: 'secondary',
-      },
-      {
-        label: "Call 811",
-        onPress: () => {
-          setModalVisible(false);
-          Linking.openURL("tel:811").catch((err) => {
-            console.error("Error calling 811:", err);
-            setModalTitle("Error");
-            setModalMessage("Could not make the call. Please check your device.");
-            setModalButtons([{ label: 'OK', onPress: () => setModalVisible(false), variant: 'primary' }]);
-            setModalVisible(true);
-          });
-        },
-        variant: 'primary',
-      },
-    ]);
-    setModalVisible(true);
-  };
-
-  const navigateToHistory = (): void => {
-    router.push("/tracker/history");
-  };
-
-  const navigateToDailyLog = (): void => {
-    router.push("/tracker/daily-log");
-  };
-
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
         {/* Due reminder banner (offline-capable) */}
-        <DueReminderBanner topOffset={120} />
+        <DueReminderBanner topOffset={70} />
         
-        {/* Fixed Header */}
+        {/* Header */}
         <CurvedHeader
-          title="Alberta Health Connect"
-          height={150}
           showLogo={true}
-          screenType="signin"
-          bottomSpacing={0}
           showNotificationBell={true}
           reminderEnabled={reminderSettings?.enabled || false}
           reminderSettings={reminderSettings || null}
+          showMenuButton={true}
+          onMenuPress={sideMenu.open}
         />
 
         {/* Content Area - Takes all available space minus header and bottom nav */}
@@ -421,104 +538,169 @@ export default function Dashboard() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.contentSection}>
-              {/* Welcome Section */}
-              <View style={styles.welcomeContainer}>
-                <Text
-                  style={[
-                    styles.welcomeText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
+              {/* Health Status Card */}
+              <View>
+                <LinearGradient
+                  colors={statusPalette.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.healthStatusContainer}
                 >
-                  Welcome, {userName}!
-                </Text>
-                <View style={styles.healthStatusContainer}>
-                  <Text
-                    style={[
-                      styles.healthStatusLabel,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Health Status
-                  </Text>
-                  <HealthStatusTag status={healthStatus} />
-                </View>
-              </View>
-
-              {/* Weekly Health Score Card */}
-              <View style={styles.healthScoreCard}>
-                <View style={styles.healthScoreHeader}>
-                  <Text
-                    style={[
-                      styles.healthScoreTitle,
-                      { fontFamily: FONTS.BarlowSemiCondensed },
-                    ]}
-                  >
-                    Weekly Health Score
-                  </Text>
-                  <TouchableOpacity onPress={navigateToHistory}>
-                    <Text
-                      style={[
-                        styles.viewDetailsText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      View Details
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.healthScoreContent}></View>
-                <Text
-                  style={[
-                    styles.healthScoreValue,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {displayedWeeklyEntries && displayedWeeklyEntries.length > 0
-                    ? `${weeklyHealthScore}/10`
-                    : "N/A"}
-                </Text>
-                <Text
-                  style={[
-                    styles.healthScoreSubtitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {displayedWeeklyEntries && displayedWeeklyEntries.length > 0
-                    ? `Based on ${displayedWeeklyEntries.length} ${displayedWeeklyEntries.length === 1 ? 'entry' : 'entries'} in last 7 days`
-                    : "No entries in last 7 days"}
-                </Text>
-
-                {/* Health Score Progress Bar - only show if there are entries */}
-                {displayedWeeklyEntries && displayedWeeklyEntries.length > 0 && (
-                  <>
-                    <View style={styles.progressBarContainer}>
-                      <View
-                        style={[
-                          styles.progressBar,
-                          { width: `${parseFloat(weeklyHealthScore) * 10}%` },
-                        ]}
-                      />
-                    </View>
-
-                    <View style={styles.scoreInterpretation}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.healthStatusHeaderRow}>
                       <Text
                         style={[
-                          styles.interpretationText,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
+                          styles.healthStatusLabel,
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text },
                         ]}
                       >
-                        {parseFloat(weeklyHealthScore) >= 8.0
-                          ? "🎉 Excellent! Keep up the good work!"
-                          : parseFloat(weeklyHealthScore) >= 6.0
-                            ? "👍 Good overall health status"
-                            : parseFloat(weeklyHealthScore) >= 4.0
-                              ? "⚠️ Fair - monitor your symptoms"
-                              : "🚨 Poor - consider seeking medical advice"}
+                        Health Status
+                      </Text>
+                      <Text
+                        style={[
+                          styles.healthStatusBadge,
+                          { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text },
+                        ]}
+                      >
+                        {healthStatus}
                       </Text>
                     </View>
-                  </>
+                    <TouchableOpacity onPress={() => setHealthTooltipOpen((prev) => !prev)}>
+                      <Text style={[styles.healthStatusInfo, { fontFamily: FONTS.BarlowSemiCondensed, color: statusPalette.text }]}>How is this decided?</Text>
+                    </TouchableOpacity>
+                  </View>
+                </LinearGradient>
+                {healthTooltipOpen && (
+                  <View style={styles.tooltipCard}>
+                    <Text style={[styles.tooltipText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                      Based on the average weekly score (10 - severity) across your last 7 days of logs: Excellent ≥ 8, Good ≥ 6, Fair ≥ 4, Poor otherwise. Needs at least one log.
+                    </Text>
+                  </View>
                 )}
+              </View>
+
+              {/* Weekly Health Log Chart */}
+              <View style={styles.weeklyCard}>
+                <LinearGradient
+                  colors={["#e9f0ff", "#ffffff"] as [string, string]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.weeklyCardGradient}
+                >
+                  <View style={styles.weeklyHeaderRow}>
+                    <View>
+                      <Text style={[styles.weeklyTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>Last 7 days</Text>
+                      <Text style={[styles.weeklySubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                        {weeklyLog.total} {weeklyLog.total === 1 ? "log" : "logs"} captured
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={navigateToHistory}>
+                      <Text style={[styles.viewDetailsText, { fontFamily: FONTS.BarlowSemiCondensed }]}>History</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.statusPillsRow}>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Mild" ? null : "Mild")}>
+                      <View style={[styles.dot, { backgroundColor: "#34c759" }]} />
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Mild {statusBuckets.mild}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Moderate" ? null : "Moderate")}>
+                      <View style={[styles.dot, { backgroundColor: "#f5a524" }]} />
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Moderate {statusBuckets.moderate}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.statusPill} onPress={() => setPillTooltip((prev) => prev === "Severe" ? null : "Severe")}>
+                      <View style={[styles.dot, { backgroundColor: "#ff3b30" }]} />
+                      <Text style={[styles.pillText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Severe {statusBuckets.severe}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {pillTooltip && (
+                    <View style={styles.tooltipCard}>
+                      <Text style={[styles.tooltipTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{pillTooltip}</Text>
+                      <Text style={[styles.tooltipText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{statusCopy[pillTooltip]}</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.dayTabsRow}>
+                    {weeklyLog.days.map((day, idx) => (
+                      <TouchableOpacity
+                        key={day.label + day.dateLabel}
+                        style={[
+                          styles.dayTab,
+                          idx === selectedDayIndex && styles.dayTabActive,
+                        ]}
+                        onPress={() => setSelectedDayIndex(idx)}
+                      >
+                        <Text style={[styles.dayTabLabel, idx === selectedDayIndex && styles.dayTabLabelActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          {day.label}
+                        </Text>
+                        <Text style={[styles.dayTabDate, idx === selectedDayIndex && styles.dayTabDateActive, { fontFamily: FONTS.BarlowSemiCondensed }]}>{day.dateLabel}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View
+                    style={styles.chartSurface}
+                    onLayout={({ nativeEvent }) => {
+                      const { width, height } = nativeEvent.layout;
+                      if (width !== chartSize.width || height !== chartSize.height) {
+                        setChartSize({ width, height });
+                      }
+                    }}
+                  >
+                    {chartSize.width > 0 && chartSize.height > 0 && (
+                      <Svg width={chartSize.width} height={chartSize.height}>
+                        <Defs>
+                          <SvgLinearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+                            <Stop offset="0" stopColor="#2f80ed" stopOpacity="0.25" />
+                            <Stop offset="1" stopColor="#2f80ed" stopOpacity="0.95" />
+                          </SvgLinearGradient>
+                        </Defs>
+                        <Polyline
+                          points={weeklyLog.days
+                            .map((day, idx) => {
+                              const x = (idx / 6) * (chartSize.width - 24) + 12;
+                              const normalized = day.count / weeklyLog.maxCount;
+                              const y = (1 - normalized) * (chartSize.height - 24) + 12;
+                              return `${x},${y}`;
+                            })
+                            .join(" ")}
+                          fill="none"
+                          stroke="url(#lineGradient)"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                        />
+                        {weeklyLog.days.map((day, idx) => {
+                          const x = (idx / 6) * (chartSize.width - 24) + 12;
+                          const normalized = day.count / weeklyLog.maxCount;
+                          const y = (1 - normalized) * (chartSize.height - 24) + 12;
+                          const isActive = idx === selectedDayIndex;
+                          return (
+                            <Circle
+                              key={day.label + idx}
+                              cx={x}
+                              cy={y}
+                              r={isActive ? 6 : 4}
+                              fill={isActive ? "#2f80ed" : "#9bb9ff"}
+                            />
+                          );
+                        })}
+                      </Svg>
+                    )}
+                  </View>
+
+                  <View style={styles.dayDetailRow}>
+                    <View>
+                      <Text style={[styles.dayDetailLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>Selected</Text>
+                      <Text style={[styles.dayDetailDate, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.label} • {selectedDay?.dateLabel}</Text>
+                    </View>
+                    <View style={styles.badgeGroup}>
+                      <View style={[styles.badge, selectedDay?.status === "Mild" && styles.badgeStable, selectedDay?.status === "Moderate" && styles.badgeCautious, selectedDay?.status === "Severe" && styles.badgeCritical]}>
+                        <Text style={[styles.badgeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.status}</Text>
+                      </View>
+                      <Text style={[styles.dayCountText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{selectedDay?.count ?? 0} logged</Text>
+                    </View>
+                  </View>
+                </LinearGradient>
               </View>
 
               {/* Quick Actions */}
@@ -537,9 +719,18 @@ export default function Dashboard() {
                     style={styles.quickActionButton}
                     onPress={handleSymptomAssessment}
                   >
-                    <View style={styles.quickActionIcon}>
-                      <Text style={styles.quickActionEmoji}>🤖</Text>
-                    </View>
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/assess-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
                     <Text
                       style={[
                         styles.quickActionText,
@@ -554,105 +745,130 @@ export default function Dashboard() {
                     style={styles.quickActionButton}
                     onPress={navigateToDailyLog}
                   >
-                    <View style={styles.quickActionIcon}>
-                      <Text style={styles.quickActionEmoji}>📝</Text>
-                    </View>
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/tracker-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
                     <Text
                       style={[
                         styles.quickActionText,
                         { fontFamily: FONTS.BarlowSemiCondensed },
                       ]}
                     >
-                      Daily Log
+                      Health Tracker
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.quickActionButton}
+                    onPress={navigateToFindCare}
+                  >
+                    <LinearGradient
+                      colors={["#E8F4FF", "#D0E9FF"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.quickActionIconGradient}
+                    >
+                      <Image
+                        source={require("../../assets/images/location-icon.png")}
+                        style={styles.quickActionIcon}
+                        resizeMode="contain"
+                      />
+                    </LinearGradient>
+                    <Text
+                      style={[
+                        styles.quickActionText,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      Find Care
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* Get Help Button - Emergency Access */}
+                <TouchableOpacity
+                  style={styles.getHelpButton}
+                  onPress={() => router.push('/(tabs)/emergency')}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={["#FF6B6B", "#FF4757"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.getHelpGradient}
+                  >
+                    <View style={styles.getHelpContent}>
+                      <View style={styles.getHelpIconContainer}>
+                        <Image
+                          source={require("../../assets/images/emergency-icon.png")}
+                          style={styles.getHelpIcon}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.getHelpTextContainer}>
+                        <Text style={[styles.getHelpTitle, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>
+                          Get Help Now
+                        </Text>
+                        <Text style={[styles.getHelpSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          Access emergency services
+                        </Text>
+                      </View>
+                      <View style={styles.getHelpArrow}>
+                        <Text style={styles.getHelpArrowText}>→</Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
 
               {/* Medical Disclaimer */}
               <View style={styles.disclaimerContainer}>
-                <Text
-                  style={[
-                    styles.disclaimerTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Medical Disclaimer
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  This app provides health guidance only. It does not replace
-                  professional medical advice.
-                </Text>
-                <Text
-                  style={[
-                    styles.disclaimerText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Always consult healthcare professionals for medical concerns.
-                </Text>
-              </View>
-
-              {/* Emergency Notice */}
-              <View style={styles.emergencyContainer}>
-                <Text
-                  style={[
-                    styles.emergencyTitle,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Emergency Notice
-                </Text>
-                <Text
-                  style={[
-                    styles.emergencyText,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  For life-threatening emergencies, call 911 immediately. For
-                  urgent health concerns, contact Health Link Alberta at 811.
-                </Text>
-
-                <View style={styles.emergencyButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.emergencyButton}
-                    onPress={handleEmergencyCall}
+                <View style={styles.disclaimerIconBubble}>
+                  <Text style={[styles.disclaimerIcon, { fontFamily: FONTS.BarlowSemiCondensed }]}>ℹ️</Text>
+                </View>
+                <View style={styles.disclaimerContent}>
+                  <Text
+                    style={[
+                      styles.disclaimerTitle,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
                   >
-                    <Text
-                      style={[
-                        styles.emergencyButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Call 911
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.healthLinkButton}
-                    onPress={callHealthLink}
+                    Important
+                  </Text>
+                  <Text
+                    style={[
+                      styles.disclaimerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
                   >
-                    <Text
-                      style={[
-                        styles.healthLinkButtonText,
-                        { fontFamily: FONTS.BarlowSemiCondensed },
-                      ]}
-                    >
-                      Call Health Link
-                    </Text>
-                  </TouchableOpacity>
+                    This app offers guidance and reminders but does not replace professional medical advice.
+                  </Text>
+                  <Text
+                    style={[
+                      styles.disclaimerText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Always consult a licensed healthcare provider for diagnosis or treatment decisions.
+                  </Text>
                 </View>
               </View>
             </View>
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
+
+      {/* Side Menu rendered globally via SideMenuProvider */}
 
       {/* StatusModal for alerts and confirmations */}
       <StatusModal
@@ -682,35 +898,35 @@ const styles = StyleSheet.create({
   contentSection: {
     padding: 24,
   },
-  welcomeContainer: {
-    marginBottom: 10,
-    marginTop: -20,
-  },
-  welcomeText: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 10,
-  },
   healthStatusContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8F9FA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
+    padding: 18,
+    borderRadius: 14,
     marginBottom: 10,
+    shadowColor: "#2f80ed",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   healthStatusLabel: {
-    fontSize: 16,
-    color: "#666",
-    marginRight: 150,
+    fontSize: 14,
+    marginBottom: 4,
   },
-  healthStatusValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#28A745",
+  healthStatusHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  healthStatusBadge: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  healthStatusInfo: {
+    fontSize: 12,
+    textDecorationLine: "underline",
   },
   // Health Score Card Styles
   healthScoreCard: {
@@ -741,6 +957,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2A7DE1",
     fontWeight: "600",
+    minWidth: 60,
+    paddingHorizontal: 4,
   },
   healthScoreContent: {
     alignItems: "center",
@@ -781,52 +999,287 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     textAlign: "center",
   },
+  weeklyCard: {
+    backgroundColor: "transparent",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "#e6ecff",
+  },
+  weeklyCardGradient: {
+    padding: 18,
+  },
+  weeklyHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  weeklyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  weeklySubtitle: {
+    fontSize: 14,
+    color: "#4f5d75",
+  },
+  statusPillsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    columnGap: 8,
+    marginBottom: 14,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#e0e7ff",
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  pillText: {
+    fontSize: 13,
+    color: "#1f2a44",
+  },
+  tooltipCard: {
+    marginTop: 8,
+    marginBottom: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#dbe4ff",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  tooltipTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    marginBottom: 4,
+  },
+  tooltipText: {
+    fontSize: 13,
+    color: "#4f5d75",
+    lineHeight: 18,
+  },
+  dayTabsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  dayTab: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#edf2ff",
+    borderWidth: 1,
+    borderColor: "#dbe4ff",
+    alignItems: "center",
+  },
+  dayTabActive: {
+    backgroundColor: "#2f80ed",
+    borderColor: "#1f6fdd",
+    shadowColor: "#2f80ed",
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  dayTabLabel: {
+    color: "#1f2a44",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  dayTabLabelActive: {
+    color: "#ffffff",
+  },
+  dayTabDate: {
+    color: "#5b6478",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  dayTabDateActive: {
+    color: "#ffffff",
+  },
+  chartSurface: {
+    height: 170,
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e6ecff",
+    marginBottom: 12,
+  },
+  dayDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  dayDetailLabel: {
+    fontSize: 13,
+    color: "#6c7080",
+    marginBottom: 2,
+  },
+  dayDetailDate: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
+  badgeGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  badge: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#dbe4ff",
+    backgroundColor: "#eef2ff",
+    marginRight: 8,
+  },
+  badgeStable: {
+    backgroundColor: "#e7f7ed",
+    borderColor: "#b7e4c7",
+  },
+  badgeCautious: {
+    backgroundColor: "#fff4e5",
+    borderColor: "#ffd19a",
+  },
+  badgeCritical: {
+    backgroundColor: "#ffe8e6",
+    borderColor: "#ffc2c2",
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1f2a44",
+  },
+  dayCountText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1A1A1A",
+  },
   // Quick Actions Styles
   quickActionsContainer: {
     marginBottom: 20,
   },
   quickActionsTitle: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     color: "#1A1A1A",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   quickActionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
   },
   quickActionButton: {
     backgroundColor: "white",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
+    padding: 20,
+    borderRadius: 16,
     alignItems: "center",
     flex: 1,
-    marginHorizontal: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowColor: "#2A7DE1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  quickActionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#F0F8FF",
+  quickActionIconGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  quickActionEmoji: {
-    fontSize: 24,
+  quickActionIcon: {
+    width: 32,
+    height: 32,
   },
   quickActionText: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#2A7DE1",
+    fontWeight: "600",
+    color: "#1A1A1A",
     textAlign: "center",
+  },
+  // Get Help Button Styles
+  getHelpButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#FF4757",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  getHelpGradient: {
+    borderRadius: 16,
+  },
+  getHelpContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 20,
+    paddingVertical: 18,
+  },
+  getHelpIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  getHelpIcon: {
+    width: 32,
+    height: 32,
+    tintColor: "#FFFFFF",
+  },
+  getHelpTextContainer: {
+    flex: 1,
+  },
+  getHelpTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  getHelpSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+  },
+  getHelpArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  getHelpArrowText: {
+    fontSize: 20,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
   assessmentButton: {
     backgroundColor: "#2A7DE1",
@@ -846,75 +1299,42 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   disclaimerContainer: {
-    backgroundColor: "#FFF3CD",
+    flexDirection: "row",
+    backgroundColor: "#E8F1FF",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#FFEAA7",
-    marginBottom: 24,
+    borderColor: "#B8D4F1",
+    marginBottom: 120,
+    alignItems: "flex-start",
+  },
+  disclaimerIconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#1F73D2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  disclaimerIcon: {
+    fontSize: 20,
+    color: "white",
+  },
+  disclaimerContent: {
+    flex: 1,
   },
   disclaimerTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#856404",
+    color: "#1F73D2",
     marginBottom: 8,
   },
   disclaimerText: {
     fontSize: 14,
-    color: "#856404",
+    color: "#1F73D2",
     marginBottom: 4,
     lineHeight: 20,
-  },
-  emergencyContainer: {
-    backgroundColor: "#F8D7DA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#F5C6CB",
-  },
-  emergencyTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#721C24",
-    marginBottom: 8,
-  },
-  emergencyText: {
-    fontSize: 14,
-    color: "#721C24",
-    marginBottom: 10,
-    lineHeight: 20,
-  },
-  emergencyButtonsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  emergencyButton: {
-    backgroundColor: "#DC3545",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: "center",
-  },
-  emergencyButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  healthLinkButton: {
-    backgroundColor: "#6C757D",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
-    alignItems: "center",
-  },
-  healthLinkButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "600",
   },
   container: {
     flex: 1,

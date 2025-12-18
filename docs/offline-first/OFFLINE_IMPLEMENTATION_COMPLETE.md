@@ -437,6 +437,17 @@ Accept that offline data syncs eventually
 
 ## Conclusion
 
+## Tombstones (offline deletes) processing
+
+When some legacy devices can’t mutate WatermelonDB rows (e.g., missing columns/ALTER TABLE disabled), we use an AsyncStorage-based tombstone registry to record deletions while offline. On reconnection, the app:
+
+- Reads the tombstone set
+- For convex-backed IDs, calls `api.healthEntries.deleteHealthEntry` on the server and mirrors local rows as deleted (isDeleted=true, isSynced=true)
+- For local-only IDs, purges those local records from WatermelonDB
+- Clears processed tombstones so they don’t get retried repeatedly
+
+This logic lives in `app/hooks/useSyncOnOnline.ts` and ensures offline deletions are consistently applied to the server, keeping UI and backend in sync.
+
 All 7 offline priorities have been successfully implemented with:
 - ✅ Zero compilation errors
 - ✅ Comprehensive offline support

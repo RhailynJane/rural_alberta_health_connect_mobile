@@ -22,6 +22,7 @@ export const getCurrentUser = query({
       firstName: user.firstName,
       lastName: user.lastName,
       phone: user.phone,
+      image: user.image,
       hasCompletedOnboarding: user.hasCompletedOnboarding,
     };
   },
@@ -51,6 +52,40 @@ export const updatePhone = mutation({
     }
 
     await ctx.db.patch(userId, { phone: normalized });
+    return { success: true };
+  },
+});
+
+/**
+ * Check if a user with the given email already exists
+ */
+export const checkUserExistsByEmail = mutation({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const normalizedEmail = args.email.toLowerCase().trim();
+    
+    const existingUser = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", normalizedEmail))
+      .first();
+    
+    return existingUser !== null;
+  },
+});
+
+/**
+ * Updates the user's profile image URL
+ */
+export const updateImage = mutation({
+  args: { image: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    await ctx.db.patch(userId, { image: args.image });
     return { success: true };
   },
 });

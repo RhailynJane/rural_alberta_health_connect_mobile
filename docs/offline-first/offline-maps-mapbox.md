@@ -1,6 +1,6 @@
 # Mapbox Offline Maps Setup Guide
 
-## 📍 Overview
+## Overview
 
 This app uses **Mapbox** for offline-capable maps, perfect for rural Alberta where connectivity may be limited.
 

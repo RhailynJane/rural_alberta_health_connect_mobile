@@ -1,22 +1,544 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Q } from "@nozbe/watermelondb";
-import { useQuery } from "convex/react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Dimensions, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { ensureHealthEntriesCoreColumns, ensureHealthEntriesV10Columns } from "../../../watermelon/database/selfHeal";
 import { useWatermelonDatabase } from "../../../watermelon/hooks/useDatabase";
+import HealthEntry from "../../../watermelon/models/HealthEntry";
+import { safeWrite } from "../../../watermelon/utils/safeWrite";
+import { addTombstone, isEntryTombstoned, listTombstones, shouldUseTombstoneFallback } from "../../../watermelon/utils/tombstones";
+import { healthEntriesEvents } from "../../_context/HealthEntriesEvents";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
 import CurvedHeader from "../../components/curvedHeader";
 import DueReminderBanner from "../../components/DueReminderBanner";
+import StatusModal from "../../components/StatusModal";
+import TTSButton from "../../components/TTSButton";
+import TTSHighlightedText from "../../components/TTSHighlightedText";
 import { FONTS } from "../../constants/constants";
+import {
+  prepareTextForTTS,
+  prepareNextStepsForTTS,
+  prepareRecommendationsForTTS,
+  useTTS,
+} from "../../../utils/tts";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
-// Renders AI assessment text into separate cards (mirrors assessment-results)
-function renderAssessmentCards(text: string | null) {
+// ═══════════════════════════════════════════════════════════
+// MEMOIZED CARD COMPONENTS - Stable references to prevent TTS unmount
+// ═══════════════════════════════════════════════════════════
+
+// Helper: Prepare section items for TTS
+const prepareSectionForTTS = (title: string, items: string[]): string => {
+  if (!items.length) return '';
+  const cleanedItems = items.map(item => prepareTextForTTS(item)).filter(Boolean);
+  return `${title}. ${cleanedItems.join('. ')}`;
+};
+
+// PrimaryCard - Memoized to prevent unmount on parent re-render
+interface PrimaryCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+  sectionKey: string;
+}
+
+const MemoizedPrimaryCard = memo(function MemoizedPrimaryCard({
+  title,
+  items,
+  icon,
+  sectionKey
+}: PrimaryCardProps) {
+  // Prepare text for TTS
+  const ttsText = items.map((item, idx) => {
+    if (sectionKey === "NEXT STEPS") {
+      return `Step ${idx + 1}: ${prepareTextForTTS(item)}`;
+    }
+    return prepareTextForTTS(item);
+  }).join('. ');
+  const pendingSpeak = useRef<string | null>(null);
+
+  // Get TTS state for highlighting
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    download,
+    downloadProgress,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[cardStyles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <View style={cardStyles.primaryAssessmentCard}>
+      <View style={cardStyles.primaryCardHeaderWithTTS}>
+        <View style={cardStyles.primaryCardHeaderLeft}>
+          {icon}
+          <Text style={[cardStyles.primaryCardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        </View>
+        {renderTTSButton()}
+      </View>
+
+      {/* Show TTS highlighted text when active */}
+      {isTTSActive && ttsChunks.length > 0 ? (
+        <TTSHighlightedText
+          chunks={ttsChunks}
+          chunkStates={ttsChunkStates}
+          isActive={isTTSActive}
+          asBulletList={sectionKey !== "NEXT STEPS"}
+          containerStyle={{ marginTop: 4 }}
+          parentPadding={16}
+        />
+      ) : (
+        sectionKey === "NEXT STEPS"
+          ? items.map((it, idx) => (
+              <View key={idx} style={cardStyles.stepRow}>
+                <View style={cardStyles.stepNumberContainer}>
+                  <Text style={[cardStyles.stepNumber, { fontFamily: FONTS.BarlowSemiCondensed }]}>{idx + 1}</Text>
+                </View>
+                <View style={cardStyles.stepContent}>
+                  <Text style={[cardStyles.stepLabel, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={1}>
+                    {it.split(':')[0] || `Step ${idx + 1}`}
+                  </Text>
+                  <Text style={[cardStyles.stepText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={3}>
+                    {it.replace(/^.*?:\s*/, '') || it}
+                  </Text>
+                </View>
+              </View>
+            ))
+          : items.map((it, idx) => (
+              <View key={idx} style={cardStyles.cardItem}>
+                <Text style={cardStyles.bulletPoint}>•</Text>
+                <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]} numberOfLines={2}>
+                  {it}
+                </Text>
+              </View>
+            ))
+      )}
+    </View>
+  );
+});
+
+// AccordionCard - Memoized to prevent unmount on parent re-render
+interface AccordionCardProps {
+  title: string;
+  items: string[];
+  icon: React.ReactNode;
+  sectionKey: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+const MemoizedAccordionCard = memo(function MemoizedAccordionCard({
+  title,
+  items,
+  icon,
+  sectionKey,
+  isExpanded,
+  onToggle,
+}: AccordionCardProps) {
+  const pendingSpeak = useRef<string | null>(null);
+
+  // Prepare text for TTS
+  const ttsText = items.map(item => prepareTextForTTS(item)).join('. ');
+
+  // Get TTS state for highlighting
+  const {
+    status: ttsStatus,
+    speak,
+    stop,
+    download,
+    downloadProgress,
+    chunks: ttsChunks,
+    chunkStates: ttsChunkStates,
+    isAvailable: ttsAvailable,
+    hasPlayed: ttsHasPlayed,
+    isOtherPlaying,
+  } = useTTS();
+
+  const isTTSActive = ttsStatus === 'generating' || ttsStatus === 'speaking';
+  const isDisabled = isOtherPlaying;
+  const listenColor = isDisabled ? '#D1D5DB' : (ttsHasPlayed ? '#10B981' : '#22D3EE');
+
+  // Auto-speak when model becomes ready after download
+  useEffect(() => {
+    if (ttsStatus === 'ready' && pendingSpeak.current) {
+      const textToSpeak = pendingSpeak.current;
+      pendingSpeak.current = null;
+      speak(textToSpeak);
+    }
+  }, [ttsStatus, speak]);
+
+  const handleTTSPress = useCallback(async () => {
+    if (ttsStatus === 'generating' || ttsStatus === 'speaking') {
+      await stop();
+    } else if (ttsStatus === 'not_downloaded' && ttsText) {
+      pendingSpeak.current = ttsText;
+      await download();
+    } else if (ttsStatus === 'ready' && ttsText) {
+      await speak(ttsText);
+    }
+  }, [ttsStatus, ttsText, speak, stop, download]);
+
+  // Render TTS button based on status - always visible when not_downloaded or ready
+  const renderTTSButton = () => {
+    if (!isExpanded || !ttsText || !ttsAvailable) return null;
+
+    if (ttsStatus === 'downloading') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            {Math.round(downloadProgress * 100)}%
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'loading') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#22D3EE" />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: '#22D3EE' }]}>
+            Loading...
+          </Text>
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'generating') {
+      return (
+        <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <ActivityIndicator size="small" color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'speaking') {
+      return (
+        <TouchableOpacity style={cardStyles.inlineIconOnlyButton} onPress={handleTTSPress} activeOpacity={0.7}>
+          <Ionicons name="pause" size={18} color="#94A3B8" />
+        </TouchableOpacity>
+      );
+    }
+
+    if (ttsStatus === 'checking') {
+      return (
+        <View style={cardStyles.inlineTtsButton}>
+          <ActivityIndicator size="small" color="#D1D5DB" />
+        </View>
+      );
+    }
+
+    if (ttsStatus === 'ready' || ttsStatus === 'not_downloaded') {
+      return (
+        <TouchableOpacity
+          style={[cardStyles.inlineTtsButton, isDisabled && { opacity: 0.5 }]}
+          onPress={handleTTSPress}
+          activeOpacity={isDisabled ? 1 : 0.7}
+          disabled={isDisabled}
+        >
+          <Ionicons name={ttsHasPlayed ? "refresh-outline" : "volume-medium-outline"} size={16} color={listenColor} />
+          <Text style={[cardStyles.inlineTtsButtonText, { fontFamily: FONTS.BarlowSemiCondensed, color: listenColor }]}>
+            {ttsHasPlayed ? 'Replay' : 'Listen'}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <View style={cardStyles.accordionCard}>
+      <TouchableOpacity
+        style={cardStyles.accordionHeader}
+        onPress={onToggle}
+        activeOpacity={0.7}
+      >
+        <View style={cardStyles.accordionHeaderLeft}>
+          {icon}
+          <Text style={[cardStyles.accordionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {renderTTSButton()}
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#6B7280"
+          />
+        </View>
+      </TouchableOpacity>
+      {isExpanded && (
+        <View style={cardStyles.accordionContent}>
+          {/* Show TTS highlighted text when active */}
+          {isTTSActive && ttsChunks.length > 0 ? (
+            <TTSHighlightedText
+              chunks={ttsChunks}
+              chunkStates={ttsChunkStates}
+              isActive={isTTSActive}
+              asBulletList={true}
+              containerStyle={{ marginTop: 4 }}
+              parentPadding={14}
+            />
+          ) : (
+            items.map((it, idx) => (
+              <View key={idx} style={cardStyles.cardItem}>
+                <Text style={cardStyles.bulletPoint}>•</Text>
+                <Text style={[cardStyles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  {it}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+    </View>
+  );
+});
+
+// Card-specific styles used by memoized components
+const cardStyles = StyleSheet.create({
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryCardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  primaryCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  primaryCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  accordionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  stepRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  stepNumberContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
+  },
+  cardItem: {
+    flexDirection: "row",
+    marginBottom: 8,
+    paddingLeft: 4,
+  },
+  bulletPoint: {
+    fontSize: 16,
+    color: "#1A1A1A",
+    marginRight: 8,
+    marginTop: 2,
+  },
+  cardItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1A1A1A",
+    lineHeight: 22,
+  },
+  inlineTtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inlineIconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
+  },
+});
+
+// ═══════════════════════════════════════════════════════════
+// END MEMOIZED CARD COMPONENTS
+// ═══════════════════════════════════════════════════════════
+
+// Renders AI assessment text matching assessment-results UI (priority + accordions)
+function renderAssessmentCards(
+  text: string | null,
+  expandedSections: Record<string, boolean>,
+  toggleSection: (key: string) => void
+) {
   if (!text) return null;
 
   type SectionKey =
@@ -25,24 +547,19 @@ function renderAssessmentCards(text: string | null) {
     | "CLINICAL INTERPRETATION"
     | "BURN/WOUND GRADING"
     | "INFECTION RISK"
-    | "EMERGENCY RED FLAGS"
-    | "RURAL GUIDANCE"
     | "URGENCY ASSESSMENT"
     | "RECOMMENDATIONS"
     | "NEXT STEPS"
     | "OTHER";
 
-  const wantedOrder: SectionKey[] = [
+  const prioritySections: SectionKey[] = ["NEXT STEPS", "RECOMMENDATIONS"];
+  const accordionSections: SectionKey[] = [
     "CLINICAL ASSESSMENT",
     "VISUAL FINDINGS",
     "CLINICAL INTERPRETATION",
     "BURN/WOUND GRADING",
     "INFECTION RISK",
-    "EMERGENCY RED FLAGS",
-    "RURAL GUIDANCE",
     "URGENCY ASSESSMENT",
-    "RECOMMENDATIONS",
-    "NEXT STEPS",
   ];
 
   const sections: Record<SectionKey, string[]> = {
@@ -51,8 +568,6 @@ function renderAssessmentCards(text: string | null) {
     "CLINICAL INTERPRETATION": [],
     "BURN/WOUND GRADING": [],
     "INFECTION RISK": [],
-    "EMERGENCY RED FLAGS": [],
-    "RURAL GUIDANCE": [],
     "URGENCY ASSESSMENT": [],
     "RECOMMENDATIONS": [],
     "NEXT STEPS": [],
@@ -74,17 +589,6 @@ function renderAssessmentCards(text: string | null) {
     if (/^grading\s*:?/i.test(cleaned)) return "BURN/WOUND GRADING";
     if (/^infection\s+risk\s*(assessment)?\s*:?/i.test(cleaned)) return "INFECTION RISK";
     if (/^risk\s+of\s+infection\s*:?/i.test(cleaned)) return "INFECTION RISK";
-    if (/^(specific\s+)?emergency\s+red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^red\s+flags?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^warning\s+signs?\s*:?/i.test(cleaned)) return "EMERGENCY RED FLAGS";
-    if (/^rural[-\s]?specific\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural[-\s]?specific\s+resource\s+guideline\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(specific\s+)?(resource\s+)?guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+(considerations?|resources?)\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resource\s+guidance\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
-    if (/^rural\s+resources?\s*:?$/i.test(cleaned)) return "RURAL GUIDANCE";
     if (/^urgency\s+(assessment|level)\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^urgency\s*:?/i.test(cleaned)) return "URGENCY ASSESSMENT";
     if (/^recommendations?\s*:?/i.test(cleaned)) return "RECOMMENDATIONS";
@@ -108,44 +612,48 @@ function renderAssessmentCards(text: string | null) {
     if (content) sections[current].push(content);
   }
 
-  const Card = ({ title, items, icon }: { title: string; items: string[]; icon: React.ReactNode }) => (
-    <View style={styles.assessmentCard}>
-      <View style={styles.cardHeader}>
-        {icon}
-        <Text style={[styles.cardTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>{title}</Text>
-      </View>
-      {items.map((it, idx) => (
-        <View key={idx} style={styles.cardItem}>
-          <Text style={styles.bulletPoint}>•</Text>
-          <Text style={[styles.cardItemText, { fontFamily: FONTS.BarlowSemiCondensed }]}>{it}</Text>
-        </View>
-      ))}
-    </View>
-  );
-
-  const icons: Record<SectionKey, { icon: React.ReactNode; color: string }> = {
-    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" />, color: "#9B59B6" },
-    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" />, color: "#3498DB" },
-    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" />, color: "#E67E22" },
-    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" />, color: "#E74C3C" },
-    "EMERGENCY RED FLAGS": { icon: <Ionicons name="warning" size={20} color="#DC3545" />, color: "#DC3545" },
-    "RURAL GUIDANCE": { icon: <Ionicons name="location" size={20} color="#16A085" />, color: "#16A085" },
-    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" />, color: "#FF6B35" },
-    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" />, color: "#28A745" },
-    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" />, color: "#2A7DE1" },
-    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" />, color: "#6C757D" },
+  // Use memoized components with stable references to prevent TTS unmount
+  const icons: Record<SectionKey, { icon: React.ReactNode }> = {
+    "CLINICAL ASSESSMENT": { icon: <Ionicons name="medical" size={20} color="#2A7DE1" /> },
+    "VISUAL FINDINGS": { icon: <Ionicons name="eye" size={20} color="#9B59B6" /> },
+    "CLINICAL INTERPRETATION": { icon: <Ionicons name="clipboard" size={20} color="#3498DB" /> },
+    "BURN/WOUND GRADING": { icon: <Ionicons name="fitness" size={20} color="#E67E22" /> },
+    "INFECTION RISK": { icon: <Ionicons name="shield-checkmark" size={20} color="#E74C3C" /> },
+    "URGENCY ASSESSMENT": { icon: <Ionicons name="speedometer" size={20} color="#FF6B35" /> },
+    "RECOMMENDATIONS": { icon: <Ionicons name="checkmark-circle" size={20} color="#28A745" /> },
+    "NEXT STEPS": { icon: <Ionicons name="arrow-forward-circle" size={20} color="#2A7DE1" /> },
+    OTHER: { icon: <Ionicons name="information-circle" size={20} color="#6C757D" /> },
   };
 
   return (
     <View>
-      {wantedOrder.map((key) =>
+      {prioritySections.map((key) =>
         sections[key] && sections[key].length > 0 ? (
-          <Card key={key} title={key} items={sections[key]} icon={icons[key].icon} />
+          <MemoizedPrimaryCard key={key} title={key} items={sections[key]} icon={icons[key].icon} sectionKey={key} />
+        ) : null
+      )}
+      {accordionSections.map((key) =>
+        sections[key] && sections[key].length > 0 ? (
+          <MemoizedAccordionCard
+            key={key}
+            title={key}
+            items={sections[key]}
+            icon={icons[key].icon}
+            sectionKey={key}
+            isExpanded={expandedSections[key] || false}
+            onToggle={() => toggleSection(key)}
+          />
         ) : null
       )}
       {sections["OTHER"] && sections["OTHER"].length > 0 && (
-        <Card title="OTHER" items={sections["OTHER"]} icon={icons["OTHER"].icon} />
+        <MemoizedAccordionCard
+          title="OTHER"
+          items={sections["OTHER"]}
+          icon={icons["OTHER"].icon}
+          sectionKey="OTHER"
+          isExpanded={expandedSections["OTHER"] || false}
+          onToggle={() => toggleSection("OTHER")}
+        />
       )}
     </View>
   );
@@ -157,94 +665,236 @@ export default function LogDetails() {
   const convexIdParam = (params.convexId as string) || undefined;
   const database = useWatermelonDatabase();
   const { isOnline } = useNetworkStatus();
+  const { isAuthenticated } = useConvexAuth();
   const [offlineEntry, setOfflineEntry] = useState<any>(null);
-  
+  const [offlineTried, setOfflineTried] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [photoIndex, setPhotoIndex] = useState(0);
+
+  // Metadata state to track both IDs explicitly
+  const [entryMetadata, setEntryMetadata] = useState<{
+    watermelonId: string | null;
+    convexId: string | null;
+  }>({ watermelonId: null, convexId: null });
+
+  const toggleSection = (key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   // Convert string to Convex ID type - but only if it looks like a Convex ID
   // Convex IDs start with 'k' or 'j' and are longer than 20 chars
   const isConvexId = entryId && entryId.length > 20 && /^[kj]/.test(entryId);
   const convexEntryId = isConvexId ? (entryId as Id<"healthEntries">) : undefined;
-  
+
+  // Convex hooks - use "skip" to prevent network calls when offline
+  // This prevents errors when offline while still following React hook rules
+  const currentUser = useQuery(api.users.getCurrentUser,
+    isOnline && isAuthenticated ? {} : "skip"
+  );
+
+  // Delete mutation - safe to call, but only use when online
+  const deleteHealthEntry = useMutation(api.healthEntries.deleteHealthEntry);
+
   // Online query - only run if we have a valid Convex ID
-  const entryOnline = useQuery(api.healthEntries.getEntryById, 
+  const entryOnline = useQuery(api.healthEntries.getEntryById,
     convexEntryId && isOnline ? { entryId: convexEntryId } : "skip"
   );
 
-  // Offline query from WatermelonDB
-  useEffect(() => {
-      if ((entryId || convexIdParam) && (!isOnline || !isConvexId)) {
-        // Query WatermelonDB if:
-        // 1. We're offline, OR
-        // 2. We're online but the entryId is a WatermelonDB ID (not Convex format)
-      const loadOfflineEntry = async () => {
+  // Offline query from WatermelonDB (always attempt so we can fallback or show deleted state)
+  const loadOfflineEntry = React.useCallback(async () => {
+    if (!(entryId || convexIdParam)) return;
+    try {
+      const healthCollection = database.get('health_entries');
+      let localEntry: any = null;
+
+      // Try by WatermelonDB id first (when entryId is a local id)
+      if (entryId && !isConvexId) {
         try {
-          const healthCollection = database.get("health_entries");
-          let localEntry: any = null;
-          
-            // Try to find by WatermelonDB ID first
-            if (entryId && !isConvexId) {
-            try {
-              localEntry = await healthCollection.find(entryId);
-            } catch {
-              // Not found by WatermelonDB ID, try convexId
+          localEntry = await healthCollection.find(entryId);
+        } catch {}
+      }
+
+      // Fallback: lookup by convexId field
+      if (!localEntry) {
+        const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
+        if (convexLookup) {
+          const results = await healthCollection.query(Q.where('convexId', convexLookup)).fetch();
+          if (results.length > 0) {
+            // Choose best candidate if multiple (higher tuple wins lexicographically)
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const best = results.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked; // prefer larger value
+              }
+              return picked;
+            }, results[0]);
+            localEntry = best;
+          }
+        }
+      }
+
+      // Even if we found localEntry directly by id, we may have newer duplicates for same convexId.
+      // Re-evaluate group to pick freshest version so edits made via duplicate strategy show instantly.
+      const groupConvexId = (localEntry?.convexId) || convexIdParam || (isConvexId ? entryId : undefined);
+      if (groupConvexId) {
+        try {
+          const group = await healthCollection.query(Q.where('convexId', groupConvexId)).fetch();
+          if (group.length > 0) {
+            const score = (x: any) => [x.isDeleted ? 0 : 1, x.lastEditedAt || 0, x.editCount || 0, x.timestamp || 0];
+            const freshest = group.reduce((picked: any, cur: any) => {
+              const sa = score(picked), sb = score(cur);
+              for (let i = 0; i < sa.length; i++) {
+                if (sa[i] === sb[i]) continue;
+                return sb[i] > sa[i] ? cur : picked;
+              }
+              return picked;
+            }, group[0]);
+            if (freshest && localEntry && freshest.id !== localEntry.id) {
+              console.log('🔄 [LOG-DETAILS] Replacing localEntry with fresher duplicate', { prev: localEntry.id, next: freshest.id });
+              localEntry = freshest;
             }
           }
-          
-            // If not found, try querying by convexId field
-          if (!localEntry) {
-            const convexLookup = convexIdParam || (isConvexId ? entryId : undefined);
-            if (convexLookup) {
-            const results = await healthCollection.query(
-              Q.where('convexId', convexLookup)
-            ).fetch();
-            if (results.length > 0) {
-              localEntry = results[0];
-            }
-            }
+        } catch (e) {
+          console.warn('⚠️ [LOG-DETAILS] Failed duplicate group re-eval', e);
+        }
+      }
+
+      if (!localEntry) {
+        console.warn(`🔎 [LOG-DETAILS] No local record found for localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
+        setOfflineEntry(null);
+        return;
+      }
+
+      // Map WatermelonDB entry to a Convex-like shape (include dedupe metadata)
+      const entryData = localEntry as any;
+      let photos: string[] = [];
+      try {
+        if (entryData.photos) {
+          photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
+        }
+      } catch {
+        photos = [];
+      }
+
+      const tombstoneSet = await listTombstones();
+      setOfflineEntry({
+        _id: localEntry.id,
+        _creationTime: entryData.createdAt || Date.now(),
+        userId: entryData.userId,
+        timestamp: entryData.timestamp,
+        severity: entryData.severity,
+        type: entryData.type,
+        symptoms: entryData.symptoms || '',
+        category: entryData.category || '',
+        notes: entryData.notes || '',
+        photos,
+        aiContext: entryData.aiContext || null,
+        convexId: entryData.convexId || null,
+        createdBy: entryData.createdBy || 'User',
+        date: entryData.date || '',
+        isDeleted: entryData.isDeleted === true || isEntryTombstoned({ convexId: entryData.convexId, _id: localEntry.id }, tombstoneSet),
+        lastEditedAt: entryData.lastEditedAt || 0,
+        editCount: entryData.editCount || 0,
+      });
+
+      setEntryMetadata({
+        watermelonId: localEntry.id,
+        convexId: entryData.convexId || null,
+      });
+    } catch (error) {
+      console.error('Failed to load offline entry:', error);
+      setOfflineEntry(null);
+    } finally {
+      setOfflineTried(true);
+    }
+  }, [entryId, convexIdParam, isConvexId, database]);
+
+  useEffect(() => {
+    loadOfflineEntry();
+  }, [loadOfflineEntry]);
+
+  // Subscribe to edit/delete events for this entry (always active, not just when focused)
+  useEffect(() => {
+    const unsub = healthEntriesEvents.subscribe((p) => {
+      if (!p) return;
+      const matchByConvex = (p.convexId && (p.convexId === (convexIdParam || (isConvexId ? entryId : undefined))));
+      const matchByLocal = (p.watermelonId && (p.watermelonId === entryId));
+      if (matchByConvex || matchByLocal) {
+        console.log('🔔 [LOG-DETAILS] Received event for this entry:', p.type, { convexId: p.convexId, watermelonId: p.watermelonId });
+        loadOfflineEntry();
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [entryId, convexIdParam, isConvexId, loadOfflineEntry]);
+
+  // Refresh when screen regains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadOfflineEntry();
+    }, [loadOfflineEntry])
+  );
+
+  // Populate metadata when online entry is loaded
+  useEffect(() => {
+    if (entryOnline && isOnline && isConvexId) {
+      // Find the corresponding WatermelonDB record
+      const findWatermelonId = async () => {
+        try {
+          const healthCollection = database.get('health_entries');
+          const results = await healthCollection
+            .query(Q.where('convexId', entryOnline._id))
+            .fetch();
+
+          if (results.length > 0) {
+            setEntryMetadata({
+              watermelonId: results[0].id,
+              convexId: entryOnline._id
+            });
+          } else {
+            // Online-only entry, no local copy
+            setEntryMetadata({
+              watermelonId: null,
+              convexId: entryOnline._id
+            });
           }
-          
-          if (!localEntry) {
-            console.error(`Failed to find entry with id(s): localId=${entryId || 'n/a'} convexId=${convexIdParam || (isConvexId ? entryId : 'n/a')}`);
-            setOfflineEntry(null);
-            return;
-          }
-          
-          // Map WatermelonDB entry to Convex format
-          const entryData = localEntry as any;
-          
-          // Safely handle photos - it's already parsed by the @json decorator
-          let photos: string[] = [];
-          try {
-            if (entryData.photos) {
-              photos = Array.isArray(entryData.photos) ? entryData.photos : JSON.parse(entryData.photos);
-            }
-          } catch {
-            photos = [];
-          }
-          
-          setOfflineEntry({
-            _id: localEntry.id,
-            _creationTime: entryData.createdAt || Date.now(),
-            userId: entryData.userId,
-            timestamp: entryData.timestamp,
-            severity: entryData.severity,
-            type: entryData.type,
-            symptoms: entryData.symptoms || "",
-            category: entryData.category || "",
-            notes: entryData.notes || "",
-            photos: photos,
-            aiContext: entryData.aiContext || null,
-          });
         } catch (error) {
-          console.error("Failed to load offline entry:", error);
-          setOfflineEntry(null);
+          console.error("Failed to find WatermelonDB record:", error);
         }
       };
-      loadOfflineEntry();
+      findWatermelonId();
     }
-  }, [isOnline, entryId, database, isConvexId, convexIdParam]);
+  }, [entryOnline, isOnline, isConvexId, database]);
 
-  // Use online entry if available, otherwise offline entry
-  const entry = isOnline ? entryOnline : offlineEntry;
+  // Prefer online entry when available, but fallback to offline if missing
+  // Choose between online and offline variants: prefer the freshest (higher lastEditedAt/editCount) or deletion state.
+  let resolvedEntry: any = offlineEntry;
+  if (entryOnline) {
+    if (!offlineEntry) {
+      resolvedEntry = entryOnline;
+    } else if (offlineEntry.convexId && offlineEntry.convexId === entryOnline._id) {
+      const onlineLastEdited = (entryOnline as any).lastEditedAt || 0;
+      const onlineEditCount = (entryOnline as any).editCount || 0;
+      const offlineLastEdited = offlineEntry.lastEditedAt || 0;
+      const offlineEditCount = offlineEntry.editCount || 0;
+      const offlineDeleted = offlineEntry.isDeleted === true;
+      // Prefer offline if it reflects a deletion not yet synced, or has more recent edits.
+      if (offlineDeleted || offlineLastEdited > onlineLastEdited || offlineEditCount > onlineEditCount) {
+        resolvedEntry = offlineEntry;
+      } else {
+        resolvedEntry = entryOnline;
+      }
+    } else {
+      // Different convex linkage; default to online if available.
+      resolvedEntry = entryOnline;
+    }
+  }
+  const isDeletedEntry = resolvedEntry?.isDeleted === true;
+  const isLoadingOnline = isOnline && isConvexId && typeof entryOnline === 'undefined';
+  const stillLoading = isLoadingOnline || (!offlineTried && offlineEntry === null);
 
   const getSeverityColor = (severity: number) => {
     if (severity >= 9) return "#DC3545";
@@ -269,7 +919,215 @@ export default function LogDetails() {
     };
   };
 
-  if (!entry) {
+  // Modal state for delete confirmation & status
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  const confirmDelete = () => {
+    setDeleteError(null);
+    setDeleteSuccess(false);
+    setDeleteModalVisible(true);
+  };
+
+  const performDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+  const { watermelonId, convexId } = entryMetadata;
+
+      if (!isOnline) {
+        // OFFLINE MODE: Prefer soft delete, but if environment lacks mutation support use tombstone fallback
+        const idToUse = watermelonId || resolvedEntry?._id;
+        if (!idToUse) {
+          throw new Error('Unable to identify entry for deletion');
+        }
+        const fallback = shouldUseTombstoneFallback(database);
+        if (fallback) {
+          // Tombstone path – do NOT touch Watermelon rows (prevents TypeError crash)
+          const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Tombstoned entry (no mutation environment):', preferred);
+        } else {
+          // Attempt normal soft-delete (with rescue duplicate if needed)
+          try {
+            await ensureHealthEntriesCoreColumns(database as any);
+            await ensureHealthEntriesV10Columns(database as any);
+          } catch {}
+          let anyWriteSucceeded = false;
+          await safeWrite(
+            database,
+            async () => {
+              const healthCollection = database.get('health_entries');
+              let localEntry: HealthEntry | null = null;
+              try {
+                localEntry = await healthCollection.find(idToUse) as HealthEntry;
+              } catch (e) {
+                console.warn('⚠️ [OFFLINE DELETE] Local record not found by id, will use tombstone if possible:', idToUse);
+                if (convexId) {
+                  const preferred = convexId;
+                  await addTombstone(preferred);
+                  console.log('🪦 [OFFLINE DELETE] Added tombstone for missing local record:', preferred);
+                  anyWriteSucceeded = true; // treat as handled
+                  return; // skip the rest of the write block
+                }
+                // If no convexId either, nothing to mutate; let outer fallback handle
+                throw e;
+              }
+              try {
+                await localEntry.update((e: any) => {
+                  e.isDeleted = true;
+                  e.isSynced = false;
+                  e.lastEditedAt = Date.now();
+                });
+                console.log('📴 Entry soft-deleted offline');
+                anyWriteSucceeded = true;
+              } catch (primaryErr) {
+                console.warn('⚠️ [OFFLINE DELETE] Primary soft-delete failed, using rescue duplicate strategy:', primaryErr);
+                const now = Date.now();
+                const deletedDuplicate = await healthCollection.create((newRec: any) => {
+                  newRec.userId = localEntry.userId;
+                  newRec.convexId = localEntry.convexId;
+                  newRec.date = localEntry.date;
+                  newRec.timestamp = now;
+                  newRec.symptoms = localEntry.symptoms;
+                  newRec.severity = localEntry.severity;
+                  newRec.notes = localEntry.notes || '';
+                  newRec.photos = localEntry.photos;
+                  newRec.type = localEntry.type || 'manual_entry';
+                  newRec.isSynced = false;
+                  newRec.createdBy = localEntry.createdBy;
+                  newRec.lastEditedAt = now;
+                  newRec.editCount = (localEntry.editCount || 0) + 1;
+                  newRec.isDeleted = true;
+                });
+                console.log('🛟 [OFFLINE DELETE] Created deletion duplicate with ID:', deletedDuplicate.id);
+                anyWriteSucceeded = true;
+              }
+
+              // Also mark duplicates
+              const now2 = Date.now();
+              const cvx = (localEntry as any)?.convexId || entryMetadata.convexId;
+              if (cvx) {
+                const dupes = await healthCollection.query(Q.where('convexId', cvx)).fetch();
+                let updated = 0;
+                for (const rec of dupes) {
+                  const healthRec = rec as HealthEntry;
+                  if (localEntry && healthRec.id === (localEntry as any).id) continue;
+                  try {
+                    await healthRec.update((e2: any) => {
+                      e2.isDeleted = true;
+                      e2.isSynced = false;
+                      e2.lastEditedAt = now2;
+                    });
+                    updated++;
+                    anyWriteSucceeded = true;
+                  } catch (e) {
+                    console.warn('⚠️ [OFFLINE DELETE] Failed to soft-delete duplicate', healthRec.id, e);
+                  }
+                }
+                if (updated > 0) console.log(`📴 [OFFLINE DELETE] Also marked ${updated} duplicate(s) deleted for convexId=${cvx}`);
+              }
+            },
+            10000,
+            'deleteHealthEntryOffline'
+          );
+          if (!anyWriteSucceeded) {
+            // Fall back to tombstone if everything failed
+            const preferred = convexId || idToUse;
+            await addTombstone(preferred);
+            console.log('🪦 [OFFLINE DELETE] Fallback tombstone after failed mutations:', preferred);
+          }
+        }
+        console.log('📴 Entry marked for deletion (soft or tombstone) – will sync when online');
+      } else {
+        // ONLINE MODE
+        if (convexId && currentUser) {
+          try {
+            await deleteHealthEntry({
+              entryId: convexId as Id<'healthEntries'>,
+              userId: currentUser._id,
+            });
+            console.log('✅ Deleted from Convex:', convexId);
+          } catch {
+            throw new Error('Failed to delete entry from server. Please try again.');
+          }
+        }
+
+        // Clean up ALL local duplicates for this entry (same convexId)
+        await safeWrite(
+          database,
+          async () => {
+            const healthCollection = database.get('health_entries');
+            if (convexId) {
+              const dupes = await healthCollection.query(Q.where('convexId', convexId)).fetch();
+              console.log(`🧽 [ONLINE DELETE] Removing ${dupes.length} local duplicates for convexId=${convexId}`);
+              for (const rec of dupes as any[]) {
+                try {
+                  await (rec as any).destroyPermanently();
+                } catch (e) {
+                  console.warn('⚠️ [ONLINE DELETE] Failed to destroy duplicate, trying soft-delete', (rec as any)?.id, e);
+                  await (rec as any).update((e2: any) => {
+                    e2.isDeleted = true;
+                    e2.isSynced = true; // matches server state
+                    e2.lastEditedAt = Date.now();
+                  });
+                }
+              }
+            } else if (watermelonId) {
+              // Fallback: remove the current local record
+              const localEntry = await healthCollection.find(watermelonId);
+              await localEntry.destroyPermanently();
+              console.log('✅ Deleted from WatermelonDB (single):', watermelonId);
+            }
+          },
+          15000,
+          'deleteHealthEntryOnlineCleanup'
+        );
+      }
+      setDeleteSuccess(true);
+      // Emit delete event before navigating back
+      healthEntriesEvents.emit({ type: 'delete', convexId: entryMetadata.convexId, watermelonId: entryMetadata.watermelonId, timestamp: Date.now() });
+      setTimeout(() => {
+        setDeleteModalVisible(false);
+        router.back();
+      }, 600);
+    } catch (err: any) {
+      console.error('❌ Delete failed:', err);
+      setDeleteError(err?.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (!resolvedEntry) {
+    if (stillLoading) {
+      return (
+        <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
+          <CurvedBackground style={{ flex: 1 }}>
+            <DueReminderBanner topOffset={120} />
+            <CurvedHeader
+              title="Tracker - Entry Details"
+              height={150}
+              showLogo={true}
+              screenType="signin"
+              bottomSpacing={0}
+              showNotificationBell={true}
+            />
+            <View style={styles.contentArea}>
+              <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+                <View style={styles.loadingContainer}>
+                  <Text style={styles.loadingText}>Loading entry details...</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </CurvedBackground>
+          <BottomNavigation floating={true} />
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
         <CurvedBackground style={{ flex: 1 }}>
@@ -285,17 +1143,29 @@ export default function LogDetails() {
           <View style={styles.contentArea}>
             <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
               <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading entry details...</Text>
+                <Ionicons name="alert-circle" size={20} color="#DC3545" />
+                <Text style={[styles.loadingText, { marginTop: 8 }]}>Entry not found or was deleted.</Text>
+                <TouchableOpacity style={[{ marginTop: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#2A7DE1' }]} onPress={() => router.back()}>
+                  <Text style={{ color: 'white', fontFamily: FONTS.BarlowSemiCondensed }}>Go Back</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
         </CurvedBackground>
-        <BottomNavigation />
+        <BottomNavigation floating={true} />
       </SafeAreaView>
     );
   }
 
-  const dateTime = formatDateTime(entry.timestamp);
+  const dateTime = formatDateTime(resolvedEntry.timestamp);
+  const heroPhotos: string[] = resolvedEntry.photos || [];
+  const heroWidth = Dimensions.get("window").width - 32;
+
+  const handleHeroScroll = (event: any) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const idx = Math.round(contentOffset.x / layoutMeasurement.width);
+    setPhotoIndex(idx);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
@@ -316,10 +1186,54 @@ export default function LogDetails() {
           <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.contentSection}>
               {/* Back Button */}
-              <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                <Ionicons name="arrow-back" size={20} color="#2A7DE1" />
-                <Text style={styles.backButtonText}>Back to Log</Text>
+              <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
+                <Ionicons name="arrow-back" size={18} color="#1F2937" />
+                <Text style={styles.backLinkText}>Back to log</Text>
               </TouchableOpacity>
+
+              {/* Hero photo carousel - matches AI Assessment style exactly */}
+              {heroPhotos.length > 0 && (
+                <View style={styles.heroImageCard}>
+                  <ScrollView
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={handleHeroScroll}
+                  >
+                    {heroPhotos.map((uri, idx) => (
+                      <View key={`slide-${idx}`} style={[styles.heroImageSlide, { width: heroWidth }]}>
+                        {/* Blurred background fill for portrait/narrow images */}
+                        <Image
+                          source={{ uri }}
+                          style={styles.blurredBackground}
+                          resizeMode="cover"
+                          blurRadius={20}
+                        />
+                        <View style={styles.blurOverlay} />
+                        {/* Main image with contain */}
+                        <Image
+                          source={{ uri }}
+                          style={styles.heroImage}
+                          resizeMode="contain"
+                        />
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {/* Floating Page Indicators - Dark Frosted Glass Pill */}
+                  {heroPhotos.length > 1 && (
+                    <View style={styles.indicatorsOverlay}>
+                      <View style={styles.indicatorsPill}>
+                        {heroPhotos.map((_, idx) => (
+                          <View
+                            key={`dot-${idx}`}
+                            style={[styles.indicator, idx === photoIndex && styles.indicatorActive]}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
 
               {/* Entry Header */}
               <View style={styles.headerCard}>
@@ -328,125 +1242,187 @@ export default function LogDetails() {
                     <Text style={styles.dateText}>{dateTime.date}</Text>
                     <Text style={styles.timeText}>{dateTime.time}</Text>
                   </View>
-                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(entry.severity) }]}>
+                  <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(resolvedEntry.severity) }]}>
                     <Text style={styles.severityBadgeText}>
-                      {getSeverityText(entry.severity)} ({entry.severity}/10)
+                      {getSeverityText(resolvedEntry.severity)} ({resolvedEntry.severity}/10)
                     </Text>
                   </View>
                 </View>
 
                 <View style={styles.typeContainer}>
                   <Ionicons
-                    name={entry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
+                    name={resolvedEntry.type === "ai_assessment" ? "hardware-chip-outline" : "person-outline"}
                     size={16}
                     color="#666"
                   />
                   <Text style={styles.typeText}>
-                    {entry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {entry.createdBy}
+                    {resolvedEntry.type === "ai_assessment" ? "AI Assessment" : "Manual Entry"} • {resolvedEntry.createdBy}
                   </Text>
                 </View>
+
+                {isDeletedEntry && (
+                  <View style={[styles.detailCard, { backgroundColor: '#FFF5F5', borderColor: '#F3C7C7' }] }>
+                    <View style={styles.cardHeader}>
+                      <Ionicons name="trash" size={20} color="#DC3545" />
+                      <Text style={[styles.cardTitle, { color: '#DC3545' }]}>This entry was deleted</Text>
+                    </View>
+                    <Text style={styles.cardContent}>This entry has been marked as deleted and is kept locally for sync. You can go back to the list.</Text>
+                  </View>
+                )}
+
+                {/* Edit/Delete Actions - Only for Manual Entries */}
+                {!isDeletedEntry && resolvedEntry.type !== "ai_assessment" && (
+                  <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/tracker/add-health-entry',
+                          params: {
+                            mode: 'edit',
+                            // Pass both local and convex identifiers so the editor can resolve correctly
+                            entryId: entryMetadata.watermelonId || resolvedEntry._id,
+                            convexId: entryMetadata.convexId || resolvedEntry.convexId || resolvedEntry._id,
+                          }
+                        });
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="pencil" size={20} color="#FFF" />
+                      <Text style={styles.editButtonText}>Edit Entry</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]}
+                      onPress={confirmDelete}
+                      disabled={deleting}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#FFF" />
+                      <Text style={styles.deleteButtonText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
-              {/* Symptoms */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="medical" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Symptoms & Description</Text>
-                </View>
-                <Text style={styles.cardContent}>{entry.symptoms}</Text>
-              </View>
-
-              {/* Category */}
-              {entry.category && (
+              {/* Health overview */}
+              {(resolvedEntry.symptoms || resolvedEntry.category || resolvedEntry.duration) && (
                 <View style={styles.detailCard}>
                   <View style={styles.cardHeader}>
-                    <Ionicons name="pricetag" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Category</Text>
+                    <Ionicons name="pulse" size={20} color="#2563EB" />
+                    <Text style={styles.cardTitle}>Health details</Text>
                   </View>
-                  <Text style={styles.cardContent}>{entry.category}</Text>
-                </View>
-              )}
-
-              {/* Duration */}
-              {entry.duration && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="time" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Duration</Text>
-                  </View>
-                  <Text style={styles.cardContent}>{entry.duration}</Text>
+                  {resolvedEntry.symptoms ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Symptoms</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.symptoms}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.category ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Category</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.category}</Text>
+                    </View>
+                  ) : null}
+                  {resolvedEntry.duration ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Duration</Text>
+                      <Text style={styles.infoValue}>{resolvedEntry.duration}</Text>
+                    </View>
+                  ) : null}
                 </View>
               )}
 
               {/* AI Assessment - split into cards like assessment-results */}
-              {entry.aiContext && (
+              {resolvedEntry.aiContext && (
                 <View>
                   <Text style={[styles.sectionSubtitle, { fontFamily: FONTS.BarlowSemiCondensed, marginBottom: 12 }]}>Medical Triage Assessment</Text>
-                  {renderAssessmentCards(entry.aiContext)}
+                  {renderAssessmentCards(
+                    resolvedEntry.aiContext,
+                    expandedSections,
+                    toggleSection
+                  )}
                 </View>
               )}
 
               {/* Notes */}
-              {entry.notes && (
+              {resolvedEntry.notes && (
                 <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="document-text" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Additional Notes</Text>
-                  </View>
-                  <Text style={styles.cardContent}>{entry.notes}</Text>
-                </View>
-              )}
-
-              {/* Photos */}
-              {entry.photos && entry.photos.length > 0 && (
-                <View style={styles.detailCard}>
-                  <View style={styles.cardHeader}>
-                    <Ionicons name="camera" size={20} color="#2A7DE1" />
-                    <Text style={styles.cardTitle}>Photos ({entry.photos.length})</Text>
-                  </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.photosContainer}>
-                      {entry.photos.map((photo, index) => (
-                        <View key={index} style={styles.photoItem}>
-                          <Image source={{ uri: photo }} style={styles.photo} />
-                          <Text style={styles.photoLabel}>Photo {index + 1}</Text>
-                        </View>
-                      ))}
+                  <View style={styles.cardHeaderWithTTS}>
+                    <View style={styles.cardHeaderLeft}>
+                      <Ionicons name="document-text" size={20} color="#2A7DE1" />
+                      <Text style={styles.cardTitle}>Additional Notes</Text>
                     </View>
-                  </ScrollView>
+                    <TTSButton
+                      text={prepareTextForTTS(resolvedEntry.notes)}
+                      compact
+                      style={styles.cardTTSButton}
+                    />
+                  </View>
+                  <Text style={styles.cardContent}>{resolvedEntry.notes}</Text>
                 </View>
               )}
 
-              {/* Technical Details */}
-              <View style={styles.detailCard}>
-                <View style={styles.cardHeader}>
-                  <Ionicons name="information-circle" size={20} color="#2A7DE1" />
-                  <Text style={styles.cardTitle}>Technical Details</Text>
-                </View>
-                <View style={styles.techDetails}>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry ID:</Text>
-                    <Text style={styles.techValue}>{entry._id}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Timestamp:</Text>
-                    <Text style={styles.techValue}>{entry.timestamp}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Date Key:</Text>
-                    <Text style={styles.techValue}>{entry.date}</Text>
-                  </View>
-                  <View style={styles.techRow}>
-                    <Text style={styles.techLabel}>Entry Type:</Text>
-                    <Text style={styles.techValue}>{entry.type || "manual_entry"}</Text>
-                  </View>
-                </View>
-              </View>
+
             </View>
           </ScrollView>
         </View>
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
+
+      {/* Delete Confirmation Modal - replaces Alert.alert */}
+      <StatusModal
+        visible={deleteModalVisible}
+        type={deleteError ? 'error' : deleteSuccess ? 'success' : 'confirm'}
+        title={
+          deleteError
+            ? 'Delete Failed'
+            : deleteSuccess
+            ? 'Entry Deleted'
+            : 'Delete Entry'
+        }
+        message={
+          deleteError
+            ? deleteError
+            : deleteSuccess
+            ? 'The entry has been deleted.'
+            : 'Are you sure you want to delete this health entry? This action cannot be undone.'
+        }
+        onClose={() => setDeleteModalVisible(false)}
+        buttons={
+          deleteError
+            ? [
+                {
+                  label: 'Close',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'primary',
+                },
+              ]
+            : deleteSuccess
+            ? [
+                {
+                  label: 'Continue',
+                  onPress: () => {
+                    setDeleteModalVisible(false);
+                    router.back();
+                  },
+                  variant: 'primary',
+                },
+              ]
+            : [
+                {
+                  label: 'Cancel',
+                  onPress: () => setDeleteModalVisible(false),
+                  variant: 'secondary',
+                },
+                {
+                  label: deleting ? 'Deleting…' : 'Delete',
+                  onPress: performDelete,
+                  variant: 'destructive',
+                },
+              ]
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -477,22 +1453,72 @@ const styles = StyleSheet.create({
     color: "#666",
     fontFamily: FONTS.BarlowSemiCondensed,
   },
-  backButton: {
+  backLink: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
-    padding: 10,
-    backgroundColor: "#F0F8FF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2A7DE1",
+    marginBottom: 14,
+    gap: 6,
   },
-  backButtonText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: "#2A7DE1",
+  backLinkText: {
+    fontSize: 15,
+    color: "#1F2937",
     fontWeight: "600",
     fontFamily: FONTS.BarlowSemiCondensed,
+  },
+  // Hero image carousel - matches AI Assessment style exactly
+  heroImageCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginBottom: 16,
+    position: "relative",
+  },
+  heroImageSlide: {
+    position: "relative",
+    height: 280,
+  },
+  blurredBackground: {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ scale: 1.1 }], // Slight scale to prevent blur edges
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.15)", // Subtle darkening
+  },
+  heroImage: {
+    width: "100%",
+    height: 280,
+    zIndex: 1,
+  },
+  // Floating indicators overlay
+  indicatorsOverlay: {
+    position: "absolute",
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Dark frosted glass pill for visibility on any background
+  indicatorsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  },
+  indicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+  },
+  indicatorActive: {
+    backgroundColor: "#FFFFFF",
+    width: 18,
+    borderRadius: 3,
   },
   headerCard: {
     backgroundColor: "white",
@@ -501,11 +1527,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#E9ECEF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
   headerRow: {
     flexDirection: "row",
@@ -546,18 +1567,77 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontFamily: FONTS.BarlowSemiCondensed,
   },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E9ECEF",
+  },
+  editButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#2A7DE1",
+    borderRadius: 10,
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 15,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
+  },
+  deleteButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "#DC3545",
+    borderRadius: 10,
+    gap: 8,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: "#E57373",
+    opacity: 0.7,
+  },
+  deleteButtonText: {
+    fontSize: 15,
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontFamily: FONTS.BarlowSemiCondensed,
+    letterSpacing: 0.3,
+  },
   detailCard: {
-    backgroundColor: "white",
+    backgroundColor: "#FFFFFF",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#E9ECEF",
+    borderColor: "#E5E7EB",
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+  },
+  cardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  cardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
   },
   cardTitle: {
     fontSize: 16,
@@ -572,6 +1652,26 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: FONTS.BarlowSemiCondensed,
   },
+  infoRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2F4F7",
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+    fontFamily: FONTS.BarlowSemiCondensed,
+    fontWeight: "600",
+  },
+  infoValue: {
+    fontSize: 15,
+    color: "#111827",
+    lineHeight: 22,
+    fontFamily: FONTS.BarlowSemiCondensed,
+  },
   // Assessment card styles (match assessment-results)
   assessmentCard: {
     backgroundColor: "#F0F8FF",
@@ -580,11 +1680,116 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#2A7DE1",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+  },
+  primaryAssessmentCard: {
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  primaryCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
+  },
+  primaryCardHeaderWithTTS: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  primaryCardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  primaryCardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  cardTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  accordionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  accordionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  accordionHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  accordionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  accordionContent: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  accordionTTSRow: {
+    marginBottom: 10,
+    alignItems: "flex-start",
+  },
+  accordionTTSButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  // Next Steps timeline (match assessment-results)
+  stepRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  stepNumberContainer: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  stepContent: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  stepLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 20,
   },
   cardItem: {
     flexDirection: "row",
@@ -650,5 +1855,24 @@ const styles = StyleSheet.create({
     color: "#1A1A1A",
     fontFamily: FONTS.BarlowSemiCondensed,
     fontWeight: "500",
+  },
+  // Inline TTS button styles
+  inlineTtsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  inlineTtsButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inlineIconOnlyButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 4,
+    minWidth: 24,
+    minHeight: 24,
   },
 });

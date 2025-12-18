@@ -54,10 +54,14 @@ export default defineSchema({
     category: v.optional(v.string()),
     duration: v.optional(v.string()),
     aiContext: v.optional(v.string()),
-      photos: v.optional(v.array(v.string())), 
+    photos: v.optional(v.array(v.string())),
     notes: v.optional(v.string()),
     createdBy: v.string(),
-    type: v.optional(v.string()),
+    type: v.optional(v.string()), // todo: update to union, do not if broke things
+    // Soft delete and edit tracking
+    isDeleted: v.optional(v.boolean()),
+    lastEditedAt: v.optional(v.number()),
+    editCount: v.optional(v.number()),
 
   })
     .index("byUserId", ["userId"])
@@ -100,5 +104,22 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_token", ["token"]),
+
+  // Health resources/articles
+  resources: defineTable({
+    title: v.string(),
+    subtitle: v.string(),
+    icon: v.string(),
+    iconColor: v.string(),
+    bgGradient: v.array(v.string()),
+    category: v.string(),
+    importance: v.string(), // 'critical' | 'high' | 'medium'
+    readTime: v.string(),
+    content: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_importance", ["importance"]),
 
 });

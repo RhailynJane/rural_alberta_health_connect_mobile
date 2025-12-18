@@ -30,13 +30,19 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files - CRITICAL: Never commit API keys or tokens
 .env
 .env*.local
-# Ignore all env variants (development, production, etc.)
+.env.development
+.env.production
+.env.*.local
+# Ignore all env variants
 .env.*
-!
+
+# Explicitly track only examples
 !.env.example
+!.env.example.development
+!.env.example.production
 
 # typescript
 *.tsbuildinfo
@@ -45,4 +51,21 @@ app-example
 
 # generated native folders
 /ios
-/android
+/android/build
+/android/gradle/*
+!/android/gradle/wrapper
+/android/.gradle
+
+# Firebase configs
+# Source of truth for EAS build (keep in repo)
+!/google-services.json
+# Ignore generated copies under android/app (prebuild will place it there)
+/android/app/google-services.json
+# Never commit Admin SDK private keys
+/android/app/rahc-push-firebase-adminsdk-*.json
+
+# temp
+temp*rhaila.md
+temp*
+rhaila.md
+.temp*

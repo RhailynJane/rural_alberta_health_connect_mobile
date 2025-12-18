@@ -58,6 +58,8 @@ export const generateContextWithGemini = action({
     category: v.string(),
     symptoms: v.array(v.string()),
     images: v.optional(v.array(v.string())),
+    // YOLO detection context - formatted text from on-device wound detection
+    yoloContext: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const {
@@ -68,6 +70,7 @@ export const generateContextWithGemini = action({
       category,
       symptoms,
       images,
+      yoloContext,
     } = args;
 
     console.log("🔍 Gemini Medical Assessment Request:", {
@@ -76,6 +79,8 @@ export const generateContextWithGemini = action({
       hasImages: images && images.length > 0,
       imageCount: images?.length || 0,
       descriptionLength: description.length,
+      hasYoloContext: !!yoloContext,
+      yoloContextLength: yoloContext?.length || 0,
     });
 
     const systemPrompt = `CRITICAL: You are a licensed emergency medicine physician providing legitimate medical triage in rural Alberta, Canada. This is a healthcare application for medical assessment only.
@@ -118,6 +123,9 @@ Symptom Duration: ${durationContext}
 Associated Medical Symptoms: ${symptoms.length > 0 ? symptoms.join(", ") : "See description"}
 Relevant Exposure Factors: ${environmentalFactors.length > 0 ? environmentalFactors.join(", ") : "None reported"}
 
+${yoloContext ? `
+${yoloContext}
+` : ''}
 ${
   images && images.length > 0
     ? `
@@ -171,41 +179,55 @@ GEOGRAPHIC HEALTHCARE CONTEXT:
 - Transport: Weather-dependent ambulance access
 
 MEDICAL TRIAGE PRIORITY:
-Provide comprehensive clinical assessment with this EXACT structure:
+Provide comprehensive clinical assessment with this EXACT structure and format:
 
 1. CLINICAL ASSESSMENT
-   - Overall impression and chief concern
+   - One clear sentence stating the primary clinical impression
+   - Brief severity assessment (mild/moderate/severe)
    ${images && images.length > 1 ? '- Synthesis of findings across all ' + images.length + ' photos' : ''}
 
 2. VISUAL FINDINGS (if photos provided)
    ${images && images.length > 1 ? '- Findings from each photo location/angle' : ''}
-   - Specific observable clinical features
-   - Measurements and severity indicators
+   - Specific observable clinical features (bullet points)
+   - Size, color, texture observations
 
 3. CLINICAL INTERPRETATION
-   - Differential diagnosis considerations
-   - Most likely clinical condition(s)
+   - Most likely condition (one line)
+   - Key supporting evidence (bullet points)
 
 4. BURN/WOUND GRADING (if applicable)
-   - Classification and severity assessment
+   - Classification with brief explanation
 
 5. INFECTION RISK
-   - Current signs and risk factors
+   - Risk level (low/moderate/high)
+   - Key indicators present or absent
 
-6. EMERGENCY RED FLAGS
-   - Specific warning signs requiring immediate care
+6. URGENCY ASSESSMENT
+   - Care timeline recommendation
 
-7. RURAL GUIDANCE
-   - Practical advice for rural setting
+7. RECOMMENDATIONS
+   FORMAT: Start each line with an action verb. Keep each recommendation to one line.
+   Example format:
+   - Clean the affected area with mild soap and water
+   - Apply a thin layer of antibiotic ointment
+   - Cover with a sterile non-stick bandage
+   - Take over-the-counter pain relief as needed
 
-8. URGENCY ASSESSMENT
-   - Timeline for seeking care
+8. NEXT STEPS
+   FORMAT: Use time-based or condition-based headers. Be specific and actionable.
+   REQUIRED STRUCTURE - use exactly this format:
+   - Today: [immediate action to take]
+   - Within 24-48 hours: [short-term follow-up action]
+   - If symptoms worsen: [escalation guidance with specific signs to watch]
+   - Follow-up: [when to reassess or seek additional care]
 
-9. RECOMMENDATIONS
-   - Specific treatment steps
+   Example:
+   - Today: Rest the affected area and apply cold compress for 15 minutes every 2 hours
+   - Within 24-48 hours: Monitor for increased redness, swelling, or warmth
+   - If symptoms worsen: Seek medical attention if you notice spreading redness, fever, or increased pain
+   - Follow-up: Schedule a clinic visit within 3-5 days if not significantly improved
 
-10. NEXT STEPS
-    - Clear action plan with timeframes
+IMPORTANT: Keep recommendations and next steps concise. Use bullet points, not paragraphs. Start with action verbs. Include specific timeframes.
 
 This is a legitimate medical consultation for healthcare triage purposes.`;
 
@@ -315,6 +337,14 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
       };
 
       console.log("📤 Sending medical assessment request to Gemini...");
+      console.log("📤 Request details:", {
+        modelName,
+        hasImages: contentParts.length > 1,
+        imageCount: contentParts.length - 1,
+        totalParts: contentParts.length,
+        temperature: body.generationConfig.temperature,
+        maxTokens: body.generationConfig.maxOutputTokens
+      });
 
       const response = await fetch(url, {
         method: "POST",
@@ -327,6 +357,11 @@ This is a legitimate medical consultation for healthcare triage purposes.`;
       const responseText = await response.text();
       console.log("📥 Gemini response status:", response.status);
       console.log("📊 Response length:", responseText.length, "characters");
+      
+      if (response.status !== 200) {
+        console.error("❌ Non-200 status code:", response.status);
+        console.error("❌ Response preview:", responseText.substring(0, 500));
+      }
 
       if (!response.ok) {
         console.error("❌ Gemini API error:", responseText);
@@ -425,6 +460,17 @@ For all burns: Do not apply ice, butter, or ointments. Seek professional medical
 
       if (!context) {
         console.warn("❌ No medical assessment generated");
+        console.warn("❌ Candidates data:", JSON.stringify(data.candidates, null, 2));
+        console.warn("❌ Full response structure:", JSON.stringify({
+          hasCandidates: !!data.candidates,
+          candidatesLength: data.candidates?.length,
+          firstCandidate: data.candidates?.[0] ? {
+            hasContent: !!data.candidates[0].content,
+            hasParts: !!data.candidates[0].content?.parts,
+            partsLength: data.candidates[0].content?.parts?.length,
+            finishReason: data.candidates[0].finishReason
+          } : null
+        }, null, 2));
         return getDetailedFallbackAssessment(
           category,
           severity,
@@ -434,6 +480,8 @@ For all burns: Do not apply ice, butter, or ointments. Seek professional medical
       }
 
       console.log("✅ Medical assessment completed successfully");
+      console.log("✅ Assessment preview:", context.substring(0, 200) + "...");
+      console.log("✅ Assessment length:", context.length, "characters");
       return { context };
     } catch (error: any) {
       console.error("❌ Medical assessment error:", error);

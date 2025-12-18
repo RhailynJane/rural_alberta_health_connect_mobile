@@ -185,7 +185,11 @@ export default function NotificationsScreen() {
             const notifId = latestNotif ? (latestNotif.localId || String(latestNotif._id).replace(/^local-/, '')) : null;
             
             return (
-              <View style={[styles.item, !isReminderRead && styles.itemUnread]}>
+              <View style={[styles.item, styles.itemPinned, !isReminderRead && styles.itemUnread]}>
+                <View style={styles.pinnedBadge}>
+                  <Icon name="schedule" size={14} color={COLORS.white} />
+                  <Text style={styles.pinnedBadgeText}>Due Now</Text>
+                </View>
                 <View style={styles.row}>
                   <Icon
                     name={isReminderRead ? "notifications-none" : "notifications-active"}
@@ -197,7 +201,7 @@ export default function NotificationsScreen() {
                   </Text>
                   {isReminderRead && (
                     <View style={styles.readBadge}>
-                      <Text style={styles.readBadgeText}>Read</Text>
+                      <Icon name="check-circle" size={16} color={COLORS.success} />
                     </View>
                   )}
                 </View>
@@ -217,6 +221,7 @@ export default function NotificationsScreen() {
                         setIsReminderRead(true);
                       }}
                     >
+                      <Icon name="done" size={14} color={COLORS.white} />
                       <Text style={styles.smallBtnText}>Mark read</Text>
                     </TouchableOpacity>
                   )}
@@ -232,87 +237,167 @@ export default function NotificationsScreen() {
               <Text style={styles.emptySub}>You&apos;ll see important updates here</Text>
             </View>
           ) : (
-            filteredDisplayList.map((n: any) => (
-              <View key={String(n._id)} style={[styles.item, !n.read && styles.itemUnread]}>
-                <View style={styles.row}>
-                  <Icon name={n.read ? "notifications-none" : "notifications-active"} size={22} color={n.read ? COLORS.darkGray : COLORS.primary} />
-                  <Text style={styles.title} numberOfLines={2}>{n.title}</Text>
-                  {n.read && (
-                    <View style={styles.readBadge}>
-                      <Text style={styles.readBadgeText}>Read</Text>
+            filteredDisplayList.map((n: any) => {
+              const getTypeIcon = () => {
+                if (n._local || n.title?.includes('Reminder')) return { icon: 'schedule', color: COLORS.primary };
+                if (n.title?.includes('Alert')) return { icon: 'warning', color: COLORS.error };
+                return { icon: 'info', color: COLORS.primary };
+              };
+              const typeInfo = getTypeIcon();
+              return (
+                <View key={String(n._id)} style={[styles.item, !n.read && styles.itemUnread, { borderLeftColor: typeInfo.color }]}>
+                  <View style={styles.headerRow}>
+                    <View style={[styles.typeIconContainer, { backgroundColor: typeInfo.color + '15' }]}>
+                      <Icon name={typeInfo.icon} size={20} color={typeInfo.color} />
                     </View>
-                  )}
+                    <View style={styles.headerContent}>
+                      <Text style={styles.title} numberOfLines={2}>{n.title}</Text>
+                      <Text style={styles.time}>{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                    </View>
+                    {n.read && (
+                      <View style={styles.readBadge}>
+                        <Icon name="check-circle" size={16} color={COLORS.success} />
+                      </View>
+                    )}
+                  </View>
+                  {!!n.body && <Text style={styles.body}>{n.body}</Text>}
+                  <View style={styles.footerRow}>
+                    <Text style={styles.date}>{new Date(n.createdAt).toLocaleDateString()}</Text>
+                    {!n.read && (
+                      <TouchableOpacity
+                        style={styles.smallBtn}
+                        onPress={async () => {
+                          if (n._local) {
+                            try { await markReminderHistoryItemRead(n.localId || String(n._id).replace(/^local-/, '')); await refreshNotifications(); } catch {}
+                          } else if (isOnline) {
+                            try { await markOneAsRead({ notificationId: n._id }); } catch {}
+                          }
+                        }}
+                      >
+                        <Icon name="done" size={14} color={COLORS.white} />
+                        <Text style={styles.smallBtnText}>Mark read</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-                {!!n.body && <Text style={styles.body}>{n.body}</Text>}
-                <View style={styles.footerRow}>
-                  <Text style={styles.time}>{new Date(n.createdAt).toLocaleString()}</Text>
-                  {!n.read && (
-                    <TouchableOpacity
-                      style={styles.smallBtn}
-                      onPress={async () => {
-                        if (n._local) {
-                          try { await markReminderHistoryItemRead(n.localId || String(n._id).replace(/^local-/, '')); await refreshNotifications(); } catch {}
-                        } else if (isOnline) {
-                          try { await markOneAsRead({ notificationId: n._id }); } catch {}
-                        }
-                      }}
-                    >
-                      <Text style={styles.smallBtnText}>Mark read</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
       </SafeAreaView>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </CurvedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16 },
-  scrollContent: { paddingBottom: 100 }, // Add bottom margin for BottomNavigation
+  container: { flex: 1, paddingHorizontal: 12 },
+  scrollContent: { paddingBottom: 160 },
   headerActions: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   unreadText: {
     fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 14,
+    fontSize: 12,
     color: COLORS.darkText,
   },
   markAllBtn: {
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
   markAllText: {
     color: COLORS.white,
     fontFamily: FONTS.BarlowSemiCondensedBold,
-    fontSize: 14,
+    fontSize: 12,
   },
-  emptyState: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
-  emptyTitle: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 18, color: COLORS.darkText, marginTop: 12 },
-  emptySub: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 14, color: COLORS.darkGray, marginTop: 4 },
-  item: { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: COLORS.lightGray },
-  itemUnread: { borderLeftWidth: 3, borderLeftColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
+  emptyState: { alignItems: 'center', paddingTop: 40, paddingBottom: 30 },
+  emptyTitle: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 16, color: COLORS.darkText, marginTop: 10 },
+  emptySub: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray, marginTop: 3 },
+  item: { 
+    backgroundColor: COLORS.white, 
+    borderRadius: 10, 
+    padding: 10, 
+    marginBottom: 8, 
+    borderWidth: 1, 
+    borderColor: COLORS.lightGray,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  itemUnread: { 
+    backgroundColor: COLORS.primary + '08',
+  },
+  itemPinned: {
+    borderTopWidth: 2,
+    borderTopColor: COLORS.primary,
+    backgroundColor: COLORS.primary + '12',
+  },
+  pinnedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.primary,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  pinnedBadgeText: {
+    color: COLORS.white,
+    fontFamily: FONTS.BarlowSemiCondensedBold,
+    fontSize: 10,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 15, color: COLORS.darkText },
-  readBadge: { backgroundColor: COLORS.darkGray, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
-  readBadgeText: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 10, color: COLORS.white },
-  body: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 13, color: COLORS.darkGray, marginTop: 4 },
-  footerRow: { marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  time: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
+  },
+  typeIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: { flex: 1, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 13, color: COLORS.darkText, fontWeight: '600', lineHeight: 16 },
+  readBadge: { 
+    backgroundColor: COLORS.success + '15', 
+    borderRadius: 5, 
+    padding: 3 
+  },
+  readBadgeText: { fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 9, color: COLORS.white },
+  body: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 12, color: COLORS.darkGray, marginTop: 4, marginBottom: 6, lineHeight: 16 },
+  footerRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  time: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 10, color: COLORS.darkGray, marginTop: 1 },
+  date: { fontFamily: FONTS.BarlowSemiCondensed, fontSize: 10, color: COLORS.darkGray },
   actionButtons: { flexDirection: 'row', gap: 8 },
-  smallBtn: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 },
+  smallBtn: { 
+    backgroundColor: COLORS.primary, 
+    borderRadius: 5, 
+    paddingHorizontal: 8, 
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
   clearBtn: { backgroundColor: COLORS.darkGray },
-  smallBtnText: { color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 12 },
+  smallBtnText: { color: COLORS.white, fontFamily: FONTS.BarlowSemiCondensedBold, fontSize: 10, fontWeight: '600' },
 });
 
  

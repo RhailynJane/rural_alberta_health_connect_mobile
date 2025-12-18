@@ -47,7 +47,7 @@ export async function createAndPushNotification(
 }
 
 /**
- * Send push notification to all of a user's devices
+ * Send push notification to all of a user's devices via Expo Push Service
  */
 async function sendPushToUser(
   ctx: any,
@@ -74,6 +74,8 @@ async function sendPushToUser(
     title,
     body,
     data: data || {},
+    priority: "high",
+    channelId: "default",
   }));
 
   // Send to Expo push notification service
@@ -87,7 +89,11 @@ async function sendPushToUser(
     });
 
     if (!response.ok) {
-      console.error("Expo push notification failed:", await response.text());
+      const errorText = await response.text();
+      console.error("Expo push notification failed:", errorText);
+    } else {
+      const result = await response.json();
+      console.log(`✅ Sent Expo push to ${tokens.length} device(s):`, result);
     }
   } catch (error) {
     console.error("Error sending push notification:", error);
@@ -257,5 +263,90 @@ export const deleteNotification = mutation({
     }
 
     await ctx.db.delete(args.notificationId);
+  },
+});
+
+/**
+ * Register Firebase Cloud Messaging (FCM) token
+ * Similar to registerPushToken but specifically for Firebase
+ */
+export const registerFirebaseFCMToken = mutation({
+  args: {
+    fcmToken: v.string(),
+    platform: v.string(), // "ios", "android", "web"
+    deviceName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    // Check if FCM token already exists for this user
+    const existing = await ctx.db
+      .query("pushTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.fcmToken))
+      .first();
+
+    if (existing) {
+      // Update timestamp and device info
+      await ctx.db.patch(existing._id, {
+        updatedAt: Date.now(),
+        ...(args.deviceName && { platform: `${args.platform}-firebase` }),
+      });
+      console.log("✅ Firebase FCM token updated for user:", userId);
+      return existing._id;
+    }
+
+    // Create new FCM token entry
+    const tokenId = await ctx.db.insert("pushTokens", {
+      userId,
+      token: args.fcmToken,
+      platform: `${args.platform}-firebase`, // Distinguish Firebase from Expo
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    console.log("✅ Firebase FCM token registered for user:", userId);
+    return tokenId;
+  },
+});
+
+/**
+ * Get user's push tokens (both Expo and Firebase)
+ */
+export const getUserPushTokens = query({
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    return await ctx.db
+      .query("pushTokens")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+  },
+});
+
+/**
+ * Send push notification via Expo Push Service
+ * Public mutation for sending push notifications to users
+ */
+export const sendPushNotificationFCM = mutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    data: v.optional(v.record(v.string(), v.string())),
+  },
+  handler: async (ctx, args) => {
+    try {
+      await sendPushToUser(ctx, args.userId, args.title, args.body, args.data);
+      return { success: true, method: 'expo' };
+    } catch (error: any) {
+      console.error("❌ Error sending push notification:", error);
+      return { success: false, error: error.message };
+    }
   },
 });

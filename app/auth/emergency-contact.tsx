@@ -190,7 +190,7 @@ export default function EmergencyContact() {
       }
 
       console.log("➡️ Navigating to medical history");
-      router.push("/auth/medical-history");
+      router.replace("/auth/medical-history");
     } catch (error) {
       console.error("❌ Emergency Contact - Error:", error);
       setErrorModalMessage("Failed to save emergency contact information. Please try again.");
@@ -222,19 +222,20 @@ export default function EmergencyContact() {
               height={150}
               showLogo={true}
               screenType="signin"
+              showMenuButton={false}
             />
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: '66%' }]} />
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: '66%' }]} />
+                </View>
+                <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                  Step 2 of 3
+                </Text>
               </View>
-              <Text style={[styles.progressText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
-                Step 2 of 3
-              </Text>
-            </View>
 
-            <View style={styles.contentSection}>
+              <View style={styles.contentSection}>
               <Text style={[styles.sectionTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Emergency Contact
               </Text>
@@ -407,11 +408,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#1A1A1A",
     marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   buttonContainer: {
     flexDirection: 'row',

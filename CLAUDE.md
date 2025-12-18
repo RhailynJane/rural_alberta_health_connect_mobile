@@ -9,6 +9,7 @@ Alberta Health Connect is a React Native mobile application designed to improve 
 ## Development Commands
 
 ### Starting the App
+
 ```bash
 npm start              # Start Expo dev server
 npm run android        # Run on Android device/emulator
@@ -17,6 +18,7 @@ npm run web            # Run in web browser
 ```
 
 ### Build & Deploy
+
 ```bash
 npm run eas-install    # Install dependencies for EAS build
 npm run prebuild       # Prebuild native projects (runs eas-install)
@@ -24,11 +26,13 @@ npx expo prebuild      # Generate native iOS/Android folders
 ```
 
 ### Code Quality
+
 ```bash
 npm run lint           # Run ESLint
 ```
 
 ### Convex Backend
+
 ```bash
 npx convex dev         # Start Convex backend in development mode
 npx convex deploy      # Deploy backend to production
@@ -37,6 +41,7 @@ npx convex deploy      # Deploy backend to production
 ## Technical Architecture
 
 ### Frontend Stack
+
 - **Framework**: React Native 0.81.5 with Expo SDK 54
 - **Routing**: Expo Router (file-based) with typed routes enabled
 - **Language**: TypeScript (strict mode disabled, experimentalDecorators enabled)
@@ -47,9 +52,11 @@ npx convex deploy      # Deploy backend to production
 - **Camera**: React Native Vision Camera (v4.7.2) for symptom image capture
 - **Maps**: @rnmapbox/maps (v10.2.6) for location-based services
 - **Notifications**: Expo Notifications with local scheduling and reminder management
-- **ML/AI**: Vision camera integration with worklets for real-time processing
+- **ML/AI**: ONNX Runtime for YOLO detection, ExecuTorch for on-device LLM (Android only)
+- **Computer Vision**: react-native-fast-opencv for image preprocessing
 
 ### Backend (Convex)
+
 - **Architecture**: BFF (Backend for Frontend) pattern with layered structure
 - **Authentication**: Convex Auth with Password provider + Expo SecureStore
 - **Database**: Convex's built-in datastore with realtime sync
@@ -58,6 +65,7 @@ npx convex deploy      # Deploy backend to production
 - **Password Reset**: OTP-based system with Resend/Brevo email integration
 
 ### Navigation Structure
+
 ```
 / (index.tsx)                    # Splash screen
 /onboarding                      # Onboarding flow
@@ -82,6 +90,7 @@ npx convex deploy      # Deploy backend to production
 The app uses WatermelonDB for offline-first data persistence with bidirectional sync to Convex:
 
 **Local Schema** (watermelon/database/schema.ts):
+
 - `users` - Cached user data with snake_case and camelCase fields
 - `user_profiles` - Profile data including reminders (JSON array)
 - `health_entries` - Health logs with offline creation support
@@ -89,6 +98,7 @@ The app uses WatermelonDB for offline-first data persistence with bidirectional 
 - `reminders` - Symptom assessment reminders
 
 **Sync Strategy** (watermelon/sync/):
+
 - `syncManager.ts` - Queue-based sync with retry logic
 - `convexSync.ts` - Bidirectional sync between WatermelonDB and Convex
 - Network-aware: Auto-syncs when connection restored
@@ -99,6 +109,7 @@ The app uses WatermelonDB for offline-first data persistence with bidirectional 
 The backend follows a **BFF (Backend for Frontend) layered pattern** with clear separation between API and business logic:
 
 ### Directory Structure
+
 ```
 convex/
 ├── personalInfoOnboarding/      # Personal info API (update.ts)
@@ -126,9 +137,11 @@ convex/
 ```
 
 ### API Layer Pattern
+
 - **Thin wrappers**: API endpoints validate auth and delegate to model layer
 - **Screen-based folders**: Each folder maps to a frontend screen/feature
 - **Example usage**:
+
   ```typescript
   // API layer (screen-specific)
   api.personalInfoOnboarding.updateInfo({ ageRange: "25-34" })
@@ -139,6 +152,7 @@ convex/
   ```
 
 ### Key Convex Endpoints
+
 - `api.auth.signIn/signOut` - Authentication
 - `api.aiAssessment.generateContextWithGemini` - AI symptom analysis (action)
 - `api.healthEntries.logAIAssessment/logManualEntry` - Health tracking with idempotency
@@ -152,6 +166,7 @@ convex/
 ## Environment Setup
 
 ### Required Environment Variables (.env.local)
+
 ```
 EXPO_PUBLIC_CONVEX_URL=<convex-deployment-url>
 CONVEX_DEPLOYMENT=<convex-deployment-id>
@@ -162,16 +177,19 @@ RNMAPBOX_MAPS_DOWNLOAD_TOKEN=<mapbox-download-token>
 Note: EAS builds use environment variables from eas.json (development, preview, production)
 
 ### Convex Deployment
+
 - Development: `npx convex dev` (uses dev deployment from .env.local)
 - Production: Configure via Convex dashboard and `npx convex deploy`
 
 ## Key Configuration Files
 
 ### Metro Config (metro.config.js)
-- Custom asset extension: `.tflite` added for TensorFlow Lite models
-- Models stored in `assets/models/`
+
+- Custom asset extensions: `.tflite` (TensorFlow Lite) and `.onnx` (ONNX Runtime) for ML models
+- Models stored in `assets/` (e.g., `assets/weights.onnx`)
 
 ### TypeScript (tsconfig.json)
+
 - Strict mode: **disabled** (strict: false)
 - Experimental decorators enabled (for WatermelonDB models)
 - Path alias: `@/*` maps to root directory
@@ -179,6 +197,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 - Excludes: @rnmapbox/maps, @react-native-community, @shopify/react-native-skia
 
 ### Expo (app.json)
+
 - **New Architecture**: Enabled (`newArchEnabled: true`)
 - **React Compiler**: Experimental feature enabled
 - **Typed Routes**: Enabled for type-safe navigation
@@ -188,6 +207,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 - **Permissions**: Camera, microphone, location, notifications (see infoPlist/Android permissions)
 
 ### EAS Build (eas.json)
+
 ```
 - development: Development client, internal distribution
 - preview: Internal distribution
@@ -196,7 +216,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 
 ## Authentication Flow
 
-1. **Provider Setup** (app/_layout.tsx):
+1. **Provider Setup** (app/\_layout.tsx):
    - ConvexAuthProvider wraps entire app
    - SecureStore for token persistence
    - Session refresh context for auth state management
@@ -213,6 +233,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 ## Camera & Vision Integration
 
 ### React Native Vision Camera
+
 - **Package**: react-native-vision-camera (v4.7.2)
 - **Implementation**: app/(tabs)/vision-test/
   - `VisionSessionContext.tsx` - Session state management for camera flow
@@ -223,15 +244,140 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 - **Use Case**: Symptom image capture for AI-powered visual assessment
 
 ### AI Assessment (Convex Action)
+
 - **Service**: Google Gemini API (via Convex action)
 - **Endpoint**: `api.aiAssessment.generateContextWithGemini`
 - **Flow**: Symptom input → Severity rating → Duration selection → AI Context Generation
 - **Image Support**: Base64 photo upload with size checking (~800KB limit)
 - **Fallback**: Rule-based assessment when AI unavailable or image too large
 
+## YOLO Object Detection (utils/yolo/)
+
+On-device wound/injury detection using ONNX Runtime with a custom YOLOv8 model.
+
+### Architecture
+
+```
+utils/yolo/
+├── index.ts           # Public API - exports all modules
+├── types.ts           # TypeScript interfaces (Detection, BoundingBox, etc.)
+├── constants.ts       # Model config (640x640 input, 8 classes, thresholds)
+├── preprocessing.ts   # Image → tensor conversion with letterboxing
+├── opencv-bridge.ts   # OpenCV wrapper for image loading/resizing
+├── inference.ts       # ONNX Runtime session management
+├── postprocessing.ts  # Parse output, NMS, scale to original coords
+├── visualization.ts   # Draw bounding boxes on images
+├── pipeline.ts        # Multi-image orchestrator (main entry point)
+└── geminiContext.ts   # Format detections for Gemini AI prompt
+```
+
+### Usage (Recommended - Pipeline API)
+
+```typescript
+import { runPipeline, processImage } from '@/utils/yolo';
+
+// Process multiple images
+const result = await runPipeline(['file://photo1.jpg', 'file://photo2.jpg']);
+console.log(`Found ${result.totalDetections} detections`);
+result.results.forEach(r => {
+  // r.annotatedImageBase64 - image with bounding boxes
+  // r.detections - array of Detection objects
+});
+
+// Process single image
+const singleResult = await processImage('file://photo.jpg');
+```
+
+### Advanced Usage (Manual Control)
+
+```typescript
+import { YoloInference, preprocessImage, postprocess, MODEL_CONFIG } from '@/utils/yolo';
+import { Asset } from 'expo-asset';
+
+// Initialize
+const yolo = new YoloInference();
+const assets = await Asset.loadAsync(require('@/assets/weights.onnx'));
+await yolo.loadModel(assets[0].localUri!);
+
+// Run detection
+const preprocess = await preprocessImage(imageUri);
+const output = await yolo.runInference(preprocess.tensor);
+const detections = postprocess(output, preprocess, MODEL_CONFIG);
+```
+
+### Model Details
+
+- **Input**: 640x640 RGB image (letterboxed)
+- **Output**: [1, 12, 8400] tensor - 8400 predictions × 12 features (x, y, w, h, 8 class probs)
+- **Classes**: 1st degree burn, 2nd degree burn, 3rd degree burn, Rashes, abrasion, bruise, cut, frostbite
+- **Thresholds**: confidence 0.5, IoU 0.45 (configurable in constants.ts)
+
+### Testing
+
+Pure functions in preprocessing and postprocessing have built-in tests:
+```typescript
+import { runAllYoloTests, runAllYoloTestsWithImages } from '@/utils/yolo';
+
+// Pure function tests (no device required)
+runAllYoloTests();
+
+// Full pipeline test with real images (requires device/emulator)
+await runAllYoloTestsWithImages(['file://test-image.jpg']);
+```
+
+## On-Device LLM (utils/llm/)
+
+On-device wound assessment using ExecuTorch with Qwen3 0.6B quantized model.
+
+### Architecture (Singleton Pattern)
+
+React Native tab navigation unmounts components, causing OOM from repeated model initialization. Solution: singleton pattern outside React lifecycle.
+
+```
+App Root (_layout.tsx)
+  └── LLMHost (never unmounts, calls useLLM())
+        └── LLMSingleton (module-level, broadcasts state via EventEmitter)
+              └── useWoundLLM() (subscribes via useSyncExternalStore)
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `LLMSingleton.ts` | Singleton manager, holds model instance |
+| `LLMHost.tsx` | Root-level component calling ExecuTorch `useLLM()` |
+| `useWoundLLM.ts` | Consumer hook using `useSyncExternalStore` |
+| `woundContext.ts` | Prompt building for wound assessment |
+
+### Usage
+
+```typescript
+import { useWoundLLM } from '@/utils/llm';
+
+const { isReady, isGenerating, generateFromPipeline, response } = useWoundLLM();
+
+// Generate context from YOLO detections
+const result = await generateFromPipeline(yoloResult, {
+  bodyLocation: 'left arm',
+  injuryDuration: '2 hours ago',
+});
+```
+
+### Platform Support
+
+- **Android**: Full support via ExecuTorch
+- **iOS**: Disabled in `react-native.config.js` due to OpenCV pod conflict (`opencv-rne` vs `FastOpenCV-iOS`)
+
+### Implementation Notes
+
+- **EventEmitter**: Uses `expo-modules-core` (not Node.js `events`)
+- **useSyncExternalStore**: `getState()` returns direct reference (not spread) to avoid infinite loops
+- See `docs/architecture/llm-singleton-pattern.md` for details
+
 ## Health Tracking System
 
 ### Data Models
+
 - **healthEntries** table (Convex):
   - AI assessments (`type: "ai_assessment"`)
   - Manual entries (`type: "manual"`)
@@ -242,6 +388,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
   - Syncs to Convex when online
 
 ### Tracking Features
+
 - Daily health logs with symptom severity rating (0-10 scale)
 - Photo attachments via expo-image-picker
 - AI-generated context and recommendations
@@ -250,7 +397,8 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 
 ## Notifications System
 
-### Local Notifications (app/_utils/notifications.ts)
+### Local Notifications (app/\_utils/notifications.ts)
+
 - **Channels**: High-priority reminder channel for Android
 - **Reminder Management**: Multiple reminders per user (stored as JSON array)
 - **User Namespacing**: Per-user AsyncStorage keys to prevent cross-user data leakage
@@ -259,6 +407,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 - **Scheduling**: Daily/weekly reminders with configurable time and day
 
 ### In-App Notifications (convex/notifications.ts)
+
 - **Schema**: notifications table with userId, title, body, type, read status
 - **Push Integration**: Expo push tokens stored in pushTokens table
 - **Helper**: `createAndPushNotification()` for unified notification creation
@@ -268,6 +417,7 @@ Note: EAS builds use environment variables from eas.json (development, preview, 
 ## Common Development Patterns
 
 ### Using Convex Hooks
+
 ```typescript
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -281,6 +431,7 @@ await updateInfo({ ageRange: "25-34", location: "Calgary" });
 ```
 
 ### Session Refresh Pattern
+
 ```typescript
 import { useSessionRefresh } from "@/app/_layout";
 
@@ -289,32 +440,91 @@ const { refreshSession, isRefreshing } = useSessionRefresh();
 ```
 
 ### Form Validation (Formik + Yup)
+
 - Standard pattern in auth screens
 - Email validation, password requirements
 - Custom error messages
 
 ### WatermelonDB Patterns
+
+**IMPORTANT**: All database modifications (create, update, delete) MUST be done within a writer context using `database.write()` or the `safeWrite` wrapper.
+
+#### Using safeWrite Wrapper (Recommended)
+
+The `safeWrite` utility (learned from Papillon project) provides timeout protection for all WatermelonDB write operations:
+
 ```typescript
-import { database } from '@/watermelon/database';
-import { Q } from '@nozbe/watermelondb';
+import { safeWrite } from "@/watermelon/utils/safeWrite";
+import { database } from "@/watermelon/database";
 
-// Query local data
-const healthEntries = await database.collections
-  .get('health_entries')
-  .query(Q.where('user_id', userId))
-  .fetch();
+// Creating records with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    await database.collections.get("health_entries").create((entry) => {
+      entry.userId = userId;
+      entry.symptoms = "Headache";
+    });
+  },
+  10000,  // 10 second timeout
+  'createHealthEntry'  // Operation name for debugging
+);
 
-// Create with offline support
-await database.write(async () => {
-  await database.collections.get('health_entries').create(entry => {
-    entry.userId = userId;
-    entry.symptoms = 'Headache';
-    // Auto-syncs when online
-  });
-});
+// Updating records with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    const entry = await healthCollection.find(entryId);
+    await entry.update((e) => {
+      e.symptoms = "Updated symptoms";
+      e.severity = 7;
+    });
+  },
+  10000,
+  'updateHealthEntry'
+);
+
+// Batch operations with timeout protection
+await safeWrite(
+  database,
+  async () => {
+    const entry1 = await collection.create((e) => { /* ... */ });
+    const entry2 = await collection.create((e) => { /* ... */ });
+  },
+  10000,
+  'batchCreateEntries'
+);
 ```
 
+#### Query Patterns (No Writer Needed)
+
+```typescript
+import { database } from "@/watermelon/database";
+import { Q } from "@nozbe/watermelondb";
+
+// Query local data (read-only, no writer needed)
+const healthEntries = await database.collections
+  .get("health_entries")
+  .query(Q.where("user_id", userId))
+  .fetch();
+
+// Find by ID (read-only, no writer needed)
+const entry = await database.collections
+  .get("health_entries")
+  .find(entryId);
+```
+
+#### Why Use safeWrite?
+
+1. **Timeout Protection**: Prevents database operations from hanging indefinitely (10s default)
+2. **Error Handling**: Centralized error logging with operation names
+3. **Debugging**: Named operations make it easier to track which operation failed
+4. **Consistency**: Ensures all write operations follow the same pattern
+
+**Reference**: `watermelon/utils/safeWrite.ts` (pattern learned from Papillon project)
+
 ### Custom UI Components
+
 - **CurvedHeader/CurvedBackground**: SVG-based curved designs
 - **HealthStatusTag**: Severity-based status indicators
 - **BottomNavigation**: Custom tab bar
@@ -337,6 +547,7 @@ await database.write(async () => {
 ## Testing Strategy
 
 Currently no automated testing framework configured. Future considerations:
+
 - Jest + React Native Testing Library for unit/integration tests
 - Detox for E2E testing
 - Convex backend testing utilities
@@ -344,11 +555,13 @@ Currently no automated testing framework configured. Future considerations:
 ## Platform-Specific Notes
 
 ### iOS
+
 - Tablet support enabled
 - Bundle ID: `com.rahc.app`
 - Permissions: Camera, microphone, location, speech recognition, notifications
 
 ### Android
+
 - Edge-to-edge enabled
 - Min SDK: 26
 - Adaptive icons configured (foreground, background, monochrome)
@@ -357,19 +570,20 @@ Currently no automated testing framework configured. Future considerations:
 - Permissions: Camera, audio recording, location (fine/coarse), notifications
 
 ### Web
+
 - Static output configured
 - Limited feature set compared to native
 
 ## Development Workflow Best Practices
 
 1. **Start Convex First**: Always run `npx convex dev` before starting Expo
-2. **Auth State**: Use `useSessionRefresh()` from app/_layout.tsx for auth-dependent screens
+2. **Auth State**: Use `useSessionRefresh()` from app/\_layout.tsx for auth-dependent screens
 3. **Type Safety**: Leverage Convex generated types in `convex/_generated/api`
 4. **Path Aliases**: Use `@/*` imports for cleaner code
 5. **Offline Testing**: Test with airplane mode - WatermelonDB should handle gracefully
 6. **Notifications**:
    - Call `setReminderUserKey(userId)` when user logs in to namespace AsyncStorage
-   - Use `initializeNotificationsOnce()` to setup channels (called in app/_layout.tsx)
+   - Use `initializeNotificationsOnce()` to setup channels (called in app/\_layout.tsx)
 7. **Camera Permissions**: Request via expo-camera plugin, configured in app.json
 8. **Mapbox**: Requires both public token (runtime) and download token (build time)
 
@@ -377,30 +591,72 @@ Currently no automated testing framework configured. Future considerations:
 
 - AI assessment requires internet (Gemini API) - falls back to rule-based when offline
 - Large images (>800KB) may cause Gemini API payload issues - compression implemented
-- WatermelonDB schema v7 - migrations must be handled carefully
+- WatermelonDB schema v10 - migrations must be handled carefully
 - TypeScript strict mode disabled - type safety not enforced
 - No automated testing infrastructure
 - Speech recognition (@react-native-voice/voice) requires device support
 
+### ONNX Runtime Android Build Fix
+
+**Problem**: The `onnxruntime-react-native` Expo config plugin has a bug where it generates invalid Gradle syntax in `android/app/build.gradle`. Instead of proper comment markers (`//`), it outputs `undefined`:
+
+```groovy
+# BROKEN (generated by plugin):
+dependencies {
+undefined @generated begin onnxruntime-react-native - expo prebuild (DO NOT MODIFY) ...
+    implementation project(':onnxruntime-react-native')
+undefined @generated end onnxruntime-react-native
+```
+
+This causes a Gradle compilation error:
+```
+build file 'android/app/build.gradle': 163: Unexpected input: '{' @ line 163, column 14.
+   dependencies {
+                ^
+```
+
+**Root Cause**: The plugin's JavaScript code has a variable meant to hold `"//"` that is undefined, likely due to a bug in the config plugin's template string interpolation.
+
+**Fix**: Manually replace `undefined` with `//` in `android/app/build.gradle`:
+
+```groovy
+# FIXED:
+dependencies {
+// @generated begin onnxruntime-react-native - expo prebuild (DO NOT MODIFY) ...
+    implementation project(':onnxruntime-react-native')
+// @generated end onnxruntime-react-native
+```
+
+**Warning**: This fix will be overwritten if you run `npx expo prebuild --clean`. Consider:
+1. Adding a post-prebuild script to auto-fix this
+2. Reporting the issue to the onnxruntime-react-native maintainers
+3. Patching the plugin using `patch-package`
+
 ## Important Implementation Details
 
 ### WatermelonDB Schema Migrations
-- Current version: 7
+
+- Current version: 10
 - Schema uses both snake_case (legacy) and camelCase (Convex alignment)
 - Migration files in watermelon/database/migrations.ts
 - **Critical**: Always add new migration when changing schema, never modify existing ones
 
 ### Session Refresh Workaround
+
 - `useSessionRefresh()` remounts ConvexAuthProvider to force session refresh
 - Used after sign up/sign in to ensure auth state propagates
 - `isRefreshing` flag prevents UI flickering during refresh
 
 ### Notification User Namespacing
+
 - **Critical**: Each user's reminders stored with userId prefix in AsyncStorage
 - Call `setReminderUserKey(userId)` on login to prevent cross-user data leakage
 - Legacy non-namespaced keys migrated on first access
 
 ### Idempotency in Health Entries
+
 - `logAIAssessment` checks for duplicate entries (userId + timestamp + date)
 - Prevents duplicate logs on network reconnection/retry
 - Returns existing entry ID if duplicate detected
+
+### No commit unless user said so

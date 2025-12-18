@@ -152,5 +152,20 @@ export default schemaMigrations({
       toVersion: 9,
       steps: [],
     },
+    // v10: Add soft delete and edit tracking fields to health_entries
+    {
+      toVersion: 10,
+      steps: [
+        {
+          type: 'add_columns',
+          table: 'health_entries',
+          columns: [
+            { name: 'isDeleted', type: 'boolean', isOptional: true },
+            { name: 'lastEditedAt', type: 'number', isOptional: true },
+            { name: 'editCount', type: 'number', isOptional: true },
+          ],
+        },
+      ],
+    },
   ],
 });

@@ -1,7 +1,9 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+    Animated,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,14 +18,52 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
+// App primary color for all severity levels
+const PRIMARY_COLOR = '#2A7DE1';
+
+const getSeverityLabel = (level: number): string => {
+  if (level <= 3) return 'Mild';
+  if (level <= 5) return 'Moderate';
+  if (level <= 7) return 'Moderate-High';
+  return 'Severe';
+};
+
 export default function SymptomSeverity() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { isOnline } = useNetworkStatus();
-  const [severityLevel, setSeverityLevel] = useState(5);
+  const [severityLevel, setSeverityLevel] = useState<number | null>(null);
+
+  // Shake animation
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const [needsAttention, setNeedsAttention] = useState(false);
+
+  const handleSelection = (level: number) => {
+    setSeverityLevel(level);
+    setNeedsAttention(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const triggerShake = () => {
+    setNeedsAttention(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -6, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -4, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => setNeedsAttention(false), 2000);
+  };
 
   const handleContinue = () => {
-    console.log("Severity level selected:", severityLevel);
+    if (severityLevel === null) {
+      triggerShake();
+      return;
+    }
 
     router.push({
       pathname: "/(tabs)/ai-assess/symptom-duration",
@@ -34,74 +74,12 @@ export default function SymptomSeverity() {
     });
   };
 
-  const renderSeverityLabels = () => {
-    return (
-      <View style={styles.severityLabels}>
-        <Text
-          style={[
-            styles.severityLabel,
-            { fontFamily: FONTS.BarlowSemiCondensed },
-          ]}
-        >
-          Mild (1)
-        </Text>
-        <Text
-          style={[
-            styles.severityLabel,
-            { fontFamily: FONTS.BarlowSemiCondensed },
-          ]}
-        >
-          Severe (10)
-        </Text>
-      </View>
-    );
-  };
-
-  const renderSeverityScale = () => {
-    return (
-      <View style={styles.scaleContainer}>
-        <View style={styles.scale}>
-          {[...Array(10)].map((_, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.scalePoint,
-                index + 1 <= severityLevel && styles.scalePointActive,
-              ]}
-              onPress={() => setSeverityLevel(index + 1)}
-            />
-          ))}
-        </View>
-        <View style={styles.scaleNumbers}>
-          {[...Array(10)].map((_, index) => (
-            <Text
-              key={index}
-              style={[
-                styles.scaleNumber,
-                { fontFamily: FONTS.BarlowSemiCondensed },
-                index + 1 === severityLevel && styles.scaleNumberActive,
-              ]}
-            >
-              {index + 1}
-            </Text>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
-  const getSeverityDescription = () => {
-    if (severityLevel <= 3) return "Mild";
-    if (severityLevel <= 7) return "Moderate";
-    return "Severe";
-  };
+  const isSelected = severityLevel !== null;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
-        {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
-        {/* Fixed Header */}
         <CurvedHeader
           title="Symptom Assessment"
           height={150}
@@ -111,7 +89,6 @@ export default function SymptomSeverity() {
           showNotificationBell={true}
         />
 
-        {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -120,52 +97,94 @@ export default function SymptomSeverity() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
+              {/* Single instruction line */}
               <Text
                 style={[
-                  styles.sectionTitle,
+                  styles.instruction,
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Symptom Severity
+                Rate your overall discomfort level.
               </Text>
-              <Text
+
+              {/* Scale with gradient colors */}
+              <Animated.View
                 style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
+                  styles.scaleWrapper,
+                  { transform: [{ translateX: shakeAnim }] }
                 ]}
               >
-                Rate your overall discomfort level from 1-10
-              </Text>
+                {/* Endpoint labels */}
+                <View style={styles.endpointLabels}>
+                  <Text
+                    style={[
+                      styles.endpointLabel,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Mild
+                  </Text>
+                  <Text
+                    style={[
+                      styles.endpointLabel,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                    ]}
+                  >
+                    Severe
+                  </Text>
+                </View>
 
-              {renderSeverityLabels()}
+                {/* Scale dots - single color */}
+                <View style={styles.scaleContainer}>
+                  {[...Array(10)].map((_, index) => {
+                    const dotLevel = index + 1;
+                    const isActive = severityLevel !== null && dotLevel <= severityLevel;
+                    const isCurrentSelection = dotLevel === severityLevel;
 
-              {renderSeverityScale()}
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.dotTouchArea}
+                        onPress={() => handleSelection(dotLevel)}
+                        activeOpacity={0.7}
+                      >
+                        {/* Glow ring behind selected dot */}
+                        {isCurrentSelection && <View style={styles.dotGlow} />}
+                        <View
+                          style={[
+                            styles.dot,
+                            isActive && styles.dotActive,
+                            isCurrentSelection && styles.dotSelected,
+                            needsAttention && !isSelected && styles.dotAttention,
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-              <View style={styles.severityIndicator}>
-                <Text
-                  style={[
-                    styles.severityValue,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  Level: {severityLevel}
-                </Text>
-                <Text
-                  style={[
-                    styles.severityDescription,
-                    { fontFamily: FONTS.BarlowSemiCondensed },
-                  ]}
-                >
-                  {getSeverityDescription()}
-                </Text>
-              </View>
+                {/* Severity descriptor - shows level and label */}
+                <View style={styles.descriptorContainer}>
+                  {isSelected && severityLevel && (
+                    <Text
+                      style={[
+                        styles.severityDescriptor,
+                        { fontFamily: FONTS.BarlowSemiCondensed },
+                      ]}
+                    >
+                      {severityLevel} — {getSeverityLabel(severityLevel)}
+                    </Text>
+                  )}
+                </View>
+              </Animated.View>
 
+              {/* Action buttons */}
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={styles.backButton}
                   onPress={() => router.back()}
                 >
-                  <Ionicons name="arrow-back" size={20} color="#666" />
+                  <Ionicons name="arrow-back" size={20} color="#6B7280" />
                   <Text
                     style={[
                       styles.backButtonText,
@@ -177,27 +196,33 @@ export default function SymptomSeverity() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.continueButton}
+                  style={[
+                    styles.continueButton,
+                    !isSelected && styles.continueButtonDisabled,
+                  ]}
                   onPress={handleContinue}
                 >
                   <Text
                     style={[
                       styles.continueButtonText,
                       { fontFamily: FONTS.BarlowSemiCondensed },
+                      !isSelected && styles.continueButtonTextDisabled,
                     ]}
                   >
                     Continue
                   </Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" />
+                  <Ionicons
+                    name="arrow-forward"
+                    size={20}
+                    color={isSelected ? "white" : "#9CA3AF"}
+                  />
                 </TouchableOpacity>
               </View>
             </View>
           </ScrollView>
         </View>
-
-        {/* Bottom Navigation */}
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </SafeAreaView>
   );
 }
@@ -215,85 +240,85 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   contentSection: {
-    padding: 24,
-    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingTop: 56,
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 8,
+  instruction: {
+    fontSize: 17,
+    color: "#374151",
     textAlign: "center",
+    marginBottom: 28,
+    lineHeight: 24,
   },
-  sectionSubtitle: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 32,
+  scaleWrapper: {
+    marginBottom: 40,
   },
-  severityLabels: {
+  endpointLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 16,
+    paddingHorizontal: 4,
+    marginBottom: 12,
   },
-  severityLabel: {
-    fontSize: 14,
-    color: "#666",
+  endpointLabel: {
+    fontSize: 13,
     fontWeight: "600",
+    letterSpacing: 0.3,
+    color: "#6B7280",
   },
   scaleContainer: {
-    marginBottom: 24,
-  },
-  scale: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    paddingHorizontal: 4,
   },
-  scalePoint: {
+  dotTouchArea: {
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotGlow: {
+    position: "absolute",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(42, 125, 225, 0.12)",
+  },
+  dot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#B0B5BC",
+  },
+  dotActive: {
+    backgroundColor: "#2A7DE1",
+    borderColor: "#2A7DE1",
+  },
+  dotSelected: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#E0E0E0",
+    shadowColor: "#2A7DE1",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  dotAttention: {
+    borderColor: "#93C5FD",
     borderWidth: 2,
-    borderColor: "#BDBDBD",
   },
-  scalePointActive: {
-    backgroundColor: "#2A7DE1",
-    borderColor: "#1A5CB0",
-  },
-  scaleNumbers: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  scaleNumber: {
-    width: 24,
-    textAlign: "center",
-    fontSize: 12,
-    color: "#666",
-  },
-  scaleNumberActive: {
-    color: "#2A7DE1",
-    fontWeight: "bold",
-  },
-  severityIndicator: {
-    backgroundColor: "#F8F9FA",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
+  descriptorContainer: {
     alignItems: "center",
-    marginBottom: 32,
+    marginTop: 16,
+    minHeight: 24,
   },
-  severityValue: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginBottom: 4,
-  },
-  severityDescription: {
+  severityDescriptor: {
     fontSize: 16,
-    color: "#2A7DE1",
     fontWeight: "600",
+    letterSpacing: 0.3,
+    color: "#374151",
   },
   buttonContainer: {
     flexDirection: "row",
@@ -303,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0F0F0",
+    backgroundColor: "#E5E7EB",
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 30,
@@ -311,10 +336,11 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   backButtonText: {
-    color: "#666",
+    color: "#4B5563",
     fontSize: 16,
     fontWeight: "600",
-    marginLeft: 8,
+    marginLeft: 6,
+    lineHeight: 20,
   },
   continueButton: {
     flexDirection: "row",
@@ -327,10 +353,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 12,
   },
+  continueButtonDisabled: {
+    backgroundColor: "#E5E7EB",
+  },
   continueButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
-    marginRight: 8,
+    marginRight: 6,
+    lineHeight: 20,
+  },
+  continueButtonTextDisabled: {
+    color: "#9CA3AF",
   },
 });

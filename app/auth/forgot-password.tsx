@@ -104,7 +104,7 @@ export default function ForgotPassword() {
           label: 'OK',
           onPress: () => {
             setModalVisible(false);
-            router.back();
+            router.replace("/auth/signin");
           },
           variant: 'primary'
         }
@@ -148,6 +148,7 @@ export default function ForgotPassword() {
               title="Alberta Health Connect"
               height={150}
               showLogo={true}
+              showMenuButton={false}
             />
 
             <View style={styles.contentSection}>
@@ -292,7 +293,7 @@ export default function ForgotPassword() {
 
                     <TouchableOpacity
                       style={styles.backButton}
-                      onPress={() => router.back()}
+                      onPress={() => router.replace("/auth/signin")}
                     >
                       <Text style={[styles.backButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                         Back to Sign In

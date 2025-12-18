@@ -1,4 +1,5 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -16,26 +17,42 @@ import DueReminderBanner from "../../components/DueReminderBanner";
 import { FONTS } from "../../constants/constants";
 import { useNetworkStatus } from "../../hooks/useNetworkStatus";
 
+type DurationOption = {
+  label: string;
+  value: string;
+  helper?: string;
+};
+
 export default function SymptomDuration() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { isOnline } = useNetworkStatus();
   const [selectedDuration, setSelectedDuration] = useState<string | null>(null);
 
-  const durationOptions = [
+  const recentOptions: DurationOption[] = [
     { label: "Today", value: "today" },
     { label: "Yesterday", value: "yesterday" },
-    { label: "2-3 days ago", value: "2-3_days" },
-    { label: "1 week ago", value: "1_week" },
-    { label: "2+ weeks ago", value: "2_weeks_plus" },
-    { label: "Ongoing", value: "ongoing" },
+    { label: "2–3 days ago", value: "2-3_days" },
   ];
+
+  const longerOptions: DurationOption[] = [
+    { label: "About a week", value: "1_week" },
+    { label: "Two weeks or more", value: "2_weeks_plus" },
+  ];
+
+  const ongoingOption: DurationOption = {
+    label: "Ongoing condition",
+    value: "ongoing",
+    helper: "No specific start date",
+  };
+
+  const handleSelection = (value: string) => {
+    setSelectedDuration(value);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   const handleContinue = () => {
     if (!selectedDuration) return;
-
-    // Navigate immediately - image processing will happen in assessment-results
-    console.log("Proceeding to assessment with duration:", selectedDuration);
 
     router.push({
       pathname: "/(tabs)/ai-assess/assessment-results",
@@ -46,39 +63,50 @@ export default function SymptomDuration() {
     });
   };
 
-  const DurationOption = ({
-    label,
-    value,
-  }: {
-    label: string;
-    value: string;
-  }) => (
-    <TouchableOpacity
-      style={[
-        styles.optionButton,
-        selectedDuration === value && styles.optionButtonSelected,
-      ]}
-      onPress={() => setSelectedDuration(value)}
-    >
-      <View style={styles.optionRadio}>
-        {selectedDuration === value && (
-          <View style={styles.optionRadioSelected} />
-        )}
-      </View>
-      <Text
-        style={[styles.optionLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}
+  const isSelected = selectedDuration !== null;
+
+  const DurationRow = ({ option }: { option: DurationOption }) => {
+    const selected = selectedDuration === option.value;
+
+    return (
+      <TouchableOpacity
+        style={[styles.row, selected && styles.rowSelected]}
+        onPress={() => handleSelection(option.value)}
+        activeOpacity={0.7}
       >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
+        <View style={styles.rowContent}>
+          <Text
+            style={[
+              styles.rowLabel,
+              { fontFamily: FONTS.BarlowSemiCondensed },
+              selected && styles.rowLabelSelected,
+            ]}
+          >
+            {option.label}
+          </Text>
+          {option.helper && (
+            <Text
+              style={[
+                styles.rowHelper,
+                { fontFamily: FONTS.BarlowSemiCondensed },
+                selected && styles.rowHelperSelected,
+              ]}
+            >
+              {option.helper}
+            </Text>
+          )}
+        </View>
+        {selected && (
+          <Ionicons name="checkmark" size={16} color="#6B7280" />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={isOnline ? ['top', 'bottom'] : ['bottom']}>
       <CurvedBackground style={{ flex: 1 }}>
-        {/* Due reminder banner (offline-capable) */}
         <DueReminderBanner topOffset={120} />
-        {/* Fixed Header */}
         <CurvedHeader
           title="Symptom Assessment"
           height={150}
@@ -88,7 +116,6 @@ export default function SymptomDuration() {
           showNotificationBell={true}
         />
 
-        {/* Content Area - Takes all available space minus header and bottom nav */}
         <View style={styles.contentArea}>
           <ScrollView
             contentContainerStyle={styles.contentContainer}
@@ -97,58 +124,88 @@ export default function SymptomDuration() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.contentSection}>
+              {/* Calm instruction */}
               <Text
                 style={[
-                  styles.sectionTitle,
+                  styles.instruction,
                   { fontFamily: FONTS.BarlowSemiCondensed },
                 ]}
               >
-                Duration & Timeline
-              </Text>
-              <Text
-                style={[
-                  styles.sectionSubtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                When did your symptoms start?
+                When did these symptoms begin
               </Text>
 
-              <View style={styles.optionsContainer}>
-                {durationOptions.map((option) => (
-                  <DurationOption
-                    key={option.value}
-                    label={option.label}
-                    value={option.value}
-                  />
-                ))}
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.continueButton,
-                  !selectedDuration && styles.continueButtonDisabled,
-                ]}
-                onPress={handleContinue}
-                disabled={!selectedDuration}
-              >
+              {/* Recent group */}
+              <View style={styles.optionGroup}>
                 <Text
                   style={[
-                    styles.continueButtonText,
+                    styles.groupLabel,
                     { fontFamily: FONTS.BarlowSemiCondensed },
                   ]}
                 >
-                  Get Assessment
+                  Recent
                 </Text>
-                <Ionicons name="analytics-outline" size={20} color="white" />
-              </TouchableOpacity>
+                <View style={styles.groupRows}>
+                  {recentOptions.map((option) => (
+                    <DurationRow key={option.value} option={option} />
+                  ))}
+                </View>
+              </View>
+
+              {/* Longer group */}
+              <View style={styles.optionGroup}>
+                <Text
+                  style={[
+                    styles.groupLabel,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Longer
+                </Text>
+                <View style={styles.groupRows}>
+                  {longerOptions.map((option) => (
+                    <DurationRow key={option.value} option={option} />
+                  ))}
+                </View>
+              </View>
+
+              {/* Ongoing - condition, not time */}
+              <View style={styles.ongoingSection}>
+                <View style={styles.ongoingRow}>
+                  <DurationRow option={ongoingOption} />
+                </View>
+              </View>
+
+              {/* CTA area */}
+              <View style={styles.ctaSection}>
+                <TouchableOpacity
+                  style={[
+                    styles.continueButton,
+                    !isSelected && styles.continueButtonDisabled,
+                  ]}
+                  onPress={handleContinue}
+                  disabled={!isSelected}
+                >
+                  <Text
+                    style={[
+                      styles.continueButtonText,
+                      { fontFamily: FONTS.BarlowSemiCondensed },
+                      !isSelected && styles.continueButtonTextDisabled,
+                    ]}
+                  >
+                    Get Assessment
+                  </Text>
+                  <Ionicons
+                    name="arrow-forward"
+                    size={20}
+                    color={isSelected ? "white" : "#9CA3AF"}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         </View>
-
-        {/* Bottom Navigation */}
       </CurvedBackground>
-      <BottomNavigation />
+      <BottomNavigation floating={true} />
     </SafeAreaView>
   );
 }
@@ -166,64 +223,74 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   contentSection: {
-    padding: 24,
-    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingTop: 56,
   },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1A1A1A",
-    marginBottom: 8,
+  instruction: {
+    fontSize: 17,
+    color: "#374151",
     textAlign: "center",
+    marginBottom: 28,
+    lineHeight: 24,
   },
-  sectionSubtitle: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 32,
+  optionGroup: {
+    marginBottom: 16,
   },
-  optionsContainer: {
-    marginBottom: 32,
+  groupLabel: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "500",
+    letterSpacing: 0.2,
+    marginBottom: 6,
+    marginLeft: 4,
   },
-  optionButton: {
+  groupRows: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "white",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E7EB",
   },
-  optionButtonSelected: {
-    borderColor: "#2A7DE1",
-    backgroundColor: "#F0F8FF",
+  rowSelected: {
+    backgroundColor: "#F8FAFC",
   },
-  optionRadio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#CCCCCC",
-    marginRight: 16,
-    justifyContent: "center",
-    alignItems: "center",
+  rowContent: {
+    flex: 1,
   },
-  optionRadioSelected: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#2A7DE1",
-  },
-  optionLabel: {
+  rowLabel: {
     fontSize: 16,
-    color: "#1A1A1A",
+    color: "#374151",
+    fontWeight: "400",
+  },
+  rowLabelSelected: {
+    color: "#1F2937",
     fontWeight: "500",
+  },
+  rowHelper: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
+  rowHelperSelected: {
+    color: "#6B7280",
+  },
+  ongoingSection: {
+    marginTop: 12,
+    marginBottom: 24,
+  },
+  ongoingRow: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  ctaSection: {
+    marginTop: 8,
   },
   continueButton: {
     flexDirection: "row",
@@ -235,12 +302,15 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
   continueButtonDisabled: {
-    backgroundColor: "#A0A0A0",
+    backgroundColor: "#E5E7EB",
   },
   continueButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "600",
     marginRight: 8,
+  },
+  continueButtonTextDisabled: {
+    color: "#9CA3AF",
   },
 });

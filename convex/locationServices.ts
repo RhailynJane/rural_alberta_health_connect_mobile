@@ -173,14 +173,14 @@ export const getRealTimeClinicData = action({
     longitude: v.optional(v.number())
   },
   handler: async (ctx, args): Promise<ClinicDataResponse | null> => {
-    console.log("📍 User location:", args.location);
+    console.log("User location:", args.location);
     
     // If coordinates provided, use them directly; otherwise geocode the location string
     let lat: number;
     let lon: number;
     
     if (args.latitude !== undefined && args.longitude !== undefined) {
-      console.log(`📍 Using provided coordinates: ${args.latitude}, ${args.longitude}`);
+      console.log(`Using provided coordinates: ${args.latitude}, ${args.longitude}`);
       lat = args.latitude;
       lon = args.longitude;
     } else {
@@ -192,7 +192,7 @@ export const getRealTimeClinicData = action({
       }
       lat = geocoded.lat;
       lon = geocoded.lon;
-      console.log(`📍 Geocoded to: ${lat}, ${lon}`);
+      console.log(`Geocoded to: ${lat}, ${lon}`);
     }
 
     try {
@@ -388,7 +388,7 @@ async function fetchFromOverpass(lat: number, lon: number, radiusMeters: number)
 
     const data = await response.json();
     const elements = data?.elements || [];
-    console.log(`📍 Overpass returned ${elements.length} raw elements`);
+    console.log(`Overpass returned ${elements.length} raw elements`);
 
     if (elements.length === 0) return null;
 
@@ -631,7 +631,7 @@ function filterMedicalFacilities(
 
 async function fetchFromMapboxPlaces(lat: number, lon: number, radiusMeters: number): Promise<ClinicFacility[] | null> {
   try {
-    console.log(`📍 Using coordinates: ${lat}, ${lon}`);
+    console.log(`Using coordinates: ${lat}, ${lon}`);
 
     const MAPBOX_TOKEN =
       (process.env.MAPBOX_ACCESS_TOKEN as string | undefined) ||

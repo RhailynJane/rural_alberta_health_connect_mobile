@@ -345,7 +345,7 @@ export default function PersonalInfo() {
 
       // Navigate immediately after local save - don't wait for Convex sync
       console.log("➡️ Navigating to emergency contact");
-      router.push("/auth/emergency-contact");
+      router.replace("/auth/emergency-contact");
 
       // Then sync with Convex (online) in the background - this will work when there's internet
       // Don't await this - let it sync in the background
@@ -391,6 +391,7 @@ export default function PersonalInfo() {
               title="Alberta Health Connect"
               height={150}
               showLogo={true}
+              showMenuButton={false}
             />
 
             {/* Inline offline banner for onboarding screen */}
@@ -398,20 +399,20 @@ export default function PersonalInfo() {
 
             {/* Progress Bar */}
             <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={styles.progressFill} />
+                <View style={styles.progressBar}>
+                  <View style={styles.progressFill} />
+                </View>
+                <Text
+                  style={[
+                    styles.progressText,
+                    { fontFamily: FONTS.BarlowSemiCondensed },
+                  ]}
+                >
+                  Step 1 of 3
+                </Text>
               </View>
-              <Text
-                style={[
-                  styles.progressText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
-                Step 1 of 3
-              </Text>
-            </View>
 
-            <View style={styles.contentSection}>
+              <View style={styles.contentSection}>
               <Text
                 style={[
                   styles.sectionTitle,
@@ -735,11 +736,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#1A1A1A",
     marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   pickerContainer: {
     backgroundColor: "white",
@@ -748,11 +744,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   customPickerButton: {
     width: "100%",
@@ -857,11 +848,6 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 8,
     maxHeight: 200,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   suggestionItem: {
     padding: 12,

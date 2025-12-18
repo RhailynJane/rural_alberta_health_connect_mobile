@@ -90,14 +90,14 @@ packagingOptions {
         pickFirst 'lib/armeabi-v7a/libc++_shared.so'
     }
 // @generated end @rnmapbox/maps-libcpp
-    ndkVersion = rootProject.ext.ndkVersion
+    ndkVersion rootProject.ext.ndkVersion
 
-    buildToolsVersion = rootProject.ext.buildToolsVersion
-    compileSdk = rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
 
-    namespace = 'com.amirzhou.rahcapp'
+    namespace 'com.rahc.app'
     defaultConfig {
-        applicationId 'com.amirzhou.rahcapp'
+        applicationId 'com.rahc.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -115,34 +115,42 @@ packagingOptions {
     }
     buildTypes {
         debug {
-            signingConfig = signingConfigs.debug
+            signingConfig signingConfigs.debug
         }
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig = signingConfigs.debug
+            signingConfig signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
-            shrinkResources = enableShrinkResources.toBoolean()
-            minifyEnabled = enableMinifyInReleaseBuilds
+            shrinkResources enableShrinkResources.toBoolean()
+            minifyEnabled enableMinifyInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             def enablePngCrunchInRelease = findProperty('android.enablePngCrunchInReleaseBuilds') ?: 'true'
-            crunchPngs = enablePngCrunchInRelease.toBoolean()
+            crunchPngs enablePngCrunchInRelease.toBoolean()
         }
     }
     packagingOptions {
         jniLibs {
             def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
-            useLegacyPackaging = enableLegacyPackaging.toBoolean()
+            useLegacyPackaging enableLegacyPackaging.toBoolean()
         }
     }
     androidResources {
-        ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
-}
 
-    configurations.all {
-        exclude group: 'com.android.support'
+// @generated begin meta-inf-fix - expo prebuild (DO NOT MODIFY)
+    packagingOptions {
+        resources {
+            pickFirsts += ['META-INF/*']
+            excludes += [
+                'META-INF/androidx.appcompat_appcompat.version',
+                'META-INF/androidx.localbroadcastmanager_localbroadcastmanager.version'
+            ]
+        }
     }
+// @generated end meta-inf-fix
+}
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
@@ -163,6 +171,21 @@ packagingOptions {
         }
     }
 }
+
+
+// @generated begin androidx-fix - expo prebuild (DO NOT MODIFY)
+// Exclude obsolete support libraries that conflict with AndroidX
+configurations.all {
+    exclude group: 'com.android.support', module: 'support-compat'
+    exclude group: 'com.android.support', module: 'support-core-utils'
+    exclude group: 'com.android.support', module: 'support-core-ui'
+    exclude group: 'com.android.support', module: 'support-fragment'
+    exclude group: 'com.android.support', module: 'animated-vector-drawable'
+    exclude group: 'com.android.support', module: 'support-vector-drawable'
+    exclude group: 'com.android.support', module: 'versionedparcelable'
+    exclude group: 'com.android.support', module: 'appcompat-v7'
+}
+// @generated end androidx-fix
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin

@@ -4,7 +4,7 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { NotificationBellEvent } from '../_utils/NotificationBellEvent';
-import { checkAndUpdateAnyReminderDue, getReminders, isBellUnread } from '../_utils/notifications';
+import { checkAndUpdateAnyReminderDue, getReminders } from '../_utils/notifications';
 import { COLORS, FONTS } from '../constants/constants';
 
 interface DueReminderBannerProps {
@@ -12,7 +12,12 @@ interface DueReminderBannerProps {
 }
 
 export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerProps) {
-  const [visible, setVisible] = useState(false);
+  // DISABLED: Use system push notifications instead of in-app banner
+  // Reminders will now show as proper push notifications via checkAndFireDueReminders()
+  // Keep this component mounted for compatibility but never show it
+  
+  // Still run background checks to update bell state, but don't show banner
+  const [visible] = useState(false); // Always false - never show banner
   const [fadeAnim] = useState(new Animated.Value(0));
   const insets = useSafeAreaInsets();
 
@@ -20,16 +25,18 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     const checkReminder = async () => {
       const list = await getReminders();
       await checkAndUpdateAnyReminderDue(list);
-      const isUnread = await isBellUnread();
-      setVisible(isUnread);
+      // Don't update visible state - let push notifications handle it
     };
 
     checkReminder();
 
-    // Listen for events - no need to recompute, just update state
-    const onDue = NotificationBellEvent.on('due', () => setVisible(true));
-    const onRead = NotificationBellEvent.on('read', () => setVisible(false));
-    const onCleared = NotificationBellEvent.on('cleared', () => setVisible(false));
+    // Listen for events but don't update visibility - push notifications will show instead
+    const onDue = NotificationBellEvent.on('due', () => {
+      // Banner stays hidden - push notification will show
+      console.log('📢 [DueReminderBanner] Reminder due - push notification will display');
+    });
+    const onRead = NotificationBellEvent.on('read', () => {});
+    const onCleared = NotificationBellEvent.on('cleared', () => {});
 
     // Reduced interval - check every 2 minutes instead of 15 seconds
     const interval = setInterval(checkReminder, 120000);
@@ -42,22 +49,6 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     };
   }, []);
 
-  useEffect(() => {
-    if (visible) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, fadeAnim]);
-
   const handleDismiss = async () => {
     // Do NOT mark as read automatically. Navigate to Notifications screen
     // so the user can manually mark the specific item as read.
@@ -68,7 +59,8 @@ export default function DueReminderBanner({ topOffset = 0 }: DueReminderBannerPr
     }
   };
 
-  if (!visible) return null;
+  // Always return null - never show in-app banner, use push notifications instead
+  return null;
 
   // Position the banner just below the phone's notch/safe area.
   const computedTop = insets.top + 1;

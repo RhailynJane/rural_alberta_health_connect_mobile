@@ -1,4 +1,3 @@
-import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -12,15 +11,20 @@ import {
     DEFAULT_MAP_CONFIG,
     MAPBOX_ACCESS_TOKEN,
 } from '../_config/mapbox.config';
+import Mapbox from '../_utils/mapboxFix';
 import { COLORS, FONTS } from '../constants/constants';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
-// Initialize Mapbox
-if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== 'YOUR_MAPBOX_PUBLIC_TOKEN') {
-  Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
-  console.log('✅ Mapbox access token configured');
-} else {
-  console.error('❌ Mapbox access token not configured properly');
+// Initialize Mapbox - wrapped in try-catch to prevent crashes
+try {
+  if (MAPBOX_ACCESS_TOKEN && MAPBOX_ACCESS_TOKEN !== 'YOUR_MAPBOX_PUBLIC_TOKEN') {
+    Mapbox.setAccessToken(MAPBOX_ACCESS_TOKEN);
+    console.log('✅ Mapbox access token configured');
+  } else {
+    console.error('❌ Mapbox access token not configured properly');
+  }
+} catch (error) {
+  console.error('❌ Failed to initialize Mapbox:', error);
 }
 
 interface Clinic {
@@ -39,6 +43,8 @@ interface MapboxOfflineMapProps {
   onClinicPress?: (clinic: Clinic) => void;
   // Optional external camera focus control
   focusCenter?: { latitude: number; longitude: number; zoom?: number } | null;
+  // Top offset for floating buttons (to account for status bar)
+  topOffset?: number;
 }
 
 function MapboxOfflineMapComponent({
@@ -46,6 +52,7 @@ function MapboxOfflineMapComponent({
   userLocation,
   onClinicPress,
   focusCenter,
+  topOffset = 16,
 }: MapboxOfflineMapProps) {
   const cameraRef = useRef<Mapbox.Camera>(null);
   const mapRef = useRef<Mapbox.MapView>(null);
@@ -67,8 +74,6 @@ function MapboxOfflineMapComponent({
   const sanitizedClinics = (clinics || []).filter((c) =>
     Number.isFinite(c?.latitude) && Number.isFinite(c?.longitude)
   );
-  // Find nearest clinic from sanitized list
-  const nearestClinic = sanitizedClinics.length > 0 ? sanitizedClinics[0] : null;
 
   // Center on user location when available
   useEffect(() => {
@@ -165,7 +170,7 @@ function MapboxOfflineMapComponent({
           animationDuration={2000}
         />
 
-        {/* User Location */}
+        {/* User Location Marker */}
         {userLocation &&
           Number.isFinite(userLocation.latitude) &&
           Number.isFinite(userLocation.longitude) && (
@@ -180,30 +185,18 @@ function MapboxOfflineMapComponent({
         )}
 
         {/* Clinic Markers */}
-        {sanitizedClinics.map((clinic, index) => {
-          const isNearest = index === 0 && nearestClinic?.id === clinic.id;
-          return (
-            <Mapbox.PointAnnotation
-              key={clinic.id}
-              id={clinic.id}
-              coordinate={[clinic.longitude, clinic.latitude]}
-              onSelected={() => handleClinicMarkerPress(clinic)}
-            >
-              <View
-                style={[
-                  styles.clinicMarker,
-                  isNearest && styles.nearestClinicMarker,
-                ]}
-              >
-                <Icon
-                  name="medkit"
-                  size={isNearest ? 24 : 20}
-                  color="white"
-                />
-              </View>
-            </Mapbox.PointAnnotation>
-          );
-        })}
+        {sanitizedClinics.map((clinic) => (
+          <Mapbox.PointAnnotation
+            key={clinic.id}
+            id={clinic.id}
+            coordinate={[clinic.longitude, clinic.latitude]}
+            onSelected={() => handleClinicMarkerPress(clinic)}
+          >
+            <View style={styles.clinicMarker}>
+              <Icon name="medkit" size={18} color="white" />
+            </View>
+          </Mapbox.PointAnnotation>
+        ))}
       </Mapbox.MapView>
       )}
 
@@ -217,42 +210,20 @@ function MapboxOfflineMapComponent({
         </View>
       )}
 
-      {/* Recenter Button */}
+      {/* Recenter Button - Glass Style */}
       {userLocation && (
         <TouchableOpacity
-          style={styles.recenterButton}
+          style={[styles.recenterButton, { top: topOffset }]}
           onPress={handleRecenter}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
           <Icon
             name="locate"
-            size={24}
-            color={followUserLocation ? COLORS.primary : COLORS.darkGray}
+            size={22}
+            color={followUserLocation ? COLORS.primary : '#64748B'}
           />
         </TouchableOpacity>
       )}
-
-      {/* Map Legend */}
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendMarker, { backgroundColor: '#EF4444' }]}>
-            <Icon name="medkit" size={12} color="white" />
-          </View>
-          <Text style={styles.legendText}>Nearest Clinic</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendMarker, { backgroundColor: '#10B981' }]}>
-            <Icon name="medkit" size={12} color="white" />
-          </View>
-          <Text style={styles.legendText}>Other Clinics</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={styles.userLocationLegend}>
-            <View style={styles.userLocationDot} />
-          </View>
-          <Text style={styles.legendText}>Your Location</Text>
-        </View>
-      </View>
     </View>
   );
 }
@@ -260,7 +231,6 @@ function MapboxOfflineMapComponent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    borderRadius: 12,
     overflow: 'hidden',
   },
   map: {
@@ -296,10 +266,10 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(59, 130, 246, 0.3)',
+    backgroundColor: 'rgba(59, 130, 246, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#3B82F6',
   },
   userLocationDot: {
@@ -309,25 +279,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
   },
   clinicMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#10B981',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0EA5E9',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  nearestClinicMarker: {
-    backgroundColor: '#EF4444',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
   calloutContainer: {
     padding: 8,
@@ -353,64 +317,19 @@ const styles = StyleSheet.create({
   recenterButton: {
     position: 'absolute',
     right: 16,
-    top: 16,
-    backgroundColor: 'white',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  legend: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  legendMarker: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-    borderWidth: 2,
-    borderColor: 'white',
-  },
-  userLocationLegend: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 6,
-    borderWidth: 2,
-    borderColor: '#3B82F6',
-  },
-  legendText: {
-    fontFamily: FONTS.BarlowSemiCondensed,
-    fontSize: 11,
-    color: COLORS.darkGray,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 

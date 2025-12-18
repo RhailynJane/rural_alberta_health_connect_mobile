@@ -1,21 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Mapbox from '@rnmapbox/maps';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {
-  ALBERTA_REGIONS,
-  DEFAULT_MAP_CONFIG,
-  OFFLINE_PACK_CONFIG,
+    ALBERTA_REGIONS,
+    DEFAULT_MAP_CONFIG,
+    OFFLINE_PACK_CONFIG,
 } from '../_config/mapbox.config';
+import Mapbox from '../_utils/mapboxFix';
 import { COLORS, FONTS } from '../constants/constants';
 import StatusModal from './StatusModal';
 

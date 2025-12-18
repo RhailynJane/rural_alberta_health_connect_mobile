@@ -1,10 +1,12 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "convex/react";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,8 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Yup from "yup";
 import { api } from "../../convex/_generated/api";
-import CurvedBackground from "../components/curvedBackground";
-import CurvedHeader from "../components/curvedHeader";
+// Removed legacy curved header/background to match new sign-in design
 import StatusModal from "../components/StatusModal";
 import { FONTS } from "../constants/constants";
 import { useSignUpForm } from "./_context/SignUpFormContext";
@@ -62,6 +63,8 @@ export default function SignUp() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalMessage, setErrorModalMessage] = useState("");
   const [pendingAgreement, setPendingAgreement] = useState(false);
   const [pendingSetFieldValue, setPendingSetFieldValue] = useState<
     ((field: string, value: any) => void) | null
@@ -69,33 +72,86 @@ export default function SignUp() {
   const { values: persistedValues, setValues: setPersistedValues } =
     useSignUpForm();
   const ensureProfileExists = useMutation((api as any)["profile/ensureProfileExists"].ensureProfileExists);
+  const checkUserExists = useMutation(api.users.checkUserExistsByEmail);
   
 
   const handleSignUp = async (values: SignUpFormValues) => {
     const { password, confirmPassword, ...safeValues } = values;
     console.log("Sign up attempted with:", safeValues);
     setSubmitError(null);
+    
+    // Check if passwords match
+    if (password !== confirmPassword) {
+      setErrorModalMessage("Passwords do not match. Please make sure both password fields are identical.");
+      setShowErrorModal(true);
+      return;
+    }
     try {
-      await signIn("password", {
-        email: values.email,
-        password: values.password,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        hasCompletedOnboarding: false,
-        flow: "signUp",
+      // Check if user already exists
+      const existingUser = await checkUserExists({ 
+        email: values.email.toLowerCase().trim() 
       });
+      
+      if (existingUser) {
+        setErrorModalMessage("Email already exists. Please use a different email or sign in instead.");
+        setShowErrorModal(true);
+        return;
+      }
+
+      // Log what we're sending
+      console.log("📤 Signup params:", {
+        email: values.email.toLowerCase().trim(),
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        passwordLength: values.password.length
+      });
+
+      // Sign up with password provider - pass custom fields for profile function
+      const result = await signIn("password", {
+        flow: "signUp",
+        email: values.email.toLowerCase().trim(),
+        password: values.password,
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        hasCompletedOnboarding: false,
+      } as any); // Type assertion to bypass TS validation
+      
+      console.log("✅ Signup result:", result);
+      
+      // Wait for session to fully establish before creating profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Ensure profile exists in Convex
       await ensureProfileExists();
-      router.push("/auth/personal-info");
+      router.replace("/auth/personal-info");
     } catch (error) {
       console.error("❌ Sign up failed:", error);
       console.error("📊 Error details:", JSON.stringify(error, null, 2));
+      console.error("📊 Error name:", error instanceof Error ? error.name : 'unknown');
+      console.error("📊 Error message:", error instanceof Error ? error.message : 'unknown');
 
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Signup failed. Please try again.";
+      let errorMessage = "Signup failed. Please try again.";
+      
+      if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        
+        // Check for specific error patterns
+        if (msg.includes("invalid password")) {
+          errorMessage = "Email already exists. Please use a different email or sign in instead.";
+        } else if (msg.includes("account already exists") || msg.includes("user already exists") || msg.includes("already registered")) {
+          errorMessage = "Email already exists. Please use a different email.";
+        } else if (msg.includes("password") && !msg.includes("invalid")) {
+          errorMessage = "Password must be at least 6 characters long.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      // Show error in modal
       setSubmitError(errorMessage);
+      setErrorModalMessage(errorMessage);
+      setShowErrorModal(true);
+      console.log("🔴 Setting error modal:", { errorMessage, showErrorModal: true });
     }
   };
 
@@ -122,15 +178,12 @@ export default function SignUp() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <CurvedBackground>
-        {/* Fixed Header */}
-        <CurvedHeader
-          title="Alberta Health Connect"
-          height={150}
-          showLogo={true}
-          screenType="signin"
-          bottomSpacing={0}
-        />
+      <LinearGradient
+        colors={["#2A7DE1", "#1F64D1"]}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.blueBackground}
+      >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.container}
@@ -140,35 +193,40 @@ export default function SignUp() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.contentSection}>
+            {/* Logo Section */}
+            <View style={styles.logoSection}>
+              <Image
+                source={require("../../assets/images/logo-icon.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+              <Text style={[styles.appTitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Rural Alberta Health Connect
+              </Text>
+              <Text style={[styles.appSubtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                Assess your health now
+              </Text>
+            </View>
+
+            {/* Form Sheet */}
+            <View style={styles.whiteSection}>
               {submitError && (
                 <Text
-                  style={[
-                    {
-                      color: "#ff3b30",
-                      textAlign: "center",
-                      marginBottom: 8,
-                      fontFamily: FONTS.BarlowSemiCondensed,
-                    },
-                  ]}
+                  style={{
+                    color: "#ff3b30",
+                    textAlign: "center",
+                    marginBottom: 8,
+                    fontFamily: FONTS.BarlowSemiCondensed,
+                  }}
                 >
                   {submitError}
                 </Text>
               )}
-              <Text
-                style={[
-                  styles.welcomeText,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
+
+              <Text style={[styles.welcomeText, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Create Your Account
               </Text>
-              <Text
-                style={[
-                  styles.subtitle,
-                  { fontFamily: FONTS.BarlowSemiCondensed },
-                ]}
-              >
+              <Text style={[styles.subtitle, { fontFamily: FONTS.BarlowSemiCondensed }]}>
                 Join Alberta Health Connect today
               </Text>
 
@@ -187,7 +245,6 @@ export default function SignUp() {
                   errors,
                   touched,
                 }) => {
-                  // Persist values on every change
                   const persistField = (field: string, value: any) => {
                     setFieldValue(field, value);
                     setPersistedValues({ ...values, [field]: value });
@@ -197,80 +254,47 @@ export default function SignUp() {
                     <View style={styles.formContainer}>
                       <View style={styles.nameRow}>
                         <View style={styles.nameInputContainer}>
-                          <Text
-                            style={[
-                              styles.label,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            First Name
-                          </Text>
+                          <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>First Name</Text>
                           <TextInput
                             style={[
                               styles.input,
                               { fontFamily: FONTS.BarlowSemiCondensed },
-                              errors.firstName &&
-                                touched.firstName &&
-                                styles.inputError,
+                              errors.firstName && touched.firstName && styles.inputError,
                             ]}
                             placeholder="Enter your first name"
                             placeholderTextColor="#999"
                             value={values.firstName}
-                            onChangeText={(text) =>
-                              persistField("firstName", text)
-                            }
+                            onChangeText={(text) => persistField("firstName", text)}
                             onBlur={handleBlur("firstName")}
                             autoCapitalize="words"
                           />
                           {errors.firstName && touched.firstName && (
-                            <Text style={styles.errorText}>
-                              {errors.firstName}
-                            </Text>
+                            <Text style={styles.errorText}>{errors.firstName}</Text>
                           )}
                         </View>
 
                         <View style={styles.nameInputContainer}>
-                          <Text
-                            style={[
-                              styles.label,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            Last Name
-                          </Text>
+                          <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>Last Name</Text>
                           <TextInput
                             style={[
                               styles.input,
                               { fontFamily: FONTS.BarlowSemiCondensed },
-                              errors.lastName &&
-                                touched.lastName &&
-                                styles.inputError,
+                              errors.lastName && touched.lastName && styles.inputError,
                             ]}
                             placeholder="Enter your last name"
                             placeholderTextColor="#999"
                             value={values.lastName}
-                            onChangeText={(text) =>
-                              persistField("lastName", text)
-                            }
+                            onChangeText={(text) => persistField("lastName", text)}
                             onBlur={handleBlur("lastName")}
                             autoCapitalize="words"
                           />
                           {errors.lastName && touched.lastName && (
-                            <Text style={styles.errorText}>
-                              {errors.lastName}
-                            </Text>
+                            <Text style={styles.errorText}>{errors.lastName}</Text>
                           )}
                         </View>
                       </View>
 
-                      <Text
-                        style={[
-                          styles.label,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Email
-                      </Text>
+                      <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>Email</Text>
                       <TextInput
                         style={[
                           styles.input,
@@ -293,131 +317,61 @@ export default function SignUp() {
                         <Text style={styles.errorText}>{errors.email}</Text>
                       )}
 
-
-                      <Text
-                        style={[
-                          styles.label,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Password
-                      </Text>
+                      <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>Password</Text>
                       <View style={styles.passwordContainer}>
                         <TextInput
                           style={[
                             styles.passwordInput,
-                            {
-                              fontFamily: FONTS.BarlowSemiCondensed,
-                              color: "#1A1A1A",
-                            },
-                            errors.password &&
-                              touched.password &&
-                              styles.inputError,
+                            { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
+                            errors.password && touched.password && styles.inputError,
                           ]}
                           placeholder="Enter your password"
                           placeholderTextColor="#999"
                           value={values.password}
-                          onChangeText={(text) =>
-                            persistField("password", text)
-                          }
+                          onChangeText={(text) => persistField("password", text)}
                           onBlur={handleBlur("password")}
                           secureTextEntry={!showPassword}
                           textContentType="newPassword"
                           autoComplete="new-password"
                           importantForAutofill="yes"
                         />
-                        <TouchableOpacity
-                          style={styles.eyeIcon}
-                          onPress={() => setShowPassword(!showPassword)}
-                        >
-                          <Ionicons
-                            name={showPassword ? "eye-off" : "eye"}
-                            size={24}
-                            color="#999"
-                          />
+                        <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
+                          <Ionicons name={showPassword ? "eye-off" : "eye"} size={24} color="#999" />
                         </TouchableOpacity>
                       </View>
                       {errors.password && touched.password && (
                         <Text style={styles.errorText}>{errors.password}</Text>
                       )}
 
-                      <Text
-                        style={[
-                          styles.label,
-                          { fontFamily: FONTS.BarlowSemiCondensed },
-                        ]}
-                      >
-                        Confirm Password
-                      </Text>
+                      <Text style={[styles.label, { fontFamily: FONTS.BarlowSemiCondensed }]}>Confirm Password</Text>
                       <View style={styles.passwordContainer}>
                         <TextInput
                           style={[
                             styles.passwordInput,
-                            {
-                              fontFamily: FONTS.BarlowSemiCondensed,
-                              color: "#1A1A1A",
-                            },
-                            errors.confirmPassword &&
-                              touched.confirmPassword &&
-                              styles.inputError,
+                            { fontFamily: FONTS.BarlowSemiCondensed, color: "#1A1A1A" },
+                            errors.confirmPassword && touched.confirmPassword && styles.inputError,
                           ]}
                           placeholder="Confirm your password"
                           placeholderTextColor="#999"
                           value={values.confirmPassword}
-                          onChangeText={(text) =>
-                            persistField("confirmPassword", text)
-                          }
+                          onChangeText={(text) => persistField("confirmPassword", text)}
                           onBlur={handleBlur("confirmPassword")}
                           secureTextEntry={!showConfirmPassword}
                           textContentType="newPassword"
                           autoComplete="new-password"
                           importantForAutofill="yes"
                         />
-                        <TouchableOpacity
-                          style={styles.eyeIcon}
-                          onPress={() =>
-                            setShowConfirmPassword(!showConfirmPassword)
-                          }
-                        >
-                          <Ionicons
-                            name={showConfirmPassword ? "eye-off" : "eye"}
-                            size={24}
-                            color="#999"
-                          />
+                        <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                          <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={24} color="#999" />
                         </TouchableOpacity>
                       </View>
-                      {/* Real-time password matching feedback */}
-                      {values.confirmPassword.length > 0 && (
-                        <View style={styles.passwordMatchContainer}>
-                          {values.password === values.confirmPassword ? (
-                            <View style={styles.passwordMatchRow}>
-                              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                              <Text style={[styles.passwordMatchText, styles.passwordMatchSuccess]}>
-                                Passwords match
-                              </Text>
-                            </View>
-                          ) : (
-                            <View style={styles.passwordMatchRow}>
-                              <Ionicons name="close-circle" size={16} color="#ff3b30" />
-                              <Text style={[styles.passwordMatchText, styles.passwordMatchError]}>
-                                Passwords do not match
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
                       {errors.confirmPassword && touched.confirmPassword && (
-                        <Text style={styles.errorText}>
-                          {errors.confirmPassword}
-                        </Text>
+                        <Text style={styles.errorText}>{errors.confirmPassword}</Text>
                       )}
 
                       <View style={styles.checkboxContainer}>
                         <TouchableOpacity
-                          style={[
-                            styles.customCheckbox,
-                            values.agreeToTerms && styles.customCheckboxChecked,
-                          ]}
+                          style={[styles.customCheckbox, values.agreeToTerms && styles.customCheckboxChecked]}
                           onPress={() =>
                             handleCheckboxPress((field: string, value: any) => {
                               setFieldValue(field, value);
@@ -426,76 +380,34 @@ export default function SignUp() {
                           }
                           activeOpacity={0.7}
                         >
-                          {values.agreeToTerms && (
-                            <Text style={styles.checkboxCheck}>✓</Text>
-                          )}
+                          {values.agreeToTerms && <Text style={styles.checkboxCheck}>✓</Text>}
                         </TouchableOpacity>
-                        <Text
-                          style={[
-                            styles.checkboxLabel,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          I agree to the{" "}
-                          <Text
-                            style={styles.linkText}
-                            onPress={() =>
-                              router.push("/auth/terms-of-service")
-                            }
-                          >
-                            Terms of Service
-                          </Text>{" "}
-                          and{" "}
-                          <Text
-                            style={styles.linkText}
-                            onPress={() => router.push("/auth/privacy-policy")}
-                          >
+                        <Text style={[styles.checkboxLabel, { fontFamily: FONTS.BarlowSemiCondensed }]}>
+                          I agree to the <Text style={styles.linkText} onPress={() => router.replace("/auth/terms-of-service")}>Terms of Service</Text> and <Text style={styles.linkText} onPress={() => router.replace("/auth/privacy-policy")}>
                             Privacy Policy
-                          </Text>
-                          . I understand this app provides health information
-                          only and does not replace professional medical care.
+                          </Text>. I understand this app provides health information only and does not replace professional medical care.
                         </Text>
                       </View>
-                      {errors.agreeToTerms && (
-                        <Text style={styles.errorText}>
-                          {errors.agreeToTerms}
-                        </Text>
-                      )}
+                      {errors.agreeToTerms && <Text style={styles.errorText}>{errors.agreeToTerms}</Text>}
 
                       <TouchableOpacity
                         style={styles.signUpButton}
-                        onPress={() => handleSubmit()}
+                        onPress={() => {
+                          if (values.password !== values.confirmPassword) {
+                            setErrorModalMessage("Passwords do not match. Please make sure both password fields are identical.");
+                            setShowErrorModal(true);
+                            return;
+                          }
+                          handleSubmit();
+                        }}
                       >
-                        <Text
-                          style={[
-                            styles.signUpButtonText,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Sign Up
-                        </Text>
+                        <Text style={[styles.signUpButtonText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Sign Up</Text>
                       </TouchableOpacity>
 
                       <View style={styles.signInContainer}>
-                        <Text
-                          style={[
-                            styles.signInText,
-                            { fontFamily: FONTS.BarlowSemiCondensed },
-                          ]}
-                        >
-                          Already have an account?{" "}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => router.push("/auth/signin")}
-                        >
-                          <Text
-                            style={[
-                              styles.signInLink,
-                              { fontFamily: FONTS.BarlowSemiCondensed },
-                            ]}
-                          >
-                            Sign In
-                          </Text>
+                        <Text style={[styles.signInText, { fontFamily: FONTS.BarlowSemiCondensed }]}>Already have an account? </Text>
+                        <TouchableOpacity onPress={() => router.replace("/auth/signin")}>
+                          <Text style={[styles.signInLink, { fontFamily: FONTS.BarlowSemiCondensed }]}>Sign In</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -505,14 +417,14 @@ export default function SignUp() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </CurvedBackground>
+      </LinearGradient>
       {/* Agreement Confirmation Modal */}
       <StatusModal
         visible={showAgreementModal}
         type="confirm"
         title="Agreement Required"
         message="Do you agree to our Terms of Service and Privacy Policy? By agreeing, you acknowledge that you have read and understood both documents."
-        icon="document-text"
+        icon="description"
         onClose={() => {
           setShowAgreementModal(false);
           setPendingSetFieldValue(null);
@@ -538,6 +450,30 @@ export default function SignUp() {
           }
         ]}
       />
+      {/* Error Modal */}
+      <StatusModal
+        visible={showErrorModal}
+        type="error"
+        title="Sign Up Failed"
+        message={errorModalMessage || "An error occurred"}
+        icon="error"
+        onClose={() => {
+          console.log("🔴 Error modal onClose called");
+          setShowErrorModal(false);
+          setErrorModalMessage("");
+        }}
+        buttons={[
+          {
+            label: "OK",
+            onPress: () => {
+              console.log("🔴 Error modal OK button pressed");
+              setShowErrorModal(false);
+              setErrorModalMessage("");
+            },
+            variant: "primary"
+          }
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -545,7 +481,11 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "transparent",
+    backgroundColor: "#1F64D1",
+  },
+  blueBackground: {
+    flex: 1,
+    backgroundColor: "#2A7DE1",
   },
   container: {
     flex: 1,
@@ -553,22 +493,49 @@ const styles = StyleSheet.create({
   contentContainer: {
     flexGrow: 1,
   },
-  contentSection: {
+  logoSection: {
+    alignItems: "center",
+    paddingTop: 40,
+    paddingBottom: 40,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+  },
+  appTitle: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  appSubtitle: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
+  },
+  whiteSection: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     padding: 24,
-    paddingTop: 5,
+    paddingTop: 32,
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "700",
     color: "#1A1A1A",
     textAlign: "center",
-    marginBottom: 4,
+    marginBottom: 12,
+    letterSpacing: 0.2,
   },
   subtitle: {
     fontSize: 16,
-    color: "#666",
+    color: "#4B5563",
     textAlign: "center",
-    marginBottom: 40,
+    marginBottom: 28,
   },
   formContainer: {
     width: "100%",
@@ -595,11 +562,6 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 15,
     marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   inputError: {
     borderColor: "#ff3b30",
@@ -644,8 +606,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 30,
     alignItems: "center",
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 40,
+    marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -672,27 +634,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   passwordContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    position: "relative",
+    marginBottom: 8,
+  },
+  passwordInput: {
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: "#ddd",
     borderRadius: 10,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  passwordInput: {
-    flex: 1,
     padding: 16,
-    fontSize: 15,
     paddingRight: 50,
+    fontSize: 15,
   },
   eyeIcon: {
-    padding: 10,
+    position: "absolute",
+    right: 16,
+    top: 16,
   },
   linkText: {
     color: "#2A7DE1",

@@ -1,16 +1,17 @@
 // components/BottomNavigation.tsx
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { usePathname, useRouter } from 'expo-router';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { FONTS } from '../constants/constants';
 
 interface Tab {
   name: string;
   label: string;
   route: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  iconNameFocused: keyof typeof Ionicons.glyphMap;
+  iconSource?: any;
+  iconSourceFocused?: any;
+  iconName?: string; // For vector icons
 }
 
 const tabs: Tab[] = [
@@ -18,128 +19,277 @@ const tabs: Tab[] = [
     name: 'Home',
     label: 'Home',
     route: '/dashboard',
-    iconName: 'home-outline',
-    iconNameFocused: 'home'
-  },
-  {
-    name: 'AIAssess',
-    label: 'AI Assess',
-    route: '/ai-assess',
-    iconName: 'medical-outline',
-    iconNameFocused: 'medical'
+    iconSource: require('../../assets/images/home-icon.png'),
+    iconSourceFocused: require('../../assets/images/home-icon.png'),
   },
   {
     name: 'Tracker',
     label: 'Tracker',
     route: '/tracker',
-    iconName: 'stats-chart-outline',
-    iconNameFocused: 'stats-chart'
+    iconSource: require('../../assets/images/tracker-icon.png'),
+    iconSourceFocused: require('../../assets/images/tracker-icon.png'),
   },
   {
-    name: 'Emergency',
-    label: 'Emergency',
-    route: '/emergency',
-    iconName: 'alert-circle-outline',
-    iconNameFocused: 'alert-circle'
+    name: 'AIAssess',
+    label: 'AI Assess',
+    route: '/ai-assess',
+    iconSource: require('../../assets/images/assess-icon.png'),
+    iconSourceFocused: require('../../assets/images/assess-icon.png'),
+  },
+  {
+    name: 'Clinics',
+    label: 'Clinics',
+    route: '/find-care/clinics',
+    iconName: 'map-outline',
   },
   {
     name: 'Profile',
     label: 'Profile',
     route: '/profile',
-    iconName: 'person-outline',
-    iconNameFocused: 'person'
+    iconSource: require('../../assets/images/profile-icon.png'),
+    iconSourceFocused: require('../../assets/images/profile-icon.png'),
   },
 ];
 
-const BottomNavigation: React.FC = () => {
+type BottomNavigationProps = {
+  floating?: boolean;
+};
+
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ floating = true }) => {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
   // Calculate dynamic height with safe area + minimal padding
-  const containerHeight = 70 + insets.bottom;
+  const containerHeight = 96 + insets.bottom;
+
+  const centerTab = tabs.find((t) => t.name === 'AIAssess');
+  const sideTabs = tabs.filter((t) => t.name !== 'AIAssess');
+  const leftTabs = sideTabs.slice(0, 2);
+  const rightTabs = sideTabs.slice(2);
 
   return (
-    <View style={[styles.container, { 
-      height: containerHeight,
-      paddingBottom: insets.bottom + 4 
-    }]}>
-      {tabs.map((tab) => {
-        const isFocused = pathname === tab.route;
+    <View
+      style={[
+        floating ? styles.containerFloating : styles.containerInline,
+        {
+          height: containerHeight,
+          paddingBottom: insets.bottom,
+        },
+      ]}
+    >
+      <View style={styles.bar}>
+        <View style={styles.sideGroupLeft}>
+          {leftTabs.map((tab) => {
+            const isFocused = pathname === tab.route;
+            const onPress = () => {
+              if (!isFocused) {
+                router.navigate(tab.route as any);
+              }
+            };
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : {}}
+                onPress={onPress}
+                style={styles.tab}
+              >
+                {tab.iconName ? (
+                  <Icon
+                    name={tab.iconName}
+                    size={22}
+                    color={isFocused ? '#2A7DE1' : '#6F7682'}
+                  />
+                ) : (
+                  <Image
+                    source={isFocused ? tab.iconSourceFocused : tab.iconSource}
+                    style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
+                    resizeMode='contain'
+                  />
+                )}
+                <Text
+                  style={[styles.tabText, isFocused && styles.tabTextFocused]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-        const onPress = () => {
-          // Use navigate for tab switching - doesn't add to stack
-          if (!isFocused) {
-            router.navigate(tab.route as any);
-          }
-        };
+        <View style={styles.sideGroupRight}>
+          {rightTabs.map((tab) => {
+            const isFocused = pathname === tab.route;
+            const onPress = () => {
+              if (!isFocused) {
+                router.navigate(tab.route as any);
+              }
+            };
+            return (
+              <TouchableOpacity
+                key={tab.name}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : {}}
+                onPress={onPress}
+                style={styles.tab}
+              >
+                {tab.iconName ? (
+                  <Icon
+                    name={tab.iconName}
+                    size={22}
+                    color={isFocused ? '#2A7DE1' : '#6F7682'}
+                  />
+                ) : (
+                  <Image
+                    source={isFocused ? tab.iconSourceFocused : tab.iconSource}
+                    style={[styles.tabIcon, { tintColor: isFocused ? '#2A7DE1' : '#6F7682' }]}
+                    resizeMode='contain'
+                  />
+                )}
+                <Text
+                  style={[styles.tabText, isFocused && styles.tabTextFocused]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
 
-        return (
-          <TouchableOpacity
-            key={tab.name}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
-            onPress={onPress}
-            style={[styles.tab, isFocused && styles.tabFocused]}
-          >
-            <Ionicons 
-              name={isFocused ? tab.iconNameFocused : tab.iconName} 
-              size={24} 
-              color={isFocused ? '#2A7DE1' : '#666'} 
+      {/* Hide center button when already on AI Assessment tab */}
+      {floating && centerTab && !pathname.startsWith('/ai-assess') && (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={pathname === centerTab.route ? { selected: true } : {}}
+          onPress={() => {
+            if (pathname !== centerTab.route) {
+              router.navigate(centerTab.route as any);
+            }
+          }}
+          style={[styles.centerButton, pathname === centerTab.route && styles.centerButtonFocused]}
+        >
+          <View style={styles.centerGlow} />
+          <View style={styles.centerIconWrapper}>
+            <Image 
+              source={centerTab.iconSourceFocused}
+              style={{ width: 28, height: 28, tintColor: '#fff' }}
+              resizeMode='contain'
             />
-            <Text 
-              style={[styles.tabText, isFocused && styles.tabTextFocused]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
-            >
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  containerFloating: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  containerInline: {
+    position: 'relative',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  bar: {
+    width: '100%',
     flexDirection: 'row',
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 5,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingTop: 18,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.015)',
+    zIndex: 1,
+  },
+  sideGroupLeft: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  sideGroupRight: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
   tab: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 2,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    minWidth: 70,
+    paddingVertical: 2,
   },
-  tabFocused: {
-    borderTopWidth: 2,
-    borderTopColor: '#2A7DE1',
+  tabIcon: {
+    width: 22,
+    height: 22,
   },
   tabText: {
-    fontSize: 9,
-    color: '#666',
+    fontSize: 10,
+    color: '#6F7682',
     fontFamily: FONTS.BarlowSemiCondensed,
-    marginTop: 4,
+    marginTop: 6,
     textAlign: 'center',
-    width: '100%',
   },
   tabTextFocused: {
     color: '#2A7DE1',
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  centerButton: {
+    position: 'absolute',
+    top: -30,
+    left: '50%',
+    marginLeft: -35,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#2A7DE1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2A7DE1',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 14,
+    elevation: 18,
+    zIndex: 3,
+  },
+  centerButtonFocused: {
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+  },
+  centerGlow: {
+    position: 'absolute',
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    backgroundColor: 'rgba(42,125,225,0.14)',
+  },
+  centerIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
