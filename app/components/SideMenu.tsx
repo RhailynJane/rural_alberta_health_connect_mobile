@@ -2,21 +2,30 @@
 import { api } from "@/convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
+  BackHandler,
   Image,
   ImageBackground,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View
 } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import IonIcon from "react-native-vector-icons/Ionicons";
 import MaterialIcon from "react-native-vector-icons/MaterialIcons";
 import { FONTS } from "../constants/constants";
+
+const MAX_MENU_WIDTH = 320;
 
 interface SideMenuProps {
   visible: boolean;
@@ -27,9 +36,9 @@ interface SideMenuProps {
   userAvatar?: string;
 }
 
-const SideMenu: React.FC<SideMenuProps> = ({ 
-  visible, 
-  onClose, 
+const SideMenu: React.FC<SideMenuProps> = ({
+  visible,
+  onClose,
   onSignOut,
   userName: userNameProp,
   userEmail: userEmailProp,
@@ -37,8 +46,54 @@ const SideMenu: React.FC<SideMenuProps> = ({
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const currentUser = useQuery(api.users.getCurrentUser, isAuthenticated && !isLoading ? {} : "skip");
+
+  // Calculate menu width reactively based on screen size
+  const menuWidth = Math.min(screenWidth * 0.8, MAX_MENU_WIDTH);
+
+  // Animation values for right-slide drawer
+  const translateX = useSharedValue(menuWidth);
+  const backdropOpacity = useSharedValue(0);
+
+  // Animate on visibility change
+  useEffect(() => {
+    if (visible) {
+      translateX.value = withTiming(0, {
+        duration: 300,
+        easing: Easing.out(Easing.cubic)
+      });
+      backdropOpacity.value = withTiming(0.5, { duration: 300 });
+    } else {
+      translateX.value = withTiming(menuWidth, {
+        duration: 250,
+        easing: Easing.in(Easing.cubic)
+      });
+      backdropOpacity.value = withTiming(0, { duration: 250 });
+    }
+  }, [visible, menuWidth]);
+
+  // Handle Android back button
+  useEffect(() => {
+    if (!visible) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [visible, onClose]);
+
+  // Animated styles
+  const menuAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+  }));
 
   // Derive display fields with graceful fallbacks
   const { displayName, displayEmail, displayAvatar } = useMemo(() => {
@@ -77,19 +132,19 @@ const SideMenu: React.FC<SideMenuProps> = ({
   ];
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.overlay}>
+    <View style={styles.overlay} pointerEvents={visible ? 'auto' : 'none'}>
+      {/* Animated backdrop */}
+      <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
         <TouchableOpacity
-          style={styles.backdrop}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={onClose}
         />
-        <SafeAreaView style={styles.menuContainer} edges={['bottom']}>
+      </Animated.View>
+
+      {/* Animated menu container */}
+      <Animated.View style={[styles.menuContainer, { width: menuWidth }, menuAnimatedStyle]}>
+        <SafeAreaView style={styles.menuInner} edges={['top', 'bottom']}>
           {/* Hero/Profile Header */}
           <View style={styles.headerWrap}>
             <ImageBackground
@@ -144,29 +199,34 @@ const SideMenu: React.FC<SideMenuProps> = ({
             <Text style={[styles.signOutText, { fontFamily: FONTS.BarlowSemiCondensedBold }]}>Sign out</Text>
           </TouchableOpacity>
         </SafeAreaView>
-      </View>
-    </Modal>
+      </Animated.View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
-    flexDirection: "row",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
   },
   backdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
   },
   menuContainer: {
-    width: "80%",
-    maxWidth: 320,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: "#fff",
     shadowColor: "#000",
     shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 5,
+  },
+  menuInner: {
+    flex: 1,
   },
   headerWrap: {
     borderBottomWidth: 1,
