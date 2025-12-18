@@ -8,26 +8,26 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View
+    Image,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { MAPBOX_ACCESS_TOKEN } from "../../_config/mapbox.config";
 import {
-  ReminderItem,
-  addReminder,
-  deleteReminder,
-  getReminders,
-  scheduleAllReminderItems,
-  setConvexSyncCallback,
-  setReminderUserKey,
-  updateReminder,
+    ReminderItem,
+    addReminder,
+    deleteReminder,
+    getReminders,
+    scheduleAllReminderItems,
+    setConvexSyncCallback,
+    setReminderUserKey,
+    updateReminder,
 } from "../../_utils/notifications";
 import BottomNavigation from "../../components/bottomNavigation";
 import CurvedBackground from "../../components/curvedBackground";
@@ -1259,24 +1259,6 @@ export default function Profile() {
               trackColor={{ false: COLORS.lightGray, true: COLORS.primary }}
               thumbColor={COLORS.white}
             />
-          </View>
-
-          {/* Notification Debug Link */}
-          <View style={styles.listCard}>
-            <TouchableOpacity 
-              style={styles.listItem} 
-              onPress={() => router.push("/(tabs)/profile/notification-debug")} 
-              activeOpacity={0.85}
-            >
-              <View style={styles.listIconWrap}>
-                <Icon name="bug-report" size={20} color={COLORS.primary} />
-              </View>
-              <View style={styles.listTextWrap}>
-                <Text style={styles.listTitle}>Notification Debug</Text>
-                <Text style={styles.listSubtitle}>Test notification settings & permissions</Text>
-              </View>
-              <Icon name="chevron-right" size={20} color={COLORS.darkGray} />
-            </TouchableOpacity>
           </View>
 
           {/* Sign Out */}

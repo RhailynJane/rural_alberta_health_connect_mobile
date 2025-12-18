@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Edge, SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -11,6 +11,7 @@ import CurvedBackground from "../components/curvedBackground";
 import CurvedHeader from "../components/curvedHeader";
 import { useSideMenu } from "../components/SideMenuProvider";
 import { FONTS } from "../constants/constants";
+import { useNetworkStatus } from "../hooks/useNetworkStatus";
 
 type CategoryType = 'all' | 'burns-heat' | 'trauma-injuries' | 'infections' | 'skin-rash' | 'cold-frostbite' | 'emergency-prevention' | 'favorites';
 
@@ -35,6 +36,9 @@ export default function Resources() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const { open } = useSideMenu();
+  const { isOnline } = useNetworkStatus();
+  // Keep bottom nav flush with the device edge; it already applies the bottom inset itself.
+  const safeAreaEdges: Edge[] = isOnline ? ['top'] : [];
   
   // Fetch resources from Convex
   const resourcesData = useQuery(api.resources.getAllResources);
@@ -1333,7 +1337,7 @@ When going out in cold or sun:
   // Show loading state while fetching data
   if (resourcesData === undefined) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={safeAreaEdges}>
         <CurvedBackground style={{ flex: 1 }}>
           <CurvedHeader
             title="Health Library"
@@ -1357,7 +1361,7 @@ When going out in cold or sun:
 
   if (selectedResource) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={safeAreaEdges}>
         <View style={styles.detailContainer}>
           {/* Hero Image Section */}
           <View style={styles.heroSection}>
@@ -1464,7 +1468,7 @@ When going out in cold or sun:
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView style={styles.safeArea} edges={safeAreaEdges}>
       <CurvedBackground style={{ flex: 1 }}>
         <CurvedHeader
           title="Health Library"
